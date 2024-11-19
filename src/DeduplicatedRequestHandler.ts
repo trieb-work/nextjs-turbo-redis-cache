@@ -1,7 +1,10 @@
 let counter = 0;
 
-//@ts-expect-error @typescript-eslint/no-explicit-any
-export class DeduplicatedRequestHandler<T extends (...args: [any, any]) => Promise<K>, K> {
+//eslint-disable-next-line @typescript-eslint/no-explicit-any
+export class DeduplicatedRequestHandler<
+  T extends (...args: [any, any]) => Promise<K>,
+  K,
+> {
   private inMemoryDeduplicationCache = new Map<string, Promise<K>>([]);
   private cachingTimeMs: number;
   private fn: T;
@@ -9,7 +12,7 @@ export class DeduplicatedRequestHandler<T extends (...args: [any, any]) => Promi
   constructor(fn: T, cachingTimeMs: number) {
     this.fn = fn;
     this.cachingTimeMs = cachingTimeMs;
-    console.log("this 1", this)
+    console.log('this 1', this);
   }
 
   // Getter to access the cache externally
@@ -25,17 +28,22 @@ export class DeduplicatedRequestHandler<T extends (...args: [any, any]) => Promi
 
   // Method to handle deduplicated requests
   deduplicatedFunction = (key: string): T => {
-    //@ts-expect-error @typescript-eslint/no-this-alias
+    //eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
-    //@ts-expect-error @typescript-eslint/no-explicit-any
+    //eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dedupedFn = async (...args: [any, any]): Promise<K> => {
       const cnt = `${key}_${counter++}`;
 
       // If there's already a pending request with the same key, return it
-      if (self.inMemoryDeduplicationCache && self.inMemoryDeduplicationCache.has(key)) {
+      if (
+        self.inMemoryDeduplicationCache &&
+        self.inMemoryDeduplicationCache.has(key)
+      ) {
         console.log(`redis get in-mem ${cnt} started`);
         console.time(`redis get in-mem ${cnt}`);
-        const res = await self.inMemoryDeduplicationCache.get(key)!.then((v) => structuredClone(v));
+        const res = await self.inMemoryDeduplicationCache
+          .get(key)!
+          .then((v) => structuredClone(v));
         console.timeEnd(`redis get in-mem ${cnt}`);
         return res;
       }
@@ -58,5 +66,5 @@ export class DeduplicatedRequestHandler<T extends (...args: [any, any]) => Promi
       }
     };
     return dedupedFn as T;
-  }
+  };
 }
