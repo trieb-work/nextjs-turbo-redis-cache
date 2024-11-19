@@ -1,5 +1,5 @@
 {
-  "name": "@trieb.work/public-typescript-npm-package-starter",
+  "name": "@trieb.work/nextjs-turbo-redis-cache",
   "version": "1.0.0",
   "scripts": {
     "dev": "vitest --watch",
