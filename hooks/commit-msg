@@ -1,0 +1,10 @@
+#!/bin/sh
+# Commit message hook to enforce conventional commits
+npx --no-install commitlint --edit "$1"
+
+# Check if commitlint failed
+if [ $? -ne 0 ]; then
+  echo "❌ Commit message does not follow Conventional Commit format."
+  echo "👉 Example: 'feat: add user authentication'"
+  exit 1
+fi

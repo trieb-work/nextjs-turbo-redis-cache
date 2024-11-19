@@ -1,0 +1,11 @@
+#!/bin/sh
+# Commit message hook to run linting on staged files
+BRANCH_NAME=$(git symbolic-ref --short HEAD)
+if [ "$BRANCH_NAME" = "main" ]; then
+  echo "❌ Direct commits to the main branch are not allowed."
+  echo "👉 Please switch to a feature branch and create a pull request."
+  exit 1
+fi
+
+npx --no-install lint-staged
+node ./scripts/vitest-run-staged.cjs

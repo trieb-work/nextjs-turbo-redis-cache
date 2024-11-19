@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write # Grant write access to pull request comments
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Code Coverage Comments
+        uses: kcjpop/coverage-comments@v2.2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          coverage-file: './coverage/lcov.info'
+
+      - name: Build project
+        run: npm run build
+      
+      - name: Dry run the release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub token for Semantic Release
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # NPM token for publishing
+        run: |
+          npx semantic-release --dry-run
+

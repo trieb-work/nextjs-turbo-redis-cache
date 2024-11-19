@@ -1,0 +1,51 @@
+{
+  "name": "@trieb.work/public-typescript-npm-package-starter",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vitest --watch",
+    "build": "tsc",
+    "lint": "eslint -c eslint.config.mjs --fix",
+    "fmt": "prettier --write 'src/**/*.ts' 'src/*.ts'",
+    "test": "vitest --coverage --config vite.config.ts",
+    "test:ui": "vitest --ui  --config vite.config.ts",
+    "prepare": "./scripts/prepare.sh"
+  },
+  "main": "dist/index.js",
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "publishConfig": {
+    "access": "public"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,json,md}": [
+      "prettier --write"
+    ]
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.6.0",
+    "@commitlint/config-conventional": "^19.6.0",
+    "@semantic-release/github": "^11.0.1",
+    "@semantic-release/npm": "^12.0.1",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "@vitest/coverage-v8": "^2.1.5",
+    "@vitest/ui": "^2.1.5",
+    "eslint": "^9.15.0",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.3.3",
+    "semantic-release": "^24.2.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5"
+  },
+  "dependencies": {}
+}
