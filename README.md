@@ -1,33 +1,30 @@
-# TypeScript Package Template
+# nextjs-turbo-redis-cache
 
-This is a template for creating a TypeScript package.
+The ultimate Redis caching solution for Next.js. Built for production-ready, large-scale projects, it delivers unparalleled performance and efficiency with features tailored for high-traffic applications.
 
-## Features
+Key Features:
 
-- TypeScript
-- Eslint
-- Prettier
-- Semantic Release to NPM and GitHub Releases with auto-generated changelog
-- Testing with Vitest
-- GitHub Actions for test, build and release on main branch
-- Commit message hook for linting staged files
-- Conventional Commits
-- Code Coverage Report and PR Comments
+- _Turbocharged Storage_: Avoids base64 encoding to save ~33% of storage space compared to traditional implementations.
+- _Batch Tag Invalidation_: Groups and optimizes delete operations for minimal Redis stress.
+- _Request Deduplication_: Prevents redundant Redis get calls, ensuring faster response times.
+- _In-Memory Caching_: Includes local caching for Redis get operations to reduce latency further.
+- _Efficient Tag Management_: in-memory tags map for lightning-fast revalidate operations with minimal Redis overhead.
+- _Intelligent Key-Space Notifications_: Automatic update of in-memory tags map for expired or evicted keys.
 
-## Getting Started
+## Getting started
 
-1. Create a new repo using this as template repo
-2. Clone the new repository
-3. Run ./scripts/setup-repo-name.sh to configure the package name in all files
-4. For private repos: set NPM_TOKEN in repository secrets (For public repos, it is already set via organization secrets)
-5. Run `pnpm install` to install the dependencies
-6. Run `pnpm run build` to build the project
-7. Run `pnpm run dev` to develop the project
-8. Run `pnpm run test` to test the project
-10. Checkout into a new branch (main is protected)
-11. Change code and commit it using conventional commit. Staged code will get checked
-12. Push and create a PR (against main or beta) to run CI
-13. Merge to main or beta to create a release or pre-release 
+TODO
+
+## Development
+
+5. Run `npm install` to install the dependencies
+6. Run `npm run build` to build the project
+7. Run `npm run dev` to develop the project
+8. Run `npm run test` to test the project
+9. Checkout into a new branch (main is protected)
+10. Change code and commit it using conventional commit. Staged code will get checked
+11. Push and create a PR (against main or beta) to run CI
+12. Merge to main or beta to create a release or pre-release
 
 ## License
 
