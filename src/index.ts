@@ -1,3 +1,2 @@
-export default function hello() {
-  console.log('Hello,  world!');
-}
+import CachedHandler from "./CachedHandler";
+export default CachedHandler;
