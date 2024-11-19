@@ -1,5 +1,6 @@
 let counter = 0;
 
+//@ts-expect-error @typescript-eslint/no-explicit-any
 export class DeduplicatedRequestHandler<T extends (...args: [any, any]) => Promise<K>, K> {
   private inMemoryDeduplicationCache = new Map<string, Promise<K>>([]);
   private cachingTimeMs: number;
@@ -24,7 +25,9 @@ export class DeduplicatedRequestHandler<T extends (...args: [any, any]) => Promi
 
   // Method to handle deduplicated requests
   deduplicatedFunction = (key: string): T => {
+    //@ts-expect-error @typescript-eslint/no-this-alias
     const self = this;
+    //@ts-expect-error @typescript-eslint/no-explicit-any
     const dedupedFn = async (...args: [any, any]): Promise<K> => {
       const cnt = `${key}_${counter++}`;
 
