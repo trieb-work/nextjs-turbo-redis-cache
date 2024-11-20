@@ -18,14 +18,14 @@ function getTimeoutRedisCommandOptions(timeoutMs: number): CommandOptions {
   return commandOptions({ signal: AbortSignal.timeout(timeoutMs) });
 }
 
-export type SyncMessage = {
+export type SyncMessage<V> = {
   type: 'insert' | 'delete';
   key?: string;
-  value?: any;
+  value?: V;
   keys?: string[];
 };
 
-const SYNC_CHANNEL_SUFFIX = ":sync-channel";
+const SYNC_CHANNEL_SUFFIX = ':sync-channel';
 
 export class SyncedMap<V> {
   private client: ReturnType<typeof createClient>;
@@ -61,7 +61,7 @@ export class SyncedMap<V> {
     });
 
     this.setup().catch((error) => {
-      console.error("Failed to setup SyncedMap:", error);
+      console.error('Failed to setup SyncedMap:', error);
       throw error;
     });
   }
@@ -83,7 +83,7 @@ export class SyncedMap<V> {
           getTimeoutRedisCommandOptions(this.timeoutMs),
           this.keyPrefix + this.redisKey,
           cursor,
-          hScanOptions
+          hScanOptions,
         );
         for (const { field, value } of remoteItems.tuples) {
           if (this.filterKeys(field)) {
@@ -97,7 +97,7 @@ export class SyncedMap<V> {
       // Clean up keys not in Redis
       await this.cleanupKeysNotInRedis();
     } catch (error) {
-      console.error("Error during initial sync:", error);
+      console.error('Error during initial sync:', error);
       throw error;
     }
   }
@@ -111,14 +111,14 @@ export class SyncedMap<V> {
         const remoteKeysPortion = await this.client.scan(
           getTimeoutRedisCommandOptions(this.timeoutMs),
           cursor,
-          scanOptions
+          scanOptions,
         );
         remoteKeys = remoteKeys.concat(remoteKeysPortion.keys);
         cursor = remoteKeysPortion.cursor;
       } while (cursor !== 0);
 
       const remoteKeysSet = new Set(
-        remoteKeys.map((key) => key.substring(this.keyPrefix.length))
+        remoteKeys.map((key) => key.substring(this.keyPrefix.length)),
       );
 
       const keysToDelete: string[] = [];
@@ -133,7 +133,7 @@ export class SyncedMap<V> {
         await this.delete(keysToDelete);
       }
     } catch (error) {
-      console.error("Error during cleanup of keys not in Redis:", error);
+      console.error('Error during cleanup of keys not in Redis:', error);
       throw error;
     }
   }
@@ -141,8 +141,8 @@ export class SyncedMap<V> {
   private setupPeriodicResync() {
     if (this.resyncIntervalMs && this.resyncIntervalMs > 0) {
       setInterval(() => {
-        this.initialSync().catch(error => {
-          console.error("Error during periodic resync:", error);
+        this.initialSync().catch((error) => {
+          console.error('Error during periodic resync:', error);
         });
       }, this.resyncIntervalMs);
     }
@@ -150,7 +150,7 @@ export class SyncedMap<V> {
 
   private async setupPubSub() {
     const syncHandler = async (message: string) => {
-      const syncMessage: SyncMessage = JSON.parse(message);
+      const syncMessage: SyncMessage<V> = JSON.parse(message);
       if (syncMessage.type === 'insert') {
         if (syncMessage.key !== undefined && syncMessage.value !== undefined) {
           this.map.set(syncMessage.key, syncMessage.value);
@@ -180,8 +180,14 @@ export class SyncedMap<V> {
       await Promise.all([
         this.subscriberClient.subscribe(this.syncChannel, syncHandler),
         // Subscribe to Redis keyspace notifications for evicted and expired keys
-        this.subscriberClient.subscribe(`__keyevent@${this.database}__:evicted`, keyEventHandler),
-        this.subscriberClient.subscribe(`__keyevent@${this.database}__:expired`, keyEventHandler),
+        this.subscriberClient.subscribe(
+          `__keyevent@${this.database}__:evicted`,
+          keyEventHandler,
+        ),
+        this.subscriberClient.subscribe(
+          `__keyevent@${this.database}__:expired`,
+          keyEventHandler,
+        ),
       ]);
 
       // Error handling for reconnection
@@ -192,12 +198,14 @@ export class SyncedMap<V> {
           this.subscriberClient = this.client.duplicate();
           await this.setupPubSub();
         } catch (reconnectError) {
-          console.error('Failed to reconnect subscriber client:', reconnectError);
+          console.error(
+            'Failed to reconnect subscriber client:',
+            reconnectError,
+          );
         }
       });
-
     } catch (error) {
-      console.error("Error setting up pub/sub client:", error);
+      console.error('Error setting up pub/sub client:', error);
       throw error;
     }
   }
@@ -218,18 +226,15 @@ export class SyncedMap<V> {
       options,
       this.keyPrefix + this.redisKey,
       key as unknown as string,
-      JSON.stringify(value)
+      JSON.stringify(value),
     );
 
-    const insertMessage: SyncMessage = {
+    const insertMessage: SyncMessage<V> = {
       type: 'insert',
       key: key as unknown as string,
       value,
     };
-    await this.client.publish(
-      this.syncChannel,
-      JSON.stringify(insertMessage)
-    );
+    await this.client.publish(this.syncChannel, JSON.stringify(insertMessage));
   }
 
   public async delete(keys: string[] | string): Promise<void> {
@@ -240,19 +245,15 @@ export class SyncedMap<V> {
     }
 
     const options = getTimeoutRedisCommandOptions(this.timeoutMs);
-    await this.client.hDel(
-      options,
-      this.keyPrefix + this.redisKey,
-      keysArray
-    );
+    await this.client.hDel(options, this.keyPrefix + this.redisKey, keysArray);
 
-    const deletionMessage: SyncMessage = {
+    const deletionMessage: SyncMessage<V> = {
       type: 'delete',
       keys: keysArray,
     };
     await this.client.publish(
       this.syncChannel,
-      JSON.stringify(deletionMessage)
+      JSON.stringify(deletionMessage),
     );
   }
 

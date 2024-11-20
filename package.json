@@ -2,7 +2,7 @@
   "name": "@trieb.work/nextjs-turbo-redis-cache",
   "version": "1.0.0",
   "scripts": {
-    "dev": "vitest --watch",
+    "dev": "pnpm test",
     "build": "tsc",
     "lint": "eslint -c eslint.config.mjs --fix",
     "fmt": "prettier --write 'src/**/*.ts' 'src/*.ts'",

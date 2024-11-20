@@ -1,8 +1,7 @@
 let counter = 0;
 
-//eslint-disable-next-line @typescript-eslint/no-explicit-any
 export class DeduplicatedRequestHandler<
-  T extends (...args: [any, any]) => Promise<K>,
+  T extends (...args: [never, never]) => Promise<K>,
   K,
 > {
   private inMemoryDeduplicationCache = new Map<string, Promise<K>>([]);
@@ -30,8 +29,7 @@ export class DeduplicatedRequestHandler<
   deduplicatedFunction = (key: string): T => {
     //eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
-    //eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const dedupedFn = async (...args: [any, any]): Promise<K> => {
+    const dedupedFn = async (...args: [never, never]): Promise<K> => {
       const cnt = `${key}_${counter++}`;
 
       // If there's already a pending request with the same key, return it
