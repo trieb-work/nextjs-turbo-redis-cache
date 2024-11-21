@@ -174,7 +174,7 @@ export class SyncedMap<V> {
       if (key.startsWith(this.keyPrefix)) {
         const keyInMap = key.substring(this.keyPrefix.length);
         if (this.filterKeys(keyInMap)) {
-          await this.delete(keyInMap);
+          await this.delete(keyInMap, true);
         }
       }
     };
@@ -254,7 +254,10 @@ export class SyncedMap<V> {
     await Promise.all(operations);
   }
 
-  public async delete(keys: string[] | string): Promise<void> {
+  public async delete(
+    keys: string[] | string,
+    withoutSyncMessage = false,
+  ): Promise<void> {
     const keysArray = Array.isArray(keys) ? keys : [keys];
     const operations = [];
 
@@ -269,13 +272,15 @@ export class SyncedMap<V> {
       );
     }
 
-    const deletionMessage: SyncMessage<V> = {
-      type: 'delete',
-      keys: keysArray,
-    };
-    operations.push(
-      this.client.publish(this.syncChannel, JSON.stringify(deletionMessage)),
-    );
+    if (!withoutSyncMessage) {
+      const deletionMessage: SyncMessage<V> = {
+        type: 'delete',
+        keys: keysArray,
+      };
+      operations.push(
+        this.client.publish(this.syncChannel, JSON.stringify(deletionMessage)),
+      );
+    }
     await Promise.all(operations);
   }
 
