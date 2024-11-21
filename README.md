@@ -19,6 +19,9 @@ Consiticency levels of Redis itself:
 - Eventual consistency: In a master-replica setup
 - Eventual consistency: In Redis Cluster mode:
 
+Consistency levels of Caching Handler:
+If Redis is used in a single node setup and Request Deduplication is turned off, only then the caching handler will have strong consistency.
+
 If using Request Deduplication, the strong consistency is not guaranteed anymore. The following sequence can happen with request deduplication:
 Instance 1: call set A 1
 Instance 1: served set A 1
@@ -36,7 +39,7 @@ Since all caching calls in one api/page/server action request is always served b
 
 ## Getting started
 
-TODO
+TODO add description for how to use it
 
 ## Development
 
