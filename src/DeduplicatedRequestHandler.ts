@@ -1,7 +1,4 @@
 import { SyncedMap } from './SyncedMap';
-
-let counter = 0;
-
 export class DeduplicatedRequestHandler<
   T extends (...args: [never, never]) => Promise<K>,
   K,
@@ -34,8 +31,6 @@ export class DeduplicatedRequestHandler<
     //eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     const dedupedFn = async (...args: [never, never]): Promise<K> => {
-      const cnt = `${key}_${counter++}`;
-
       // If there's already a pending request with the same key, return it
       if (
         self.inMemoryDeduplicationCache &&
