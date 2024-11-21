@@ -6,7 +6,6 @@ import {
   CacheHandlerValue,
   IncrementalCache,
 } from 'next/dist/server/lib/incremental-cache';
-import { IncrementalCacheKind } from 'next/dist/server/response-cache';
 
 export type CommandOptions = ReturnType<typeof commandOptions>;
 type GetParams = Parameters<IncrementalCache['get']>;
@@ -269,8 +268,8 @@ export default class RedisStringsHandler implements CacheHandler {
 
     const expireAt =
       ctx.revalidate &&
-        Number.isSafeInteger(ctx.revalidate) &&
-        ctx.revalidate > 0
+      Number.isSafeInteger(ctx.revalidate) &&
+      ctx.revalidate > 0
         ? this.estimateExpireAge(ctx.revalidate)
         : this.estimateExpireAge(this.defaultStaleAge);
     const options = getTimeoutRedisCommandOptions(this.timeoutMs);
