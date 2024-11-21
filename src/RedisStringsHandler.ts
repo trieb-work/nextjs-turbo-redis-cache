@@ -6,12 +6,13 @@ import {
   CacheHandlerValue,
   IncrementalCache,
 } from 'next/dist/server/lib/incremental-cache';
+import { IncrementalCacheKind } from 'next/dist/server/response-cache';
 
-type CommandOptions = ReturnType<typeof commandOptions>;
+export type CommandOptions = ReturnType<typeof commandOptions>;
 type GetParams = Parameters<IncrementalCache['get']>;
 type SetParams = Parameters<IncrementalCache['set']>;
 type RevalidateParams = Parameters<IncrementalCache['revalidateTag']>;
-type Client = ReturnType<typeof createClient>;
+export type Client = ReturnType<typeof createClient>;
 
 export type CreateRedisStringsHandlerOptions = {
   database?: number;
@@ -34,7 +35,9 @@ function isImplicitTag(tag: string): boolean {
   return tag.startsWith(NEXT_CACHE_IMPLICIT_TAG_ID);
 }
 
-function getTimeoutRedisCommandOptions(timeoutMs: number): CommandOptions {
+export function getTimeoutRedisCommandOptions(
+  timeoutMs: number,
+): CommandOptions {
   return commandOptions({ signal: AbortSignal.timeout(timeoutMs) });
 }
 
@@ -43,6 +46,9 @@ export default class RedisStringsHandler implements CacheHandler {
   private client: Client;
   private sharedTagsMap: SyncedMap<string[]>;
   private revalidatedTagsMap: SyncedMap<number>;
+  private inMemoryDeduplicationCache: SyncedMap<
+    Promise<ReturnType<Client['get']>>
+  >;
   private redisGet: Client['get'];
   private redisDeduplicationHandler: DeduplicatedRequestHandler<
     Client['get'],
@@ -137,16 +143,31 @@ export default class RedisStringsHandler implements CacheHandler {
         Math.random() * (avgResyncIntervalMs / 10),
     });
 
+    this.inMemoryDeduplicationCache = new SyncedMap({
+      client: this.client,
+      keyPrefix,
+      redisKey: 'inMemoryDeduplicationCache',
+      database,
+      timeoutMs,
+      querySize: revalidateTagQuerySize,
+      filterKeys,
+      customizedSync: {
+        withoutRedisHashmap: true,
+        withoutSetSync: true,
+      },
+    });
+
     const redisGet: Client['get'] = this.client.get.bind(this.client);
     this.redisDeduplicationHandler = new DeduplicatedRequestHandler(
       redisGet,
       inMemoryCachingTime,
+      this.inMemoryDeduplicationCache,
     );
     this.redisGet = redisGet;
     this.deduplicatedRedisGet =
       this.redisDeduplicationHandler.deduplicatedFunction;
   }
-  resetRequestCache(...args): void {
+  resetRequestCache(...args: never[]): void {
     console.warn('WARNING resetRequestCache() was called', args);
   }
 
@@ -161,7 +182,7 @@ export default class RedisStringsHandler implements CacheHandler {
   }
 
   public async get(key: GetParams[0], ctx: GetParams[1]) {
-    if (ctx?.kindHint !== 'fetch') {
+    if (ctx?.kind !== IncrementalCacheKind.FETCH) {
       console.log('get key', key, 'ctx', ctx);
     }
     await this.assertClientIsReady();
@@ -323,7 +344,7 @@ export default class RedisStringsHandler implements CacheHandler {
     // delete entries from in-memory deduplication cache
     if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
       for (const key of keysToDelete) {
-        this.redisDeduplicationHandler.cache.delete(key);
+        this.inMemoryDeduplicationCache.delete(key);
       }
     }
 

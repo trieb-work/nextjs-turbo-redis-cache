@@ -1,9 +1,13 @@
 // SyncedMap.ts
-import { commandOptions } from 'redis';
-import type { createClient } from 'redis';
+import { Client, getTimeoutRedisCommandOptions } from './RedisStringsHandler';
+
+type CustomizedSync = {
+  withoutRedisHashmap?: boolean;
+  withoutSetSync?: boolean;
+};
 
 type SyncedMapOptions = {
-  client: ReturnType<typeof createClient>;
+  client: Client;
   keyPrefix: string;
   redisKey: string; // Redis Hash key
   database: number;
@@ -11,12 +15,8 @@ type SyncedMapOptions = {
   querySize: number;
   filterKeys: (key: string) => boolean;
   resyncIntervalMs?: number;
+  customizedSync?: CustomizedSync;
 };
-
-type CommandOptions = ReturnType<typeof commandOptions>;
-function getTimeoutRedisCommandOptions(timeoutMs: number): CommandOptions {
-  return commandOptions({ signal: AbortSignal.timeout(timeoutMs) });
-}
 
 export type SyncMessage<V> = {
   type: 'insert' | 'delete';
@@ -25,11 +25,10 @@ export type SyncMessage<V> = {
   keys?: string[];
 };
 
-const SYNC_CHANNEL_SUFFIX = ':sync-channel';
-
+const SYNC_CHANNEL_SUFFIX = ':sync-channel:';
 export class SyncedMap<V> {
-  private client: ReturnType<typeof createClient>;
-  private subscriberClient: ReturnType<typeof createClient>;
+  private client: Client;
+  private subscriberClient: Client;
   private map: Map<string, V>;
   private keyPrefix: string;
   private syncChannel: string;
@@ -39,6 +38,7 @@ export class SyncedMap<V> {
   private querySize: number;
   private filterKeys: (key: string) => boolean;
   private resyncIntervalMs?: number;
+  private customizedSync?: CustomizedSync;
 
   private setupLock: Promise<void>;
   private setupLockResolve!: () => void;
@@ -47,12 +47,13 @@ export class SyncedMap<V> {
     this.client = options.client;
     this.keyPrefix = options.keyPrefix;
     this.redisKey = options.redisKey;
-    this.syncChannel = `${options.keyPrefix}${options.redisKey}${SYNC_CHANNEL_SUFFIX}`;
+    this.syncChannel = `${options.keyPrefix}${SYNC_CHANNEL_SUFFIX}${options.redisKey}`;
     this.database = options.database;
     this.timeoutMs = options.timeoutMs;
     this.querySize = options.querySize;
     this.filterKeys = options.filterKeys;
     this.resyncIntervalMs = options.resyncIntervalMs;
+    this.customizedSync = options.customizedSync;
 
     this.map = new Map<string, V>();
     this.subscriberClient = this.client.duplicate();
@@ -67,9 +68,13 @@ export class SyncedMap<V> {
   }
 
   private async setup() {
-    await this.initialSync();
-    await this.setupPubSub();
-    this.setupPeriodicResync();
+    let setupPromises: Promise<void>[] = [];
+    if (!this.customizedSync?.withoutRedisHashmap) {
+      setupPromises.push(this.initialSync());
+      this.setupPeriodicResync();
+    }
+    setupPromises.push(this.setupPubSub());
+    await Promise.all(setupPromises);
     this.setupLockResolve();
   }
 
@@ -220,41 +225,58 @@ export class SyncedMap<V> {
 
   public async set(key: string, value: V): Promise<void> {
     this.map.set(key, value);
+    const operations = [];
 
-    const options = getTimeoutRedisCommandOptions(this.timeoutMs);
-    await this.client.hSet(
-      options,
-      this.keyPrefix + this.redisKey,
-      key as unknown as string,
-      JSON.stringify(value),
-    );
+    // This is needed if we only want to sync delete commands. This is especially useful for non serializable data like a promise map
+    if (this.customizedSync?.withoutSetSync) {
+      return;
+    }
+    if (!this.customizedSync?.withoutRedisHashmap) {
+      const options = getTimeoutRedisCommandOptions(this.timeoutMs);
+      operations.push(
+        this.client.hSet(
+          options,
+          this.keyPrefix + this.redisKey,
+          key as unknown as string,
+          JSON.stringify(value),
+        ),
+      );
+    }
 
     const insertMessage: SyncMessage<V> = {
       type: 'insert',
       key: key as unknown as string,
       value,
     };
-    await this.client.publish(this.syncChannel, JSON.stringify(insertMessage));
+    operations.push(
+      this.client.publish(this.syncChannel, JSON.stringify(insertMessage)),
+    );
+    await Promise.all(operations);
   }
 
   public async delete(keys: string[] | string): Promise<void> {
     const keysArray = Array.isArray(keys) ? keys : [keys];
+    const operations = [];
 
     for (const key of keysArray) {
       this.map.delete(key);
     }
 
-    const options = getTimeoutRedisCommandOptions(this.timeoutMs);
-    await this.client.hDel(options, this.keyPrefix + this.redisKey, keysArray);
+    if (!this.customizedSync?.withoutRedisHashmap) {
+      const options = getTimeoutRedisCommandOptions(this.timeoutMs);
+      operations.push(
+        this.client.hDel(options, this.keyPrefix + this.redisKey, keysArray),
+      );
+    }
 
     const deletionMessage: SyncMessage<V> = {
       type: 'delete',
       keys: keysArray,
     };
-    await this.client.publish(
-      this.syncChannel,
-      JSON.stringify(deletionMessage),
+    operations.push(
+      this.client.publish(this.syncChannel, JSON.stringify(deletionMessage)),
     );
+    await Promise.all(operations);
   }
 
   public has(key: string): boolean {

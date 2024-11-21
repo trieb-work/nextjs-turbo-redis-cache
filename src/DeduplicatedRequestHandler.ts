@@ -1,28 +1,32 @@
+import { SyncedMap } from './SyncedMap';
+
 let counter = 0;
 
 export class DeduplicatedRequestHandler<
   T extends (...args: [never, never]) => Promise<K>,
   K,
 > {
-  private inMemoryDeduplicationCache = new Map<string, Promise<K>>([]);
+  private inMemoryDeduplicationCache: SyncedMap<Promise<K>>;
   private cachingTimeMs: number;
   private fn: T;
 
-  constructor(fn: T, cachingTimeMs: number) {
+  constructor(
+    fn: T,
+    cachingTimeMs: number,
+    inMemoryDeduplicationCache: SyncedMap<Promise<K>>,
+  ) {
     this.fn = fn;
     this.cachingTimeMs = cachingTimeMs;
-    console.log('this 1', this);
-  }
-
-  // Getter to access the cache externally
-  public get cache(): Map<string, Promise<K>> {
-    return this.inMemoryDeduplicationCache;
+    this.inMemoryDeduplicationCache = inMemoryDeduplicationCache;
   }
 
   // Method to manually seed a result into the cache
   seedRequestReturn(key: string, value: K): void {
     const resultPromise = new Promise<K>((res) => res(value));
     this.inMemoryDeduplicationCache.set(key, resultPromise);
+    setTimeout(() => {
+      this.inMemoryDeduplicationCache.delete(key);
+    }, this.cachingTimeMs);
   }
 
   // Method to handle deduplicated requests
