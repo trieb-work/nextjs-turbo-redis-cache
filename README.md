@@ -11,6 +11,14 @@ Key Features:
 - _Efficient Tag Management_: in-memory tags map for lightning-fast revalidate operations with minimal Redis overhead.
 - _Intelligent Key-Space Notifications_: Automatic update of in-memory tags map for expired or evicted keys.
 
+## Describe Options
+
+TODO
+
+## Getting started
+
+TODO add description for how to use it
+
 ## Consistency
 
 To understand consistency levels of this caching implementation we first have to understand the consistency of redis itself:
@@ -35,13 +43,9 @@ Instance 2: served get A -> 1 (served 1 but should already be deleted)
 Instance 1: served delete A
 
 The time window for this eventual consistency to occur is typically around the length of a single redis command. Depending on your load ranging from 5ms to max 100ms.
-If using in-memory caching, the window for this eventual consistency to occur can be even higher because additionally also synchronization messages have to get delivered. Depending on your load typically ranging around 50ms to max of 120ms.
+If using local in-memory caching (Enabled by RedisStringsHandler option inMemoryCachingTime), the window for this eventual consistency to occur can be even higher because additionally also synchronization messages have to get delivered. Depending on your load typically ranging around 50ms to max of 120ms.
 
-Since all caching calls in one api/page/server action request is always served by the same instance this problem will not occur inside a single request but rather in a combination of multiple parallel requests. The probability that this will occur for a single user during a request sequence is very low, since typically a single user will not make the follow up request during this small time window of typically 50ms. To further mitigate the Problem and increase performance make sure that your load balancer will always serve one user to the same instance.
-
-## Getting started
-
-TODO add description for how to use it
+Since all caching calls in one api/page/server action request is always served by the same instance this problem will not occur inside a single request but rather in a combination of multiple parallel requests. The probability that this will occur for a single user during a request sequence is very low, since typically a single user will not make the follow up request during this small time window of typically 50ms. To further mitigate the Problem and increase performance (increase local in-memory cache hit ratio) make sure that your load balancer will always serve one user to the same instance (sticky sessions).
 
 ## Development
 

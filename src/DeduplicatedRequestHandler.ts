@@ -41,12 +41,9 @@ export class DeduplicatedRequestHandler<
         self.inMemoryDeduplicationCache &&
         self.inMemoryDeduplicationCache.has(key)
       ) {
-        console.log(`redis get in-mem ${cnt} started`);
-        console.time(`redis get in-mem ${cnt}`);
         const res = await self.inMemoryDeduplicationCache
           .get(key)!
           .then((v) => structuredClone(v));
-        console.timeEnd(`redis get in-mem ${cnt}`);
         return res;
       }
 
@@ -55,10 +52,7 @@ export class DeduplicatedRequestHandler<
       self.inMemoryDeduplicationCache.set(key, promise);
 
       try {
-        console.log(`redis get origin ${cnt} started`);
-        console.time(`redis get origin ${cnt}`);
         const result = await promise;
-        console.timeEnd(`redis get origin ${cnt}`);
         return structuredClone(result);
       } finally {
         // Once the promise is resolved/rejected, remove it from the map

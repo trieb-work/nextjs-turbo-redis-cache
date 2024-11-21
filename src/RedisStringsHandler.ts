@@ -75,9 +75,7 @@ export default class RedisStringsHandler implements CacheHandler {
     defaultStaleAge = 60 * 60 * 24 * 14,
     estimateExpireAge = (staleAge) =>
       process.env.VERCEL_ENV === 'preview' ? staleAge * 1.2 : staleAge * 2,
-    ...options
   }: CreateRedisStringsHandlerOptions) {
-    console.log('constructor called, options ', options);
     this.maxMemoryCacheSize = maxMemoryCacheSize;
     this.keyPrefix = keyPrefix;
     this.timeoutMs = timeoutMs;
@@ -182,9 +180,6 @@ export default class RedisStringsHandler implements CacheHandler {
   }
 
   public async get(key: GetParams[0], ctx: GetParams[1]) {
-    if (ctx?.kind !== IncrementalCacheKind.FETCH) {
-      console.log('get key', key, 'ctx', ctx);
-    }
     await this.assertClientIsReady();
 
     const clientGet = this.redisGetDeduplication
@@ -208,11 +203,9 @@ export default class RedisStringsHandler implements CacheHandler {
     }
 
     if (cacheValue.value?.kind === 'FETCH') {
-      console.time('decoding' + key);
       cacheValue.value.data.body = Buffer.from(
         cacheValue.value.data.body,
       ).toString('base64');
-      console.timeEnd('decoding' + key);
     }
 
     const combinedTags = new Set([
@@ -262,9 +255,6 @@ export default class RedisStringsHandler implements CacheHandler {
       data.data.body = Buffer.from(data.data.body, 'base64').toString();
       console.timeEnd('encoding' + key);
     }
-    if (data.kind !== 'FETCH') {
-      console.log('set key', key, 'data', data, 'ctx', ctx);
-    }
     await this.assertClientIsReady();
 
     data.lastModified = Date.now();
@@ -279,8 +269,8 @@ export default class RedisStringsHandler implements CacheHandler {
 
     const expireAt =
       ctx.revalidate &&
-      Number.isSafeInteger(ctx.revalidate) &&
-      ctx.revalidate > 0
+        Number.isSafeInteger(ctx.revalidate) &&
+        ctx.revalidate > 0
         ? this.estimateExpireAge(ctx.revalidate)
         : this.estimateExpireAge(this.defaultStaleAge);
     const options = getTimeoutRedisCommandOptions(this.timeoutMs);
@@ -312,10 +302,10 @@ export default class RedisStringsHandler implements CacheHandler {
     await Promise.all([setOperation, setTagsOperation]);
   }
   public async revalidateTag(tagOrTags: RevalidateParams[0]) {
-    console.log('revalidateTag tagOrTags', tagOrTags);
     const tags = new Set([tagOrTags || []].flat());
     await this.assertClientIsReady();
 
+    // TODO: check how this revalidatedTagsMap is used or if it can be deleted
     for (const tag of tags) {
       if (isImplicitTag(tag)) {
         const now = Date.now();
