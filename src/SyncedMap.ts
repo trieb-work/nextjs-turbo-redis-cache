@@ -183,6 +183,10 @@ export class SyncedMap<V> {
       await this.subscriberClient.connect();
 
       await Promise.all([
+        // We use a custom channel for insert/delete For the following reason:
+        // With custom channel we can delete multiple entries in one message. If we would listen to unlink / del we
+        // could get thousands of messages for one revalidateTag (For example revalidateTag("algolia") would send an enormous amount of network packages)
+        // Also we can send the value in the message for insert
         this.subscriberClient.subscribe(this.syncChannel, syncHandler),
         // Subscribe to Redis keyspace notifications for evicted and expired keys
         this.subscriberClient.subscribe(

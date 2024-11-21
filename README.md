@@ -13,11 +13,13 @@ Key Features:
 
 ## Consistency
 
-Consiticency levels of Redis itself:
+To understand consistency levels of this caching implementation we first have to understand the consistency of redis itself:
+Redis executes commands in a single-threaded manner. This ensures that all operations are processed sequentially, so clients always see a consistent view of the data.
+But depending on the setup of redis this can change:
 
-- Strong consistency: Redis executes commands in a single-threaded manner. This ensures that all operations are processed sequentially, so clients always see a consistent view of the data.
-- Eventual consistency: In a master-replica setup
-- Eventual consistency: In Redis Cluster mode:
+- Strong consistency: only for single node setup
+- Eventual consistency: In a master-replica setup (strong consistency only while there is no failover)
+- Eventual consistency: In Redis Cluster mode
 
 Consistency levels of Caching Handler:
 If Redis is used in a single node setup and Request Deduplication is turned off, only then the caching handler will have strong consistency.
