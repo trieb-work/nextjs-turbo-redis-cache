@@ -24,7 +24,6 @@ export type CreateRedisStringsHandlerOptions = {
   inMemoryCachingTime?: number;
   defaultStaleAge?: number;
   estimateExpireAge?: (staleAge: number) => number;
-  maxMemoryCacheSize?: number;
 };
 
 const NEXT_CACHE_IMPLICIT_TAG_ID = '_N_T_';
@@ -41,7 +40,6 @@ export function getTimeoutRedisCommandOptions(
 }
 
 export default class RedisStringsHandler implements CacheHandler {
-  private maxMemoryCacheSize: undefined | number;
   private client: Client;
   private sharedTagsMap: SyncedMap<string[]>;
   private revalidatedTagsMap: SyncedMap<number>;
@@ -62,7 +60,6 @@ export default class RedisStringsHandler implements CacheHandler {
   private estimateExpireAge: (staleAge: number) => number;
 
   constructor({
-    maxMemoryCacheSize,
     database = process.env.VERCEL_ENV === 'production' ? 0 : 1,
     keyPrefix = process.env.VERCEL_URL || 'UNDEFINED_URL_',
     sharedTagsKey = '__sharedTags__',
@@ -75,7 +72,6 @@ export default class RedisStringsHandler implements CacheHandler {
     estimateExpireAge = (staleAge) =>
       process.env.VERCEL_ENV === 'preview' ? staleAge * 1.2 : staleAge * 2,
   }: CreateRedisStringsHandlerOptions) {
-    this.maxMemoryCacheSize = maxMemoryCacheSize;
     this.keyPrefix = keyPrefix;
     this.timeoutMs = timeoutMs;
     this.redisGetDeduplication = redisGetDeduplication;
