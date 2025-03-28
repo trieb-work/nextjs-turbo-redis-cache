@@ -1,3 +1,11 @@
+# [1.2.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.1.3...v1.2.0) (2025-03-28)
+
+
+### Features
+
+* add tsup ([ccf122a](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/ccf122a243fade016b6b2d544acec4098222becd))
+* add tsup ([2dffad6](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/2dffad68401bc273cf81a0a0d06446d34b574a5e))
+
 ## [1.1.3](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.1.2...v1.1.3) (2025-03-28)
 
 
