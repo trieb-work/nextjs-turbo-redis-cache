@@ -86,3 +86,8 @@ Since all caching calls in one api/page/server action request is always served b
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+
+## Sponsor
+
+This project is created and maintained by the Next.js & Payload CMS agency [trieb.work](https://trieb.work)
