@@ -20,7 +20,7 @@
     "import": "./dist/index.js",
     "require": "./dist/index.js"
   },
-  "type": "module",
+  "type": "commonjs",
   "keywords": [
     "nextjs",
     "redis",
