@@ -21,6 +21,7 @@ TODO
 pnpm install @trieb.work/nextjs-turbo-redis-cache
 ```
 
+### Option A: minimum implentation with default options
 extend `next.config.js` with:
 ```
 const nextConfig = {
@@ -29,6 +30,10 @@ const nextConfig = {
   ...
 }
 ```
+
+### Option B: create a wrapper file to change options
+
+TODO
 
 ## Consistency
 
