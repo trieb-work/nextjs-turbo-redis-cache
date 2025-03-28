@@ -14,11 +14,11 @@
     "test:ui": "vitest --ui  --config vite.config.ts",
     "prepare": "./scripts/prepare.sh"
   },
-  "main": "dist/index.cjs",
+  "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "exports": {
-    "require": "./dist/index.cjs",
+    "require": "./dist/index.js",
     "import": "./dist/index.mjs"
   },
   "keywords": [
