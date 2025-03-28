@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.1.0...v1.1.1) (2025-03-28)
+
+
+### Bug Fixes
+
+* Update package.json ([bf17b41](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/bf17b4186c8b7d94be83c61b5d4f8622ac7cf7f0))
+
 # [1.1.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.0.0...v1.1.0) (2025-03-28)
 
 
