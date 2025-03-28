@@ -7,20 +7,20 @@
   },
   "scripts": {
     "dev": "pnpm test",
-    "build": "tsc",
+    "build": "tsup",
     "lint": "eslint -c eslint.config.mjs --fix",
     "fmt": "prettier --write 'src/**/*.ts' 'src/*.ts'",
     "test": "vitest --coverage --config vite.config.ts",
     "test:ui": "vitest --ui  --config vite.config.ts",
     "prepare": "./scripts/prepare.sh"
   },
-  "main": "dist/index.js",
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "exports": {
-    "import": "./dist/index.js",
-    "require": "./dist/index.js"
+    "require": "./dist/index.cjs",
+    "import": "./dist/index.mjs"
   },
-  "type": "commonjs",
   "keywords": [
     "nextjs",
     "redis",
@@ -74,10 +74,13 @@
     "prettier": "^3.3.3",
     "semantic-release": "^24.2.0",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.5"
+    "vitest": "^2.1.5",
+    "tsup": "^8.4.0",
+    "next": "15.0.3",
+    "redis": "4.7.0"
   },
-  "dependencies": {
-    "next": "^15.0.3",
-    "redis": "^4.7.0"
+  "peerDependencies": {
+    "next": "15.0.3",
+    "redis": "4.7.0"
   }
 }
