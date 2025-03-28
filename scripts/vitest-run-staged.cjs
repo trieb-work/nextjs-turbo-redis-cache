@@ -18,7 +18,7 @@ const findTestFile = (filePath) => {
   const stagedFiles = stagedFilesOutput.trim().split('\n');
 
   const stagedTsFiles = stagedFiles
-    .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
+    .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts') && !file.endsWith('.config.ts'))
 
   const testFiles = stagedTsFiles
     .map((file) => findTestFile(file))
