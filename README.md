@@ -17,7 +17,32 @@ TODO
 
 ## Getting started
 
-TODO add description for how to use it
+```bash
+pnpm install @trieb.work/nextjs-turbo-redis-cache
+```
+
+extend `next.config.js` with:
+```
+const nextConfig = {
+  cacheHandler:
+    process.env.NODE_ENV === "production" || process.env.DEV_REDIS_CACHE
+      ? new CachedHandler({
+        // Default Options:
+        // maxMemoryCacheSize, // deprecated
+        // database = process.env.VERCEL_ENV === 'production' ? 0 : 1,
+        // keyPrefix = process.env.VERCEL_URL || 'UNDEFINED_URL_',
+        // sharedTagsKey = '__sharedTags__',
+        // timeoutMs = 5000,
+        // revalidateTagQuerySize = 250,
+        // avgResyncIntervalMs = 60 * 60 * 1000,
+        // redisGetDeduplication = true,
+        // inMemoryCachingTime = 10_000,
+        // defaultStaleAge = 60 * 60 * 24 * 14,
+        // estimateExpireAge = (staleAge) =>
+        //   process.env.VERCEL_ENV === 'preview' ? staleAge * 1.2 : staleAge * 2,
+      })
+      : undefined,
+```
 
 ## Consistency
 
