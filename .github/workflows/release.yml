@@ -5,6 +5,15 @@ on:
     branches:
       - main
       - beta
+      
+permissions:
+  contents: write
+  pull-requests: write
+  deployments: write
+  packages: write
+  statuses: write
+  issues: write
+  actions: write
 
 jobs:
   release:
@@ -22,6 +31,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build project
+        run: npm run build
 
       - name: Run Semantic Release
         env:
