@@ -1,6 +1,6 @@
 {
   "name": "@trieb.work/nextjs-turbo-redis-cache",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "scripts": {
     "dev": "pnpm test",
     "build": "tsc",
