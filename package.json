@@ -1,6 +1,10 @@
 {
   "name": "@trieb.work/nextjs-turbo-redis-cache",
   "version": "1.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/trieb-work/nextjs-turbo-redis-cache.git"
+  },
   "scripts": {
     "dev": "pnpm test",
     "build": "tsc",
@@ -11,8 +15,12 @@
     "prepare": "./scripts/prepare.sh"
   },
   "main": "dist/index.js",
-  "type": "module",
   "types": "dist/index.d.ts",
+  "exports": {
+    "import": "./dist/index.js",
+    "require": "./dist/index.js"
+  },
+  "type": "module",
   "keywords": [
     "nextjs",
     "redis",
