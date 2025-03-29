@@ -1,5 +1,7 @@
 # nextjs-turbo-redis-cache
 
+[![npm version](https://img.shields.io/npm/v/@trieb.work/nextjs-turbo-redis-cache.svg)](https://www.npmjs.com/package/@trieb.work/nextjs-turbo-redis-cache)
+
 The ultimate Redis caching solution for Next.js. Built for production-ready, large-scale projects, it delivers unparalleled performance and efficiency with features tailored for high-traffic applications.
 
 Key Features:
@@ -22,7 +24,9 @@ pnpm install @trieb.work/nextjs-turbo-redis-cache
 ```
 
 ### Option A: minimum implentation with default options
+
 extend `next.config.js` with:
+
 ```
 const nextConfig = {
   ...
@@ -78,8 +82,6 @@ Since all caching calls in one api/page/server action request is always served b
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-
 ## Sponsor
 
 This project is created and maintained by the Next.js & Payload CMS agency [trieb.work](https://trieb.work)
-
