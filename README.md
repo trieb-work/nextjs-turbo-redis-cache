@@ -2,14 +2,14 @@
 
 [![npm version](https://img.shields.io/npm/v/@trieb.work/nextjs-turbo-redis-cache.svg)](https://www.npmjs.com/package/@trieb.work/nextjs-turbo-redis-cache)
 
-The ultimate Redis caching solution for Next.js. Built for production-ready, large-scale projects, it delivers unparalleled performance and efficiency with features tailored for high-traffic applications.
+The ultimate Redis caching solution for Next.js. Built for production-ready, large-scale projects, it delivers unparalleled performance and efficiency with features tailored for high-traffic applications. This package has been created after extensibly testing the @neshca package and finding several major issues with it.
 
 Key Features:
 
 - _Turbocharged Storage_: Avoids base64 encoding to save ~33% of storage space compared to traditional implementations.
 - _Batch Tag Invalidation_: Groups and optimizes delete operations for minimal Redis stress.
 - _Request Deduplication_: Prevents redundant Redis get calls, ensuring faster response times.
-- _In-Memory Caching_: Includes local caching for Redis get operations to reduce latency further.
+- _In-Memory Caching_: Includes local caching for Redis get operations to reduce latency further. Don't request redis for the same key multiple times.
 - _Efficient Tag Management_: in-memory tags map for lightning-fast revalidate operations with minimal Redis overhead.
 - _Intelligent Key-Space Notifications_: Automatic update of in-memory tags map for expired or evicted keys.
 
