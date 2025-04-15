@@ -35,6 +35,8 @@ const nextConfig = {
 }
 ```
 
+Set REDISHOST and REDISPORT environment variables.
+
 ### Option B: create a wrapper file to change options
 
 TODO
