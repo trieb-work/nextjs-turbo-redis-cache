@@ -1,3 +1,4 @@
+import { debug } from './debug';
 import { SyncedMap } from './SyncedMap';
 export class DeduplicatedRequestHandler<
   T extends (...args: [never, never]) => Promise<K>,
@@ -28,17 +29,39 @@ export class DeduplicatedRequestHandler<
 
   // Method to handle deduplicated requests
   deduplicatedFunction = (key: string): T => {
+    debug('DeduplicatedRequestHandler.deduplicatedFunction() called with', key);
     //eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     const dedupedFn = async (...args: [never, never]): Promise<K> => {
       // If there's already a pending request with the same key, return it
+      debug(
+        'DeduplicatedRequestHandler.deduplicatedFunction().dedupedFn called with',
+        key,
+        args,
+        self.fn.name,
+      );
       if (
         self.inMemoryDeduplicationCache &&
         self.inMemoryDeduplicationCache.has(key)
       ) {
+        debug(
+          'DeduplicatedRequestHandler.deduplicatedFunction().dedupedFn ',
+          key,
+          args,
+          self.fn.name,
+          'found key in inMemoryDeduplicationCache',
+        );
         const res = await self.inMemoryDeduplicationCache
           .get(key)!
           .then((v) => structuredClone(v));
+        debug(
+          'DeduplicatedRequestHandler.deduplicatedFunction().dedupedFn ',
+          key,
+          args,
+          self.fn.name,
+          'found key in inMemoryDeduplicationCache and served result from there',
+          res,
+        );
         return res;
       }
 
@@ -46,11 +69,27 @@ export class DeduplicatedRequestHandler<
       const promise = self.fn(...args);
       self.inMemoryDeduplicationCache.set(key, promise);
 
+      debug(
+        'DeduplicatedRequestHandler.deduplicatedFunction().dedupedFn ',
+        key,
+        args,
+        self.fn.name,
+        'did not found key in inMemoryDeduplicationCache. Setting it now and waiting for promise to resolve',
+      );
+
       try {
         const result = await promise;
+        debug(
+          'DeduplicatedRequestHandler.deduplicatedFunction().dedupedFn ',
+          key,
+          args,
+          self.fn.name,
+          'promise resolved. Returning result',
+          result,
+        );
         return structuredClone(result);
       } finally {
-        // Once the promise is resolved/rejected, remove it from the map
+        // Once the promise is resolved/rejected and caching timeout is over, remove it from the map
         setTimeout(() => {
           self.inMemoryDeduplicationCache.delete(key);
         }, self.cachingTimeMs);

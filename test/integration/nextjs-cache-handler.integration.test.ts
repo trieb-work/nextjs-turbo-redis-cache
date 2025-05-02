@@ -36,6 +36,9 @@ async function waitForServer(url, timeout = 20000) {
 
 describe('Next.js Turbo Redis Cache Integration', () => {
   beforeAll(async () => {
+    // Install freshly built cache handler
+    await runCommand('pnpm', ['i'], NEXT_APP_DIR);
+
     // Build Next.js app first
     await runCommand('npx', ['next', 'build'], NEXT_APP_DIR);
 
@@ -48,7 +51,8 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         env: {
           ...process.env,
           NODE_ENV: 'production',
-          REDIS_URL: 'redis://localhost:6379',
+          REDISHOST: 'localhost',
+          REDISPORT: '6379',
         },
         stdio: 'inherit',
       },
@@ -70,12 +74,12 @@ describe('Next.js Turbo Redis Cache Integration', () => {
   it('should cache API responses in Redis', async () => {
     // First request (should increment counter)
     const res1 = await fetch(NEXT_START_URL + '/api/cache-test');
-    const data1 = await res1.json();
+    const data1: any = await res1.json();
     expect(data1.counter).toBe(1);
 
     // Second request (should hit cache, counter should not increment if cache works)
     const res2 = await fetch(NEXT_START_URL + '/api/cache-test');
-    const data2 = await res2.json();
+    const data2: any = await res2.json();
 
     // If cache is working, counter should stay 1; if not, it will increment
     expect(data2.counter).toBe(1);

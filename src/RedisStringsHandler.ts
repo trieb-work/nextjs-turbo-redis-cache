@@ -1,17 +1,48 @@
 import { commandOptions, createClient } from 'redis';
 import { SyncedMap } from './SyncedMap';
 import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
-import {
-  CacheHandler,
-  CacheHandlerValue,
-  IncrementalCache,
-} from 'next/dist/server/lib/incremental-cache';
+import { debug } from './debug';
 
 export type CommandOptions = ReturnType<typeof commandOptions>;
-type GetParams = Parameters<IncrementalCache['get']>;
-type SetParams = Parameters<IncrementalCache['set']>;
-type RevalidateParams = Parameters<IncrementalCache['revalidateTag']>;
 export type Client = ReturnType<typeof createClient>;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function bufferReviver(_: string, value: any): any {
+  if (value && typeof value === 'object' && typeof value.$binary === 'string') {
+    return Buffer.from(value.$binary, 'base64');
+  }
+  return value;
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function bufferReplacer(_: string, value: any): any {
+  if (Buffer.isBuffer(value)) {
+    return {
+      $binary: value.toString('base64'),
+    };
+  }
+  if (
+    value &&
+    typeof value === 'object' &&
+    value?.type === 'Buffer' &&
+    Array.isArray(value.data)
+  ) {
+    return {
+      $binary: Buffer.from(value.data).toString('base64'),
+    };
+  }
+  return value;
+}
+
+type CacheEntry = {
+  value: object;
+  lastModified: number;
+  tags: string[];
+};
+type CacheHandlerContext = {
+  tags: string[];
+  softTags: string[];
+  revalidate?: number;
+};
 
 export type CreateRedisStringsHandlerOptions = {
   database?: number;
@@ -39,7 +70,7 @@ export function getTimeoutRedisCommandOptions(
   return commandOptions({ signal: AbortSignal.timeout(timeoutMs) });
 }
 
-export default class RedisStringsHandler implements CacheHandler {
+export default class RedisStringsHandler {
   private client: Client;
   private sharedTagsMap: SyncedMap<string[]>;
   private revalidatedTagsMap: SyncedMap<number>;
@@ -66,8 +97,10 @@ export default class RedisStringsHandler implements CacheHandler {
     timeoutMs = 5000,
     revalidateTagQuerySize = 250,
     avgResyncIntervalMs = 60 * 60 * 1000,
-    redisGetDeduplication = true,
-    inMemoryCachingTime = 10_000,
+    // redisGetDeduplication = true, TODO change back
+    redisGetDeduplication = false,
+    // inMemoryCachingTime = 10_000, TODO change back
+    inMemoryCachingTime = 0,
     defaultStaleAge = 60 * 60 * 24 * 14,
     estimateExpireAge = (staleAge) =>
       process.env.VERCEL_ENV === 'preview' ? staleAge * 1.2 : staleAge * 2,
@@ -160,11 +193,11 @@ export default class RedisStringsHandler implements CacheHandler {
     this.deduplicatedRedisGet =
       this.redisDeduplicationHandler.deduplicatedFunction;
   }
-  resetRequestCache(...args: never[]): void {
-    console.warn('WARNING resetRequestCache() was called', args);
-  }
+
+  resetRequestCache(): void {}
 
   private async assertClientIsReady(): Promise<void> {
+    debug('RedisStringsHandler.assertClientIsReady() called');
     await Promise.all([
       this.sharedTagsMap.waitUntilReady(),
       this.revalidatedTagsMap.waitUntilReady(),
@@ -172,52 +205,67 @@ export default class RedisStringsHandler implements CacheHandler {
     if (!this.client.isReady) {
       throw new Error('Redis client is not ready yet or connection is lost.');
     }
+    debug(
+      'RedisStringsHandler.assertClientIsReady() finished with client ready',
+    );
   }
 
-  public async get(key: GetParams[0], ctx: GetParams[1]) {
+  public async get(
+    key: string,
+    ctx: CacheHandlerContext,
+  ): Promise<CacheEntry | null> {
+    // TODO fix type of ctx. Example requests:
+    // {kind: 'APP_ROUTE', isRoutePPREnabled: false, isFallback: false}
+
+    debug('RedisStringsHandler.get() called with', key, ctx);
     await this.assertClientIsReady();
 
     const clientGet = this.redisGetDeduplication
-      ? this.deduplicatedRedisGet(key)
+      ? this.deduplicatedRedisGet(this.keyPrefix + key)
       : this.redisGet;
-    const result = await clientGet(
+    const serializedCacheEntry = await clientGet(
       getTimeoutRedisCommandOptions(this.timeoutMs),
       this.keyPrefix + key,
     );
 
-    if (!result) {
+    debug(
+      'RedisStringsHandler.get() finished with result (serializedCacheEntry)',
+      serializedCacheEntry?.substring(0, 1000),
+    );
+
+    if (!serializedCacheEntry) {
       return null;
     }
 
-    const cacheValue = JSON.parse(result) as
-      | (CacheHandlerValue & { lastModified: number })
-      | null;
+    const cacheEntry: CacheEntry | null = JSON.parse(
+      serializedCacheEntry,
+      bufferReviver,
+    );
 
-    if (!cacheValue) {
+    debug(
+      'RedisStringsHandler.get() finished with result (cacheEntry)',
+      cacheEntry,
+    );
+
+    if (!cacheEntry) {
       return null;
-    }
-
-    if (cacheValue.value?.kind === 'FETCH') {
-      cacheValue.value.data.body = Buffer.from(
-        cacheValue.value.data.body,
-      ).toString('base64');
     }
 
     const combinedTags = new Set([
-      ...(ctx?.softTags || []),
+      ...(ctx?.softTags || []), // TODO: check what softTags are and if they can be removed. Maybe something old?
       ...(ctx?.tags || []),
     ]);
 
     if (combinedTags.size === 0) {
-      return cacheValue;
+      return cacheEntry;
     }
 
     for (const tag of combinedTags) {
-      // TODO: check how this revalidatedTagsMap is used or if it can be deleted
+      // TODO: check how this revalidatedTagsMap is used or if it can be deleted. Looks like implicit tags is something old
       const revalidationTime = this.revalidatedTagsMap.get(tag);
-      if (revalidationTime && revalidationTime > cacheValue.lastModified) {
+      if (revalidationTime && revalidationTime > cacheEntry.lastModified) {
         const redisKey = this.keyPrefix + key;
-        // Do not await here as this can happen in the background while we can already serve the cacheValue
+        // Do not await here as this can happen in the background while we can already serve the cacheEntry
         this.client
           .unlink(getTimeoutRedisCommandOptions(this.timeoutMs), redisKey)
           .catch((err) => {
@@ -238,46 +286,57 @@ export default class RedisStringsHandler implements CacheHandler {
       }
     }
 
-    return cacheValue;
+    return cacheEntry;
   }
-  public async set(
-    key: SetParams[0],
-    data: SetParams[1] & { lastModified: number },
-    ctx: SetParams[2],
-  ) {
-    if (data.kind === 'FETCH') {
-      console.time('encoding' + key);
-      data.data.body = Buffer.from(data.data.body, 'base64').toString();
-      console.timeEnd('encoding' + key);
-    }
+  public async set(key: string, data: object, ctx: CacheHandlerContext) {
+    // fix type of data:
+    // { kind: 'APP_ROUTE', status: 200, body: Buffer(13), headers: {… } }
+    // fix type of ctx:
+    // {revalidate: false, isRoutePPREnabled: false, isFallback: false}
+
     await this.assertClientIsReady();
 
-    data.lastModified = Date.now();
-
-    const value = JSON.stringify(data);
+    // Constructing and serializing the value for storing it in redis
+    const cacheEntry: CacheEntry = {
+      value: data,
+      lastModified: Date.now(),
+      tags: ctx.tags,
+    };
+    const serializedCacheEntry = JSON.stringify(cacheEntry, bufferReplacer);
+    debug(
+      'RedisStringsHandler.set() will set the following serializedCacheEntry',
+      serializedCacheEntry?.substring(0, 1000),
+    );
 
     // pre seed data into deduplicated get client. This will reduce redis load by not requesting
     // the same value from redis which was just set.
     if (this.redisGetDeduplication) {
-      this.redisDeduplicationHandler.seedRequestReturn(key, value);
+      this.redisDeduplicationHandler.seedRequestReturn(
+        key,
+        serializedCacheEntry,
+      );
     }
 
+    // Constructing the expire time for the cache entry
     const expireAt =
       ctx.revalidate &&
       Number.isSafeInteger(ctx.revalidate) &&
       ctx.revalidate > 0
         ? this.estimateExpireAge(ctx.revalidate)
         : this.estimateExpireAge(this.defaultStaleAge);
+
+    // Setting the cache entry in redis
     const options = getTimeoutRedisCommandOptions(this.timeoutMs);
     const setOperation: Promise<string | null> = this.client.set(
       options,
       this.keyPrefix + key,
-      value,
+      serializedCacheEntry,
       {
         EX: expireAt,
       },
     );
 
+    // Setting the tags for the cache entry in the sharedTagsMap (locally stored hashmap synced via redis)
     let setTagsOperation: Promise<void> | undefined;
     if (ctx.tags && ctx.tags.length > 0) {
       const currentTags = this.sharedTagsMap.get(key);
@@ -296,7 +355,7 @@ export default class RedisStringsHandler implements CacheHandler {
 
     await Promise.all([setOperation, setTagsOperation]);
   }
-  public async revalidateTag(tagOrTags: RevalidateParams[0]) {
+  public async revalidateTag(tagOrTags: string | string[]) {
     const tags = new Set([tagOrTags || []].flat());
     await this.assertClientIsReady();
 
