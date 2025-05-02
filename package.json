@@ -75,7 +75,6 @@
     "@vitest/ui": "^2.1.5",
     "eslint": "^9.15.0",
     "lint-staged": "^15.2.10",
-    "next": "15.0.3",
     "node-fetch": "3",
     "prettier": "^3.3.3",
     "redis": "4.7.0",
@@ -88,8 +87,5 @@
     "next": "15.0.3",
     "redis": "4.7.0"
   },
-  "packageManager": "pnpm@9.15.9+sha512.68046141893c66fad01c079231128e9afb89ef87e2691d69e4d40eee228988295fd4682181bae55b58418c3a253bde65a505ec7c5f9403ece5cc3cd37dcf2531",
-  "dependencies": {
-    "bson": "^6.10.3"
-  }
+  "packageManager": "pnpm@9.15.9+sha512.68046141893c66fad01c079231128e9afb89ef87e2691d69e4d40eee228988295fd4682181bae55b58418c3a253bde65a505ec7c5f9403ece5cc3cd37dcf2531"
 }
