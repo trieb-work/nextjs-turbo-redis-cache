@@ -7,7 +7,7 @@ import { bufferReviver, bufferReplacer } from './utils/json';
 export type CommandOptions = ReturnType<typeof commandOptions>;
 export type Client = ReturnType<typeof createClient>;
 
-type CacheEntry = {
+export type CacheEntry = {
   value: unknown;
   lastModified: number;
   tags: string[];

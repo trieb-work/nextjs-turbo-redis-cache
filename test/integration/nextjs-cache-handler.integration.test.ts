@@ -3,6 +3,7 @@ import { spawn } from 'child_process';
 import fetch from 'node-fetch';
 import { createClient } from 'redis';
 import { join } from 'path';
+import { CacheEntry } from '../../src/RedisStringsHandler';
 
 const NEXT_APP_DIR = join(__dirname, 'next-app');
 console.log('NEXT_APP_DIR', NEXT_APP_DIR);
@@ -116,7 +117,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
     if (redisClient) await redisClient.quit();
   });
 
-  it('should cache API responses in Redis', async () => {
+  it('should cache static API routes in Redis', async () => {
     // First request (should increment counter)
     const res1 = await fetch(NEXT_START_URL + '/api/cached-static-fetch');
     const data1: any = await res1.json();
@@ -129,8 +130,129 @@ describe('Next.js Turbo Redis Cache Integration', () => {
     // If cache is working, counter should stay 1; if not, it will increment
     expect(data2.counter).toBe(1);
 
-    // Optionally, check Redis keys
+    // check Redis keys
     const keys = await redisClient.keys(process.env.VERCEL_URL + '*');
     expect(keys.length).toBeGreaterThan(0);
+
+    // check the content of redis key
+    const value = await redisClient.get(
+      process.env.VERCEL_URL + '/api/cached-static-fetch',
+    );
+    expect(value).toBeDefined();
+    const cacheEntry: CacheEntry = JSON.parse(value);
+    expect((cacheEntry.value as any).kind).toBe('APP_ROUTE');
+    const bodyBuffer = Buffer.from(
+      (cacheEntry.value as any)?.body?.$binary,
+      'base64',
+    );
+    const bodyJson = JSON.parse(bodyBuffer.toString('utf-8'));
+    expect(bodyJson.counter).toBe(data2.counter);
+  });
+
+  it('should not cache uncached API routes in Redis', async () => {
+    // First request (should increment counter)
+    const res1 = await fetch(NEXT_START_URL + '/api/uncached-fetch');
+    const data1: any = await res1.json();
+    expect(data1.counter).toBe(1);
+
+    // Second request (should hit cache, counter should not increment if cache works)
+    const res2 = await fetch(NEXT_START_URL + '/api/uncached-fetch');
+    const data2: any = await res2.json();
+
+    // If not caching it is working request 2 should be higher as request one
+    expect(data2.counter).toBeGreaterThan(data1.counter);
+
+    // check the content of redis key
+    const value = await redisClient.get(
+      process.env.VERCEL_URL + '/api/uncached-fetch',
+    );
+    expect(value).toBeNull();
+  });
+
+  describe('should have the correct caching behavior for pages', () => {
+    describe('Without any fetch requests', () => {
+      describe('With default page configuration for revalidate and dynamic values', () => {
+        it('should be cached in redis', async () => {
+          /**
+           * 0. Store timestamp of the first call in a variable so we can later check if TTL in redis is correct
+           * 1. Call the page twice
+           * 2. Extract the Timestamp from both results
+           * 3. Compare the two timestamps
+           * 4. The timestamps should be the same, meaning that the page was deduplicated
+           * 5. Connect to redis and check if the page was cached in redis and if TTL is set correctly
+           */
+
+          // First request (should increment counter)
+          const res1 = await fetch(NEXT_START_URL + '/api/cached-static-fetch');
+          const data1: any = await res1.json();
+          expect(data1.counter).toBe(1);
+
+          // Second request (should hit cache, counter should not increment if cache works)
+          const res2 = await fetch(NEXT_START_URL + '/api/cached-static-fetch');
+          const data2: any = await res2.json();
+
+          // If cache is working, counter should stay 1; if not, it will increment
+          expect(data2.counter).toBe(1);
+
+          // check Redis keys
+          const keys = await redisClient.keys(process.env.VERCEL_URL + '*');
+          expect(keys.length).toBeGreaterThan(0);
+
+          // check the content of redis key
+          const value = await redisClient.get(
+            process.env.VERCEL_URL + '/api/cached-static-fetch',
+          );
+          expect(value).toBeDefined();
+          const cacheEntry: CacheEntry = JSON.parse(value);
+          expect((cacheEntry.value as any).kind).toBe('APP_ROUTE');
+          const bodyBuffer = Buffer.from(
+            (cacheEntry.value as any)?.body?.$binary,
+            'base64',
+          );
+          const bodyJson = JSON.parse(bodyBuffer.toString('utf-8'));
+          expect(bodyJson.counter).toBe(data2.counter);
+        });
+      });
+    });
   });
 });
+
+/**
+ * TODO
+ * Test cases:
+ * 0. Store timestamp of the first call in a variable so we can later check if TTL in redis is correct
+ * 1. Call the page twice
+ * 2. Extract the Timestamp from both results
+ * 3. Compare the two timestamps
+ * 4. The timestamps should be the same, meaning that the page was deduplicated
+ * 5. Connect to redis and check if the page was cached in redis and if TTL is set correctly
+ *
+ * 6. Call the page again, but wait 3 seconds before calling it
+ * 7. Extract the Timestamp
+ * 8. Compare the timestamp to previous timestamp
+ * 9. The timestamp should be the same, meaning that the page was cached (By in-memory cache which is set to 10 seconds by default)
+ *
+ * 10. Call the page again, but wait 11 seconds before calling it
+ * 11. Extract the Timestamp
+ * 12. Compare the timestamp to previous timestamp
+ * 13. The timestamp should be the same, meaning that the page was cached (By redis cache which becomes active after in-memory cache expires)
+ *
+ * 14. Connect to redis and check if the page was cached in redis and if TTL is set correctly
+ *
+ * 15. Check expiration time of the page in redis
+ *
+ * 16. Call the page again after TTL expiration time
+ * 17. Extract the Timestamp
+ * 18. Compare the timestamp to previous timestamp
+ * 19. The timestamp should be different, meaning that the page was recreated
+ *
+ * 20. call API which will invalidate the page via a revalidatePage action
+ * 21. Call the page again
+ * 18. Compare the timestamp to previous timestamp
+ * 19. The timestamp should be different, meaning that the page was recreated
+ *
+ * 20. Connect to redis and delete the page from redis
+ * 21. Call the page again, but wait 11 seconds before calling it
+ * 22. Compare the timestamp to previous timestamp
+ * 23. The timestamp should be different, meaning that the page was recreated
+ */

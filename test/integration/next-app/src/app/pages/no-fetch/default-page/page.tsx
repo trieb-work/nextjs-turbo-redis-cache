@@ -44,12 +44,6 @@ export default async function TestPage() {
  * 18. Compare the timestamp to previous timestamp
  * 19. The timestamp should be different, meaning that the page was recreated
  *
- * 20. call API which will invalidate the page via a revalidateTag action
- * 21. Call the page again
- * 18. Compare the timestamp to previous timestamp
- * 19. The timestamp should be different, meaning that the page was recreated
- *
- *
  * 20. call API which will invalidate the page via a revalidatePage action
  * 21. Call the page again
  * 18. Compare the timestamp to previous timestamp
