@@ -182,13 +182,33 @@ export class SyncedMap<V> {
     try {
       await this.subscriberClient.connect();
 
+      // Check if keyspace event configuration is set correctly
+      const keyspaceEventConfig = (
+        await this.subscriberClient.configGet('notify-keyspace-events')
+      )?.['notify-keyspace-events'];
+      if (!keyspaceEventConfig.includes('E')) {
+        throw new Error(
+          "Keyspace event configuration has to include 'E' for Keyevent events, published with __keyevent@<db>__ prefix. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
+        );
+      }
+      if (
+        !keyspaceEventConfig.includes('A') &&
+        !(
+          keyspaceEventConfig.includes('x') && keyspaceEventConfig.includes('e')
+        )
+      ) {
+        throw new Error(
+          "Keyspace event configuration has to include 'A' or 'x' and 'e' for expired and evicted events. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
+        );
+      }
+
       await Promise.all([
         // We use a custom channel for insert/delete For the following reason:
         // With custom channel we can delete multiple entries in one message. If we would listen to unlink / del we
         // could get thousands of messages for one revalidateTag (For example revalidateTag("algolia") would send an enormous amount of network packages)
         // Also we can send the value in the message for insert
         this.subscriberClient.subscribe(this.syncChannel, syncHandler),
-        // Subscribe to Redis keyspace notifications for evicted and expired keys
+        // Subscribe to Redis keyevent notifications for evicted and expired keys
         this.subscriberClient.subscribe(
           `__keyevent@${this.database}__:evicted`,
           keyEventHandler,

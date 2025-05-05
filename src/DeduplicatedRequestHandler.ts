@@ -22,6 +22,13 @@ export class DeduplicatedRequestHandler<
   seedRequestReturn(key: string, value: K): void {
     const resultPromise = new Promise<K>((res) => res(value));
     this.inMemoryDeduplicationCache.set(key, resultPromise);
+
+    debug(
+      'DeduplicatedRequestHandler.seedRequestReturn() seeded result',
+      key,
+      (value as string).substring(0, 200),
+    );
+
     setTimeout(() => {
       this.inMemoryDeduplicationCache.delete(key);
     }, this.cachingTimeMs);
@@ -37,8 +44,6 @@ export class DeduplicatedRequestHandler<
       debug(
         'DeduplicatedRequestHandler.deduplicatedFunction().dedupedFn called with',
         key,
-        args,
-        self.fn.name,
       );
       if (
         self.inMemoryDeduplicationCache &&
@@ -47,8 +52,6 @@ export class DeduplicatedRequestHandler<
         debug(
           'DeduplicatedRequestHandler.deduplicatedFunction().dedupedFn ',
           key,
-          args,
-          self.fn.name,
           'found key in inMemoryDeduplicationCache',
         );
         const res = await self.inMemoryDeduplicationCache
@@ -57,10 +60,8 @@ export class DeduplicatedRequestHandler<
         debug(
           'DeduplicatedRequestHandler.deduplicatedFunction().dedupedFn ',
           key,
-          args,
-          self.fn.name,
           'found key in inMemoryDeduplicationCache and served result from there',
-          res,
+          JSON.stringify(res).substring(0, 200),
         );
         return res;
       }
@@ -72,25 +73,31 @@ export class DeduplicatedRequestHandler<
       debug(
         'DeduplicatedRequestHandler.deduplicatedFunction().dedupedFn ',
         key,
-        args,
-        self.fn.name,
         'did not found key in inMemoryDeduplicationCache. Setting it now and waiting for promise to resolve',
       );
 
       try {
+        const ts = performance.now();
         const result = await promise;
         debug(
           'DeduplicatedRequestHandler.deduplicatedFunction().dedupedFn ',
           key,
-          args,
-          self.fn.name,
-          'promise resolved. Returning result',
-          result,
+          'promise resolved (in ',
+          performance.now() - ts,
+          'ms). Returning result',
+          JSON.stringify(result).substring(0, 200),
         );
         return structuredClone(result);
       } finally {
         // Once the promise is resolved/rejected and caching timeout is over, remove it from the map
         setTimeout(() => {
+          debug(
+            'DeduplicatedRequestHandler.deduplicatedFunction().dedupedFn ',
+            key,
+            'deleting key from inMemoryDeduplicationCache after ',
+            self.cachingTimeMs,
+            'ms',
+          );
           self.inMemoryDeduplicationCache.delete(key);
         }, self.cachingTimeMs);
       }
