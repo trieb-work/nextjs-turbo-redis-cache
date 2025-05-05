@@ -31,15 +31,19 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '20'
+          cache: 'pnpm'
+          
+      - name: Install pnpm
+        run: corepack enable
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm ci
 
       - name: Run lint
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Run tests
-        run: npm run test
+        run: pnpm run test
 
       - name: Code Coverage Comments
         uses: kcjpop/coverage-comments@v2.2
@@ -48,7 +52,7 @@ jobs:
           coverage-file: './coverage/lcov.info'
 
       - name: Build project
-        run: npm run build
+        run: pnpm run build
       
       - name: Dry run the release
         env:
