@@ -15,7 +15,8 @@ export default async function TestPage() {
 }
 
 /**
- * Test case:
+ * TODO
+ * Test cases:
  * 0. Store timestamp of the first call in a variable so we can later check if TTL in redis is correct
  * 1. Call the page twice
  * 2. Extract the Timestamp from both results

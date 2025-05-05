@@ -1,37 +1,11 @@
 import { commandOptions, createClient } from 'redis';
 import { SyncedMap } from './SyncedMap';
 import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
-import { debug } from './debug';
+import { debug } from './utils/debug';
+import { bufferReviver, bufferReplacer } from './utils/json';
 
 export type CommandOptions = ReturnType<typeof commandOptions>;
 export type Client = ReturnType<typeof createClient>;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function bufferReviver(_: string, value: any): any {
-  if (value && typeof value === 'object' && typeof value.$binary === 'string') {
-    return Buffer.from(value.$binary, 'base64');
-  }
-  return value;
-}
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function bufferReplacer(_: string, value: any): any {
-  if (Buffer.isBuffer(value)) {
-    return {
-      $binary: value.toString('base64'),
-    };
-  }
-  if (
-    value &&
-    typeof value === 'object' &&
-    value?.type === 'Buffer' &&
-    Array.isArray(value.data)
-  ) {
-    return {
-      $binary: Buffer.from(value.data).toString('base64'),
-    };
-  }
-  return value;
-}
 
 type CacheEntry = {
   value: unknown;
@@ -82,6 +56,13 @@ export type CreateRedisStringsHandlerOptions = {
   estimateExpireAge?: (staleAge: number) => number;
 };
 
+const NEXT_CACHE_IMPLICIT_TAG_ID = '_N_T_';
+const REVALIDATED_TAGS_KEY = '__revalidated_tags__';
+
+function isImplicitTag(tag: string): boolean {
+  return tag.startsWith(NEXT_CACHE_IMPLICIT_TAG_ID);
+}
+
 export function getTimeoutRedisCommandOptions(
   timeoutMs: number,
 ): CommandOptions {
@@ -91,6 +72,7 @@ export function getTimeoutRedisCommandOptions(
 export default class RedisStringsHandler {
   private client: Client;
   private sharedTagsMap: SyncedMap<string[]>;
+  private revalidatedTagsMap: SyncedMap<number>;
   private inMemoryDeduplicationCache: SyncedMap<
     Promise<ReturnType<Client['get']>>
   >;
@@ -153,7 +135,8 @@ export default class RedisStringsHandler {
       throw error;
     }
 
-    const filterKeys = (key: string): boolean => key !== sharedTagsKey;
+    const filterKeys = (key: string): boolean =>
+      key !== REVALIDATED_TAGS_KEY && key !== sharedTagsKey;
 
     this.sharedTagsMap = new SyncedMap<string[]>({
       client: this.client,
@@ -165,6 +148,20 @@ export default class RedisStringsHandler {
       filterKeys,
       resyncIntervalMs:
         avgResyncIntervalMs -
+        avgResyncIntervalMs / 10 +
+        Math.random() * (avgResyncIntervalMs / 10),
+    });
+
+    this.revalidatedTagsMap = new SyncedMap<number>({
+      client: this.client,
+      keyPrefix,
+      redisKey: REVALIDATED_TAGS_KEY,
+      database,
+      timeoutMs,
+      querySize: revalidateTagQuerySize,
+      filterKeys,
+      resyncIntervalMs:
+        avgResyncIntervalMs +
         avgResyncIntervalMs / 10 +
         Math.random() * (avgResyncIntervalMs / 10),
     });
@@ -197,7 +194,10 @@ export default class RedisStringsHandler {
   resetRequestCache(): void {}
 
   private async assertClientIsReady(): Promise<void> {
-    await this.sharedTagsMap.waitUntilReady();
+    await Promise.all([
+      this.sharedTagsMap.waitUntilReady(),
+      this.revalidatedTagsMap.waitUntilReady(),
+    ]);
     if (!this.client.isReady) {
       throw new Error('Redis client is not ready yet or connection is lost.');
     }
@@ -205,13 +205,27 @@ export default class RedisStringsHandler {
 
   public async get(
     key: string,
-    ctx: {
-      kind: 'APP_ROUTE' | 'APP_PAGE';
-      isRoutePPREnabled: boolean;
-      isFallback: boolean;
-    },
+    ctx:
+      | {
+          kind: 'APP_ROUTE' | 'APP_PAGE';
+          isRoutePPREnabled: boolean;
+          isFallback: boolean;
+        }
+      | {
+          kind: 'FETCH';
+          revalidate: number;
+          fetchUrl: string;
+          fetchIdx: number;
+          tags: string[];
+          softTags: string[];
+          isFallback: boolean;
+        },
   ): Promise<CacheEntry | null> {
-    if (ctx.kind !== 'APP_ROUTE' && ctx.kind !== 'APP_PAGE') {
+    if (
+      ctx.kind !== 'APP_ROUTE' &&
+      ctx.kind !== 'APP_PAGE' &&
+      ctx.kind !== 'FETCH'
+    ) {
       console.warn(
         'RedisStringsHandler.get() called with',
         key,
@@ -280,6 +294,43 @@ export default class RedisStringsHandler {
       );
     }
 
+    if (ctx.kind === 'FETCH') {
+      const combinedTags = new Set([
+        ...(ctx?.softTags || []),
+        ...(ctx?.tags || []),
+      ]);
+
+      if (combinedTags.size === 0) {
+        return cacheEntry;
+      }
+
+      // TODO: check how this revalidatedTagsMap is used or if it can be deleted
+      for (const tag of combinedTags) {
+        const revalidationTime = this.revalidatedTagsMap.get(tag);
+        if (revalidationTime && revalidationTime > cacheEntry.lastModified) {
+          const redisKey = this.keyPrefix + key;
+          // Do not await here as this can happen in the background while we can already serve the cacheValue
+          this.client
+            .unlink(getTimeoutRedisCommandOptions(this.timeoutMs), redisKey)
+            .catch((err) => {
+              console.error(
+                'Error occurred while unlinking stale data. Retrying now. Error was:',
+                err,
+              );
+              this.client.unlink(
+                getTimeoutRedisCommandOptions(this.timeoutMs),
+                redisKey,
+              );
+            })
+            .finally(async () => {
+              await this.sharedTagsMap.delete(key);
+              await this.revalidatedTagsMap.delete(tag);
+            });
+          return null;
+        }
+      }
+    }
+
     return cacheEntry;
   }
   public async set(
@@ -299,6 +350,16 @@ export default class RedisStringsHandler {
           status: number;
           headers: Record<string, string>;
           body: Buffer;
+        }
+      | {
+          kind: 'FETCH';
+          data: {
+            headers: Record<string, string>;
+            body: string; // base64 encoded
+            status: number;
+            url: string;
+          };
+          revalidate: number | false;
         },
     ctx: {
       revalidate: number | false;
@@ -307,7 +368,11 @@ export default class RedisStringsHandler {
       tags?: string[];
     },
   ) {
-    if (data.kind !== 'APP_ROUTE' && data.kind !== 'APP_PAGE') {
+    if (
+      data.kind !== 'APP_ROUTE' &&
+      data.kind !== 'APP_PAGE' &&
+      data.kind !== 'FETCH'
+    ) {
       console.warn(
         'RedisStringsHandler.get() called with',
         key,
@@ -379,11 +444,20 @@ export default class RedisStringsHandler {
 
     await Promise.all([setOperation, setTagsOperation]);
   }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public async revalidateTag(tagOrTags: string | string[], ...rest: any[]) {
     debug('RedisStringsHandler.revalidateTag() called with', tagOrTags, rest);
     const tags = new Set([tagOrTags || []].flat());
     await this.assertClientIsReady();
+
+    // TODO: check how this revalidatedTagsMap is used or if it can be deleted
+    for (const tag of tags) {
+      if (isImplicitTag(tag)) {
+        const now = Date.now();
+        await this.revalidatedTagsMap.set(tag, now);
+      }
+    }
 
     // find all keys that are related to this tag
     const keysToDelete: string[] = [];

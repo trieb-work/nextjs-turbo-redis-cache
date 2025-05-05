@@ -1,7 +1,7 @@
 import RedisStringsHandler, {
   CreateRedisStringsHandlerOptions,
 } from './RedisStringsHandler';
-import { debug } from './debug';
+import { debug } from './utils/debug';
 
 let cachedHandler: RedisStringsHandler;
 

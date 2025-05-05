@@ -14,7 +14,7 @@
     "test": "vitest --coverage --config vite.config.ts",
     "test:ui": "vitest --ui  --config vite.config.ts",
     "test:unit": "vitest --config vite.config.ts src/**/*.test.ts src/**/*.test.tsx",
-    "test:integration": "pnpm build && vitest --config vite.config.ts test/integration/nextjs-cache-handler.integration.test.ts",
+    "test:integration": "vitest --config vite.config.ts ./test/integration/nextjs-cache-handler.integration.test.ts",
     "prepare": "./scripts/prepare.sh"
   },
   "main": "dist/index.js",

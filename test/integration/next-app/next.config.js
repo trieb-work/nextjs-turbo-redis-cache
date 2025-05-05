@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  cacheHandler: require.resolve('./customized-cache-handler'),
+  cacheHandler: require.resolve('@trieb.work/nextjs-turbo-redis-cache'),
 };
 
 module.exports = nextConfig;

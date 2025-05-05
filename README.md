@@ -157,6 +157,16 @@ By accepting and tolerating this eventual consistency, the performance of the ca
 11. Push and create a PR (against main or beta) to run CI
 12. Merge to main or beta to create a release or pre-release
 
+## Some words on nextjs caching internals
+
+Nextjs will use different caching objects for different pages and api routes. Currently supported are kind: APP_ROUTE and APP_PAGE.
+
+app/<segment>/route.ts files will request using the APP_ROUTE kind.
+app/<segment>/page.tsx files will request using the APP_PAGE kind.
+/favicon.ico file will request using the APP_ROUTE kind.
+
+Fetch requests (inside app route or page) will request using the FETCH kind.
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

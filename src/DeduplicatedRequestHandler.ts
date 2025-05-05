@@ -1,4 +1,4 @@
-import { debug } from './debug';
+import { debug } from './utils/debug';
 import { SyncedMap } from './SyncedMap';
 export class DeduplicatedRequestHandler<
   T extends (...args: [never, never]) => Promise<K>,

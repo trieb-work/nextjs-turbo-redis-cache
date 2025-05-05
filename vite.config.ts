@@ -9,14 +9,25 @@ export default defineConfig({
       'src/**/*.test.tsx',
       'test/integration/**/*.test.ts',
     ],
-    exclude: ['node_modules', 'dist', '.git'],
+    exclude: [
+      'node_modules',
+      'dist',
+      '.git',
+      '**/node_modules/**',
+      '**/node_modules',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
       include: process.env.VITEST_COVERAGE_INCLUDE?.split(',') || [
         'src/**/*.ts',
       ],
-      exclude: ['node_modules', 'dist'],
+      exclude: [
+        'node_modules',
+        'dist',
+        '**/node_modules/**',
+        '**/node_modules',
+      ],
     },
   },
 });
