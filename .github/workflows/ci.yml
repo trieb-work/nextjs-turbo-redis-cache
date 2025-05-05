@@ -51,12 +51,16 @@ jobs:
       - name: Build Integration Test Project
         run: cd test/integration/next-app && pnpm build
 
+      - name: Start Redis
+        uses: supercharge/redis-github-action@1.8.0
+        with:
+          redis-version: '7'
+          redis-port: 6379
+
       - name: Run tests
         run: pnpm test
         env:
           SKIP_BUILD: true
-          REDISHOST: ${{ secrets.REDISHOST }}
-          REDISPORT: ${{ secrets.REDISPORT }}
 
       - name: Code Coverage Comments
         uses: kcjpop/coverage-comments@v2.2
