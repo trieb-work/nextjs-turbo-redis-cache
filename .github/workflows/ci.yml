@@ -50,7 +50,10 @@ jobs:
         with:
           redis-version: '7'
           redis-port: 6379
-          
+
+      - name: Install redis-cli
+        run: sudo apt-get update && sudo apt-get install -y redis-tools
+
       - name: Configure Redis Keyspace Notifications
         run: redis-cli config set notify-keyspace-events Exe
 
