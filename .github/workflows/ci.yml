@@ -37,7 +37,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm ci
+        run: pnpm install
 
       - name: Run lint
         run: pnpm run lint
