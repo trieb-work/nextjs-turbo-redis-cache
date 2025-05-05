@@ -50,6 +50,9 @@ jobs:
         with:
           redis-version: '7'
           redis-port: 6379
+          
+      - name: Configure Redis Keyspace Notifications
+        run: redis-cli config set notify-keyspace-events Exe
 
       - name: Install Integration Test Project
         run: cd test/integration/next-app && pnpm install
