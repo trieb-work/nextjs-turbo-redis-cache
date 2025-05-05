@@ -23,14 +23,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Install pnpm
+        run: corepack enable
+
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20'
           cache: 'pnpm'
-
-      - name: Install pnpm
-        run: corepack enable
 
       - name: Install dependencies
         run: pnpm ci
