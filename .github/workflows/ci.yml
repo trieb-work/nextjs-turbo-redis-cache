@@ -40,13 +40,13 @@ jobs:
         run: pnpm install
 
       - name: Run lint
-        run: pnpm run lint
+        run: pnpm lint
 
       - name: Build project
-        run: pnpm run build
+        run: pnpm build
 
       - name: Run tests
-        run: pnpm run test
+        run: pnpm test
 
       - name: Code Coverage Comments
         uses: kcjpop/coverage-comments@v2.2

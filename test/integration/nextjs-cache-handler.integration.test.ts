@@ -75,8 +75,10 @@ describe('Next.js Turbo Redis Cache Integration', () => {
     process.env.VERCEL_URL =
       'integration-test-' + Math.random().toString(36).substring(2, 15);
     console.log('redis key prefix is:', process.env.VERCEL_URL);
-    process.env.REDISHOST = 'localhost';
-    process.env.REDISPORT = '6379';
+
+    // Only override if redis env vars if not set. This can be set in the CI env.
+    process.env.REDISHOST = process.env.REDISHOST || 'localhost';
+    process.env.REDISPORT = process.env.REDISPORT || '6379';
 
     // Start Next.js app
     nextProcess = spawn(
@@ -103,7 +105,9 @@ describe('Next.js Turbo Redis Cache Integration', () => {
     console.log('next start successful');
 
     // Connect to Redis
-    redisClient = createClient({ url: 'redis://localhost:6379' });
+    redisClient = createClient({
+      url: `redis://${process.env.REDISHOST}:${process.env.REDISPORT}`,
+    });
     await redisClient.connect();
   }, 60000);
 
