@@ -45,17 +45,17 @@ jobs:
       - name: Build project
         run: pnpm build
 
-      - name: Install Integration Test Project
-        run: cd test/integration/next-app && pnpm install
-
-      - name: Build Integration Test Project
-        run: cd test/integration/next-app && pnpm build
-
       - name: Start Redis
         uses: supercharge/redis-github-action@1.8.0
         with:
           redis-version: '7'
           redis-port: 6379
+
+      - name: Install Integration Test Project
+        run: cd test/integration/next-app && pnpm install
+
+      - name: Build Integration Test Project
+        run: cd test/integration/next-app && pnpm build
 
       - name: Run tests
         run: pnpm test
