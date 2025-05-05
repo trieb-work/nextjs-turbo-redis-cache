@@ -42,6 +42,9 @@ jobs:
       - name: Run lint
         run: pnpm run lint
 
+      - name: Build project
+        run: pnpm run build
+
       - name: Run tests
         run: pnpm run test
 
@@ -50,9 +53,6 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           coverage-file: './coverage/lcov.info'
-
-      - name: Build project
-        run: pnpm run build
       
       - name: Dry run the release
         env:
