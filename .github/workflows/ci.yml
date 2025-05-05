@@ -45,8 +45,18 @@ jobs:
       - name: Build project
         run: pnpm build
 
+      - name: Install Integration Test Project
+        run: cd test/integration/next-app && pnpm install
+
+      - name: Build Integration Test Project
+        run: cd test/integration/next-app && pnpm build
+
       - name: Run tests
         run: pnpm test
+        env:
+          SKIP_BUILD: true
+          REDISHOST: ${{ secrets.REDISHOST }}
+          REDISPORT: ${{ secrets.REDISPORT }}
 
       - name: Code Coverage Comments
         uses: kcjpop/coverage-comments@v2.2

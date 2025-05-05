@@ -109,7 +109,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
       url: `redis://${process.env.REDISHOST}:${process.env.REDISPORT}`,
     });
     await redisClient.connect();
-  }, 120_000);
+  }, 60_000);
 
   afterAll(async () => {
     if (nextProcess) nextProcess.kill();
