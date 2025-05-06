@@ -50,8 +50,9 @@ pnpm install @trieb.work/nextjs-turbo-redis-cache
 
 REDISHOST and REDISPORT environment variables are required.
 VERCEL_URL, VERCEL_ENV are optional. VERCEL_URL is used to create a key prefix for the redis keys. VERCEL_ENV is used to determine the database to use. Only VERCEL_ENV=production will show up in DB 0 (redis default db). All other values of VERCEL_ENV will use DB 1, use `redis-cli -n 1` to connect to different DB 1. This is another protection feature to avoid that different environments (e.g. staging and production) will overwrite each other.
+Furthermore there exists the DEBUG_CACHE_HANDLER environment variable to enable debug logging of the caching handler once it is set to true.
 
-### Option A: minimum implentation with default options
+### Option A: minimum implementation with default options
 
 extend `next.config.js` with:
 
@@ -148,14 +149,41 @@ By accepting and tolerating this eventual consistency, the performance of the ca
 
 ## Development
 
-5. Run `npm install` to install the dependencies
-6. Run `npm run build` to build the project
-7. Run `npm run dev` to develop the project
-8. Run `npm run test` to test the project
-9. Checkout into a new branch (main is protected)
-10. Change code and commit it using conventional commit. Staged code will get checked
-11. Push and create a PR (against main or beta) to run CI
-12. Merge to main or beta to create a release or pre-release
+1. Run `pnpm install` to install the dependencies
+1. Run `pnpm build` to build the project
+1. Run `pnpm lint` to lint the project
+1. Run `pnpm format` to format the project
+1. Run `pnpm dev-next` to test and develop the caching handler using the nextjs integration test project
+
+## Testing
+
+To run all tests you can use the following command:
+
+```bash
+pnpm test
+```
+
+### Unit tests
+
+To run unit tests you can use the following command:
+
+```bash
+pnpm test:unit
+```
+
+### Integration tests
+
+To run integration tests you can use the following command:
+
+```bash
+pnpm test:integration
+```
+
+The integration tests will start a Next.js server and test the caching handler. You can modify testing behavior by setting the following environment variables:
+
+- SKIP_BUILD: If set to true, the integration tests will not build the Next.js app. Therefore the nextjs app needs to be built before running the tests. Or you execute the test once without skip build and the re-execute `pnpm test:integration` with skip build set to true.
+- SKIP_OPTIONAL_LONG_RUNNER_TESTS: If set to true, the integration tests will not run the optional long runner tests.
+- DEBUG_INTEGRATION: If set to true, the integration tests will print debug information of the test itself to the console.
 
 ## Some words on nextjs caching internals
 
