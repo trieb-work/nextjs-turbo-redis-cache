@@ -9,7 +9,6 @@ export default async function TestPage() {
       <p>Random number: {rdm}</p>
       <p>This is a test page for integration testing.</p>
       <p>Timestamp: {Date.now()}</p>
-      <p>Slug: /test-page</p>
     </main>
   );
 }

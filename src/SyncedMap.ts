@@ -1,5 +1,6 @@
 // SyncedMap.ts
 import { Client, getTimeoutRedisCommandOptions } from './RedisStringsHandler';
+import { debug } from './utils/debug';
 
 type CustomizedSync = {
   withoutRedisHashmap?: boolean;
@@ -169,18 +170,39 @@ export class SyncedMap<V> {
       }
     };
 
-    const keyEventHandler = async (_channel: string, message: string) => {
-      const key = message;
+    const keyEventHandler = async (key: string, message: string) => {
+      debug(
+        'SyncedMap.keyEventHandler() called with message',
+        this.redisKey,
+        message,
+        key,
+      );
+      // const key = message;
       if (key.startsWith(this.keyPrefix)) {
         const keyInMap = key.substring(this.keyPrefix.length);
         if (this.filterKeys(keyInMap)) {
+          debug(
+            'SyncedMap.keyEventHandler() key matches filter and will be deleted',
+            this.redisKey,
+            message,
+            key,
+          );
           await this.delete(keyInMap, true);
         }
+      } else {
+        debug(
+          'SyncedMap.keyEventHandler() key does not have prefix',
+          this.redisKey,
+          message,
+          key,
+        );
       }
     };
 
     try {
-      await this.subscriberClient.connect();
+      await this.subscriberClient.connect().catch(async () => {
+        await this.subscriberClient.connect();
+      });
 
       // Check if keyspace event configuration is set correctly
       const keyspaceEventConfig = (
@@ -244,10 +266,20 @@ export class SyncedMap<V> {
   }
 
   public get(key: string): V | undefined {
+    debug(
+      'SyncedMap.get() called with key',
+      key,
+      JSON.stringify(this.map.get(key))?.substring(0, 100),
+    );
     return this.map.get(key);
   }
 
   public async set(key: string, value: V): Promise<void> {
+    debug(
+      'SyncedMap.set() called with key',
+      key,
+      JSON.stringify(value)?.substring(0, 100),
+    );
     this.map.set(key, value);
     const operations = [];
 
@@ -278,10 +310,20 @@ export class SyncedMap<V> {
     await Promise.all(operations);
   }
 
+  // /api/revalidated-fetch
+  // true
+
   public async delete(
     keys: string[] | string,
     withoutSyncMessage = false,
   ): Promise<void> {
+    debug(
+      'SyncedMap.delete() called with keys',
+      this.redisKey,
+      keys,
+      withoutSyncMessage,
+    );
+
     const keysArray = Array.isArray(keys) ? keys : [keys];
     const operations = [];
 
@@ -305,7 +347,14 @@ export class SyncedMap<V> {
         this.client.publish(this.syncChannel, JSON.stringify(deletionMessage)),
       );
     }
+
     await Promise.all(operations);
+    debug(
+      'SyncedMap.delete() finished operations',
+      this.redisKey,
+      keys,
+      operations.length,
+    );
   }
 
   public has(key: string): boolean {

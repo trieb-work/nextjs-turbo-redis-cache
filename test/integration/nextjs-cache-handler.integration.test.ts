@@ -13,6 +13,10 @@ const NEXT_START_URL = `http://localhost:${NEXT_START_PORT}`;
 let nextProcess;
 let redisClient;
 
+async function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function runCommand(cmd, args, cwd) {
   return new Promise((resolve, reject) => {
     let stderr = '';
@@ -81,6 +85,14 @@ describe('Next.js Turbo Redis Cache Integration', () => {
     process.env.REDISHOST = process.env.REDISHOST || 'localhost';
     process.env.REDISPORT = process.env.REDISPORT || '6379';
 
+    // If there was detected to run a server before (any old server which was not stopped correctly), kill it
+    try {
+      const res = await fetch(NEXT_START_URL + '/api/cached-static-fetch');
+      if (res.ok) {
+        await runCommand('pkill', ['next'], NEXT_APP_DIR);
+      }
+    } catch {}
+
     // Start Next.js app
     nextProcess = spawn(
       'npx',
@@ -97,11 +109,11 @@ describe('Next.js Turbo Redis Cache Integration', () => {
       nextProcess.stdout.on('data', (data) => {
         console.log(`stdout: ${data}`);
       });
-
-      nextProcess.stderr.on('data', (data) => {
-        console.error(`stderr: ${data}`);
-      });
     }
+
+    nextProcess.stderr.on('data', (data) => {
+      console.error(`stderr: ${data}`);
+    });
     await waitForServer(NEXT_START_URL);
     console.log('next start successful');
 
@@ -117,142 +129,334 @@ describe('Next.js Turbo Redis Cache Integration', () => {
     if (redisClient) await redisClient.quit();
   });
 
-  it('should cache static API routes in Redis', async () => {
-    // First request (should increment counter)
-    const res1 = await fetch(NEXT_START_URL + '/api/cached-static-fetch');
-    const data1: any = await res1.json();
-    expect(data1.counter).toBe(1);
+  describe('should cache static API routes in Redis', () => {
+    let counter1: number;
 
-    // Second request (should hit cache, counter should not increment if cache works)
-    const res2 = await fetch(NEXT_START_URL + '/api/cached-static-fetch');
-    const data2: any = await res2.json();
+    it('First request (should increment counter)', async () => {
+      const res = await fetch(NEXT_START_URL + '/api/cached-static-fetch');
+      const data: any = await res.json();
+      expect(data.counter).toBe(1);
+      counter1 = data.counter;
+    });
 
-    // If cache is working, counter should stay 1; if not, it will increment
-    expect(data2.counter).toBe(1);
+    it('Second request (should hit cache, counter should not increment if cache works)', async () => {
+      const res = await fetch(NEXT_START_URL + '/api/cached-static-fetch');
+      const data: any = await res.json();
+      // If cache is working, counter should stay 1; if not, it will increment
+      expect(data.counter).toBe(counter1);
+    });
 
-    // check Redis keys
-    const keys = await redisClient.keys(process.env.VERCEL_URL + '*');
-    expect(keys.length).toBeGreaterThan(0);
+    it('The data in the redis key should match the expected format', async () => {
+      const keys = await redisClient.keys(process.env.VERCEL_URL + '*');
+      expect(keys.length).toBeGreaterThan(0);
 
-    // check the content of redis key
-    const value = await redisClient.get(
-      process.env.VERCEL_URL + '/api/cached-static-fetch',
-    );
-    expect(value).toBeDefined();
-    const cacheEntry: CacheEntry = JSON.parse(value);
-    expect((cacheEntry.value as any).kind).toBe('APP_ROUTE');
-    const bodyBuffer = Buffer.from(
-      (cacheEntry.value as any)?.body?.$binary,
-      'base64',
-    );
-    const bodyJson = JSON.parse(bodyBuffer.toString('utf-8'));
-    expect(bodyJson.counter).toBe(data2.counter);
+      // check the content of redis key
+      const value = await redisClient.get(
+        process.env.VERCEL_URL + '/api/cached-static-fetch',
+      );
+      expect(value).toBeDefined();
+      const cacheEntry: CacheEntry = JSON.parse(value);
+
+      // The format should be as expected
+      expect(cacheEntry).toEqual({
+        value: {
+          kind: 'APP_ROUTE',
+          status: 200,
+          body: { $binary: 'eyJjb3VudGVyIjoxfQ==' },
+          headers: {
+            'cache-control': 'public, max-age=1',
+            'content-type': 'application/json',
+            'x-next-cache-tags':
+              '_N_T_/layout,_N_T_/api/layout,_N_T_/api/cached-static-fetch/layout,_N_T_/api/cached-static-fetch/route,_N_T_/api/cached-static-fetch',
+          },
+        },
+        lastModified: expect.any(Number),
+        tags: [
+          '_N_T_/layout',
+          '_N_T_/api/layout',
+          '_N_T_/api/cached-static-fetch/layout',
+          '_N_T_/api/cached-static-fetch/route',
+          '_N_T_/api/cached-static-fetch',
+        ],
+      });
+
+      expect((cacheEntry.value as any).kind).toBe('APP_ROUTE');
+      const bodyBuffer = Buffer.from(
+        (cacheEntry.value as any)?.body?.$binary,
+        'base64',
+      );
+      const bodyJson = JSON.parse(bodyBuffer.toString('utf-8'));
+      expect(bodyJson.counter).toBe(counter1);
+    });
+
+    it('A request to revalidatePage API should remove the route from redis (string and hashmap)', async () => {
+      const revalidateRes = await fetch(
+        NEXT_START_URL + '/api/revalidatePath?path=/api/cached-static-fetch',
+      );
+      const revalidateResJson: any = await revalidateRes.json();
+      expect(revalidateResJson.success).toBe(true);
+
+      // check Redis keys
+      const keys = await redisClient.keys(
+        process.env.VERCEL_URL + '/api/cached-static-fetch',
+      );
+      expect(keys.length).toBe(0);
+
+      const hashmap = await redisClient.hGet(
+        process.env.VERCEL_URL + '__sharedTags__',
+        '/api/cached-static-fetch',
+      );
+      expect(hashmap).toBeNull();
+    });
+
+    it('A new request after the revalidation should increment the counter (because the route was re-evaluated)', async () => {
+      const res = await fetch(NEXT_START_URL + '/api/cached-static-fetch');
+      const data: any = await res.json();
+      expect(data.counter).toBe(counter1 + 1);
+    });
+
+    it('After the new request was made the redis key and hashmap should be set again', async () => {
+      // check Redis keys
+      const keys = await redisClient.keys(
+        process.env.VERCEL_URL + '/api/cached-static-fetch',
+      );
+      expect(keys.length).toBe(1);
+
+      const hashmap = await redisClient.hGet(
+        process.env.VERCEL_URL + '__sharedTags__',
+        '/api/cached-static-fetch',
+      );
+      expect(JSON.parse(hashmap)).toEqual([
+        '_N_T_/layout',
+        '_N_T_/api/layout',
+        '_N_T_/api/cached-static-fetch/layout',
+        '_N_T_/api/cached-static-fetch/route',
+        '_N_T_/api/cached-static-fetch',
+      ]);
+    });
   });
 
-  it('should not cache uncached API routes in Redis', async () => {
-    // First request (should increment counter)
-    const res1 = await fetch(NEXT_START_URL + '/api/uncached-fetch');
-    const data1: any = await res1.json();
-    expect(data1.counter).toBe(1);
+  describe('should cache revalidation API routes in Redis', () => {
+    let counter1: number;
 
-    // Second request (should hit cache, counter should not increment if cache works)
-    const res2 = await fetch(NEXT_START_URL + '/api/uncached-fetch');
-    const data2: any = await res2.json();
+    it('First request (should increment counter)', async () => {
+      const res = await fetch(NEXT_START_URL + '/api/revalidated-fetch');
+      const data: any = await res.json();
+      expect(data.counter).toBe(1);
+      counter1 = data.counter;
+    });
 
-    // If not caching it is working request 2 should be higher as request one
-    expect(data2.counter).toBeGreaterThan(data1.counter);
+    it('Second request which is send in revalidation time should hit cache (counter should not increment)', async () => {
+      const res = await fetch(NEXT_START_URL + '/api/revalidated-fetch');
+      const data: any = await res.json();
+      expect(data.counter).toBe(counter1);
+    });
 
-    // check the content of redis key
-    const value = await redisClient.get(
-      process.env.VERCEL_URL + '/api/uncached-fetch',
-    );
-    expect(value).toBeNull();
+    it('Third request which is send directly after revalidation time will still serve cache but trigger re-evaluation (stale-while-revalidate)', async () => {
+      await delay(6000);
+      const res = await fetch(NEXT_START_URL + '/api/revalidated-fetch');
+      const data: any = await res.json();
+      expect(data.counter).toBe(counter1);
+    }, 10_000);
+
+    it('Third request which is send directly after revalidation time will serve re-evaluated data (stale-while-revalidate)', async () => {
+      await delay(1000);
+      const res = await fetch(NEXT_START_URL + '/api/revalidated-fetch');
+      const data: any = await res.json();
+      expect(data.counter).toBe(counter1 + 1);
+    });
+
+    it('After expiration, the redis key should be removed from redis and the hashmap', async () => {
+      const ttl = await redisClient.ttl(
+        process.env.VERCEL_URL + '/api/revalidated-fetch',
+      );
+      expect(ttl).toBeGreaterThan(3);
+
+      await delay(ttl * 1000 + 500);
+
+      // check Redis keys
+      const keys = await redisClient.keys(
+        process.env.VERCEL_URL + '/api/revalidated-fetch',
+      );
+      expect(keys.length).toBe(0);
+
+      // The key should also be removed from the hashmap
+      const hashmap = await redisClient.hGet(
+        process.env.VERCEL_URL + '__sharedTags__',
+        '/api/revalidated-fetch',
+      );
+      expect(hashmap).toBeNull();
+    }, 15_000);
+  });
+
+  describe('should not cache uncached API routes in Redis', () => {
+    let counter1: number;
+
+    it('First request (should increment counter)', async () => {
+      const res1 = await fetch(NEXT_START_URL + '/api/uncached-fetch');
+      const data1: any = await res1.json();
+      expect(data1.counter).toBe(1);
+      counter1 = data1.counter;
+    });
+
+    it('Second request (should hit cache, counter should not increment if cache works)', async () => {
+      const res2 = await fetch(NEXT_START_URL + '/api/uncached-fetch');
+      const data2: any = await res2.json();
+
+      // If not caching it is working request 2 should be higher as request one
+      expect(data2.counter).toBe(counter1 + 1);
+    });
+
+    it('The redis key should not be set', async () => {
+      // check the content of redis key
+      const value = await redisClient.get(
+        process.env.VERCEL_URL + '/api/uncached-fetch',
+      );
+      expect(value).toBeNull();
+    });
   });
 
   describe('should have the correct caching behavior for pages', () => {
     describe('Without any fetch requests', () => {
       describe('With default page configuration for revalidate and dynamic values', () => {
-        it('should be cached in redis', async () => {
-          /**
-           * 0. Store timestamp of the first call in a variable so we can later check if TTL in redis is correct
-           * 1. Call the page twice
-           * 2. Extract the Timestamp from both results
-           * 3. Compare the two timestamps
-           * 4. The timestamps should be the same, meaning that the page was deduplicated
-           * 5. Connect to redis and check if the page was cached in redis and if TTL is set correctly
-           */
+        let timestamp1: string | undefined;
 
+        it('Two parallel requests should return the same timestamp (because requests are deduplicated)', async () => {
           // First request (should increment counter)
-          const res1 = await fetch(NEXT_START_URL + '/api/cached-static-fetch');
-          const data1: any = await res1.json();
-          expect(data1.counter).toBe(1);
+          const [pageRes1, pageRes2] = await Promise.all([
+            fetch(NEXT_START_URL + '/pages/no-fetch/default-page'),
+            fetch(NEXT_START_URL + '/pages/no-fetch/default-page'),
+          ]);
 
-          // Second request (should hit cache, counter should not increment if cache works)
-          const res2 = await fetch(NEXT_START_URL + '/api/cached-static-fetch');
-          const data2: any = await res2.json();
+          const pageText1 = await pageRes1.text();
+          timestamp1 = pageText1.match(/Timestamp: <!-- -->(\d+)/)?.[1];
+          expect(timestamp1).toBeDefined();
 
-          // If cache is working, counter should stay 1; if not, it will increment
-          expect(data2.counter).toBe(1);
+          const pageText2 = await pageRes2.text();
+          const timestamp2 = pageText2.match(/Timestamp: <!-- -->(\d+)/)?.[1];
+          expect(timestamp2).toBeDefined();
+          expect(timestamp1).toBe(timestamp2);
+        });
+
+        it('Redis should have a key for the page which should have a TTL set to 28 days (2 * 14 days default revalidate time)', async () => {
+          // check Redis keys
+          const ttl = await redisClient.ttl(
+            process.env.VERCEL_URL + '/pages/no-fetch/default-page',
+          );
+          // 14 days is default revalidate for pages -> expiration time is 2 * revalidate time -> -10 seconds for testing offset stability
+          expect(ttl).toBeGreaterThan(2 * 14 * 24 * 60 * 60 - 10);
+        });
+
+        it('The data in the redis key should match the expected format', async () => {
+          const data = await redisClient.get(
+            process.env.VERCEL_URL + '/pages/no-fetch/default-page',
+          );
+          expect(data).toBeDefined();
+          const cacheEntry: CacheEntry = JSON.parse(data);
+
+          // The format should be as expected
+          expect(cacheEntry).toEqual({
+            value: {
+              kind: 'APP_PAGE',
+              html: expect.any(String),
+              rscData: {
+                $binary: expect.any(String),
+              },
+              headers: {
+                'x-nextjs-stale-time': expect.any(String),
+                'x-next-cache-tags':
+                  '_N_T_/layout,_N_T_/pages/layout,_N_T_/pages/no-fetch/layout,_N_T_/pages/no-fetch/default-page/layout,_N_T_/pages/no-fetch/default-page/page,_N_T_/pages/no-fetch/default-page',
+              },
+              status: 200,
+            },
+            lastModified: expect.any(Number),
+            tags: [
+              '_N_T_/layout',
+              '_N_T_/pages/layout',
+              '_N_T_/pages/no-fetch/layout',
+              '_N_T_/pages/no-fetch/default-page/layout',
+              '_N_T_/pages/no-fetch/default-page/page',
+              '_N_T_/pages/no-fetch/default-page',
+            ],
+          });
+        });
+
+        if (process.env.SKIP_OPTIONAL_LONG_RUNNER_TESTS !== 'true') {
+          it('A new request after 3 seconds should return the same timestamp (because the page was cached in in-memory cache)', async () => {
+            await delay(3_000);
+            const pageRes3 = await fetch(
+              NEXT_START_URL + '/pages/no-fetch/default-page',
+            );
+            const pageText3 = await pageRes3.text();
+            const timestamp3 = pageText3.match(/Timestamp: <!-- -->(\d+)/)?.[1];
+            expect(timestamp3).toBeDefined();
+            expect(timestamp1).toBe(timestamp3);
+          });
+
+          it('A new request after 11 seconds should return the same timestamp (because the page was cached in redis cache)', async () => {
+            await delay(11_000);
+            const pageRes4 = await fetch(
+              NEXT_START_URL + '/pages/no-fetch/default-page',
+            );
+            const pageText4 = await pageRes4.text();
+            const timestamp4 = pageText4.match(/Timestamp: <!-- -->(\d+)/)?.[1];
+            expect(timestamp4).toBeDefined();
+            expect(timestamp1).toBe(timestamp4);
+          }, 15_000);
+        }
+
+        it('A request to revalidatePage API should remove the page from redis (string and hashmap)', async () => {
+          const revalidateRes = await fetch(
+            NEXT_START_URL +
+              '/api/revalidatePath?path=/pages/no-fetch/default-page',
+          );
+          const revalidateResJson: any = await revalidateRes.json();
+          expect(revalidateResJson.success).toBe(true);
 
           // check Redis keys
-          const keys = await redisClient.keys(process.env.VERCEL_URL + '*');
-          expect(keys.length).toBeGreaterThan(0);
+          const keys = await redisClient.keys(
+            process.env.VERCEL_URL + '/pages/no-fetch/default-page',
+          );
+          expect(keys.length).toBe(0);
 
-          // check the content of redis key
-          const value = await redisClient.get(
-            process.env.VERCEL_URL + '/api/cached-static-fetch',
+          const hashmap = await redisClient.hGet(
+            process.env.VERCEL_URL + '__sharedTags__',
+            '/pages/no-fetch/default-page',
           );
-          expect(value).toBeDefined();
-          const cacheEntry: CacheEntry = JSON.parse(value);
-          expect((cacheEntry.value as any).kind).toBe('APP_ROUTE');
-          const bodyBuffer = Buffer.from(
-            (cacheEntry.value as any)?.body?.$binary,
-            'base64',
+          expect(hashmap).toBeNull();
+        });
+
+        it('A new request after the revalidation should return a new timestamp (because the page was recreated)', async () => {
+          const pageRes4 = await fetch(
+            NEXT_START_URL + '/pages/no-fetch/default-page',
           );
-          const bodyJson = JSON.parse(bodyBuffer.toString('utf-8'));
-          expect(bodyJson.counter).toBe(data2.counter);
+          const pageText4 = await pageRes4.text();
+          const timestamp4 = pageText4.match(/Timestamp: <!-- -->(\d+)/)?.[1];
+          expect(timestamp4).toBeDefined();
+          expect(Number(timestamp4)).toBeGreaterThan(Number(timestamp1));
+        });
+
+        it('After the new request was made the redis key and hashmap should be set again', async () => {
+          // check Redis keys
+          const keys = await redisClient.keys(
+            process.env.VERCEL_URL + '/pages/no-fetch/default-page',
+          );
+          expect(keys.length).toBe(1);
+
+          const hashmap = await redisClient.hGet(
+            process.env.VERCEL_URL + '__sharedTags__',
+            '/pages/no-fetch/default-page',
+          );
+          expect(JSON.parse(hashmap)).toEqual([
+            '_N_T_/layout',
+            '_N_T_/pages/layout',
+            '_N_T_/pages/no-fetch/layout',
+            '_N_T_/pages/no-fetch/default-page/layout',
+            '_N_T_/pages/no-fetch/default-page/page',
+            '_N_T_/pages/no-fetch/default-page',
+          ]);
         });
       });
     });
   });
 });
-
-/**
- * TODO
- * Test cases:
- * 0. Store timestamp of the first call in a variable so we can later check if TTL in redis is correct
- * 1. Call the page twice
- * 2. Extract the Timestamp from both results
- * 3. Compare the two timestamps
- * 4. The timestamps should be the same, meaning that the page was deduplicated
- * 5. Connect to redis and check if the page was cached in redis and if TTL is set correctly
- *
- * 6. Call the page again, but wait 3 seconds before calling it
- * 7. Extract the Timestamp
- * 8. Compare the timestamp to previous timestamp
- * 9. The timestamp should be the same, meaning that the page was cached (By in-memory cache which is set to 10 seconds by default)
- *
- * 10. Call the page again, but wait 11 seconds before calling it
- * 11. Extract the Timestamp
- * 12. Compare the timestamp to previous timestamp
- * 13. The timestamp should be the same, meaning that the page was cached (By redis cache which becomes active after in-memory cache expires)
- *
- * 14. Connect to redis and check if the page was cached in redis and if TTL is set correctly
- *
- * 15. Check expiration time of the page in redis
- *
- * 16. Call the page again after TTL expiration time
- * 17. Extract the Timestamp
- * 18. Compare the timestamp to previous timestamp
- * 19. The timestamp should be different, meaning that the page was recreated
- *
- * 20. call API which will invalidate the page via a revalidatePage action
- * 21. Call the page again
- * 18. Compare the timestamp to previous timestamp
- * 19. The timestamp should be different, meaning that the page was recreated
- *
- * 20. Connect to redis and delete the page from redis
- * 21. Call the page again, but wait 11 seconds before calling it
- * 22. Compare the timestamp to previous timestamp
- * 23. The timestamp should be different, meaning that the page was recreated
- */

@@ -126,9 +126,12 @@ export default class RedisStringsHandler {
         .then(() => {
           console.info('Redis client connected.');
         })
-        .catch((error) => {
-          console.error('Failed to connect Redis client:', error);
-          this.client.disconnect();
+        .catch(() => {
+          this.client.connect().catch((error) => {
+            console.error('Failed to connect Redis client:', error);
+            this.client.disconnect();
+            throw error;
+          });
         });
     } catch (error: unknown) {
       console.error('Failed to initialize Redis client');
@@ -339,7 +342,10 @@ export default class RedisStringsHandler {
       | {
           kind: 'APP_PAGE';
           status: number;
-          headers: Record<string, string>;
+          headers: {
+            'x-nextjs-stale-time': string; // timestamp in ms
+            'x-next-cache-tags': string; // comma separated paths (tags)
+          };
           html: string;
           rscData: Buffer;
           segmentData: unknown;
@@ -348,7 +354,11 @@ export default class RedisStringsHandler {
       | {
           kind: 'APP_ROUTE';
           status: number;
-          headers: Record<string, string>;
+          headers: {
+            'cache-control'?: string;
+            'x-nextjs-stale-time': string; // timestamp in ms
+            'x-next-cache-tags': string; // comma separated paths (tags)
+          };
           body: Buffer;
         }
       | {
@@ -384,6 +394,11 @@ export default class RedisStringsHandler {
     }
 
     await this.assertClientIsReady();
+
+    if (data.kind === 'APP_PAGE' || data.kind === 'APP_ROUTE') {
+      const tags = data.headers['x-next-cache-tags']?.split(',');
+      ctx.tags = [...(ctx.tags || []), ...(tags || [])];
+    }
 
     // Constructing and serializing the value for storing it in redis
     const cacheEntry: CacheEntry = {
