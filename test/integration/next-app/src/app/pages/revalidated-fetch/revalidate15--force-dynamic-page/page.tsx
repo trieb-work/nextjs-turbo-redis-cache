@@ -1,12 +1,12 @@
 export const dynamic = 'force-dynamic';
 
 export default async function TestPage() {
-  const res = await fetch(
-    `http://localhost:${process.env.NEXT_START_PORT || 3000}/api/uncached-fetch`,
+  const res = await await fetch(
+    `http://localhost:${process.env.NEXT_START_PORT || 3000}/api/revalidated-fetch`,
     {
       next: {
         revalidate: 15,
-        tags: ['uncached-fetch-revalidate15-force-dynamic-page'],
+        tags: ['revalidated-fetch-revalidate15-force-dynamic-page'],
       },
     },
   );

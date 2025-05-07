@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "pnpm test",
-    "dev-next": "cd ./test/integration/next-app && pnpm dev",
+    "run-dev-server": "cd ./test/integration/next-app && pnpm dev",
     "build": "tsup",
     "lint": "eslint -c eslint.config.mjs --fix",
     "fmt": "prettier --write 'src/**/*.ts' 'src/*.ts'",

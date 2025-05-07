@@ -17,6 +17,8 @@ Key Features:
 This package is compatible with Next.js 15.0.0 and above while using App Router. It is not compatible with Next.js 14.x. or if you are using Pages Router.
 Redis need to have Redis Version 2.8.0 or higher and have to be configured with `notify-keyspace-events` to be able to use the key-space notifications feature.
 
+Currently unstable_cacheLife and unstable_cacheTag are not tested. Use these operations with caution and your own risk.
+
 ## Available Options (needs Option B of getting started)
 
 | Option                 | Description                                                                                                       | Default Value                                         |
@@ -153,7 +155,7 @@ By accepting and tolerating this eventual consistency, the performance of the ca
 1. Run `pnpm build` to build the project
 1. Run `pnpm lint` to lint the project
 1. Run `pnpm format` to format the project
-1. Run `pnpm dev-next` to test and develop the caching handler using the nextjs integration test project
+1. Run `pnpm run-dev-server` to test and develop the caching handler using the nextjs integration test project
 
 ## Testing
 

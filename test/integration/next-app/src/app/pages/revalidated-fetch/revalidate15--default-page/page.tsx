@@ -1,11 +1,11 @@
 export default async function TestPage() {
   try {
     const res = await fetch(
-      `http://localhost:${process.env.NEXT_START_PORT || 3000}/api/uncached-fetch`,
+      `http://localhost:${process.env.NEXT_START_PORT || 3000}/api/revalidated-fetch`,
       {
         next: {
           revalidate: 15,
-          tags: ['uncached-fetch-revalidate15-default-page'],
+          tags: ['revalidated-fetch-revalidate15-default-page'],
         },
       },
     );
