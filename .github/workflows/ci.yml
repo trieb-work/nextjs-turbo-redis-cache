@@ -27,28 +27,52 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Install pnpm
+        run: corepack enable
+
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install
 
       - name: Run lint
-        run: npm run lint
+        run: pnpm lint
+
+      - name: Build project
+        run: pnpm build
+
+      - name: Start Redis
+        uses: supercharge/redis-github-action@1.8.0
+        with:
+          redis-version: '7'
+          redis-port: 6379
+
+      - name: Install redis-cli
+        run: sudo apt-get update && sudo apt-get install -y redis-tools
+
+      - name: Configure Redis Keyspace Notifications
+        run: redis-cli config set notify-keyspace-events Exe
+
+      - name: Install Integration Test Project
+        run: cd test/integration/next-app && pnpm install
+
+      - name: Build Integration Test Project
+        run: cd test/integration/next-app && pnpm build
 
       - name: Run tests
-        run: npm run test
+        run: pnpm test
+        env:
+          SKIP_BUILD: true
 
       - name: Code Coverage Comments
         uses: kcjpop/coverage-comments@v2.2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           coverage-file: './coverage/lcov.info'
-
-      - name: Build project
-        run: npm run build
       
       - name: Dry run the release
         env:

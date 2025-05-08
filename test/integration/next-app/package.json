@@ -1,0 +1,29 @@
+{
+  "name": "next-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "export VERCEL_URL=\"dev-test-$RANDOM\" && echo $VERCEL_URL && cd ../../.. && pnpm build && cd test/integration/next-app && pnpm i && pnpm build && VERCEL_ENV=production REDISHOST=localhost REDISPORT=6379 DEBUG_CACHE_HANDLER=true pnpm start",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "react": "19.0.0-rc-66855b96-20241106",
+    "react-dom": "19.0.0-rc-66855b96-20241106",
+    "next": "15.0.3",
+    "redis": "4.7.0",
+    "@trieb.work/nextjs-turbo-redis-cache": "file:../../../"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@tailwindcss/postcss": "^4",
+    "tailwindcss": "^4",
+    "eslint": "^9",
+    "eslint-config-next": "15.3.0",
+    "@eslint/eslintrc": "^3"
+  }
+}

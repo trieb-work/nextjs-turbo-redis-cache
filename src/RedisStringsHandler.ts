@@ -1,37 +1,68 @@
 import { commandOptions, createClient } from 'redis';
 import { SyncedMap } from './SyncedMap';
 import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
-import {
-  CacheHandler,
-  CacheHandlerValue,
-  IncrementalCache,
-} from 'next/dist/server/lib/incremental-cache';
+import { debug } from './utils/debug';
+import { bufferReviver, bufferReplacer } from './utils/json';
 
 export type CommandOptions = ReturnType<typeof commandOptions>;
-type GetParams = Parameters<IncrementalCache['get']>;
-type SetParams = Parameters<IncrementalCache['set']>;
-type RevalidateParams = Parameters<IncrementalCache['revalidateTag']>;
 export type Client = ReturnType<typeof createClient>;
 
+export type CacheEntry = {
+  value: unknown;
+  lastModified: number;
+  tags: string[];
+};
+
 export type CreateRedisStringsHandlerOptions = {
+  /** Redis database number to use. Uses DB 0 for production, DB 1 otherwise
+   * @default process.env.VERCEL_ENV === 'production' ? 0 : 1
+   */
   database?: number;
+  /** Prefix added to all Redis keys
+   * @default process.env.VERCEL_URL || 'UNDEFINED_URL_'
+   */
   keyPrefix?: string;
+  /** Timeout in milliseconds for Redis operations
+   * @default 5000
+   */
   timeoutMs?: number;
+  /** Number of entries to query in one batch during full sync of shared tags hash map
+   * @default 250
+   */
   revalidateTagQuerySize?: number;
+  /** Key used to store shared tags hash map in Redis
+   * @default '__sharedTags__'
+   */
   sharedTagsKey?: string;
+  /** Average interval in milliseconds between tag map full re-syncs
+   * @default 3600000 (1 hour)
+   */
   avgResyncIntervalMs?: number;
+  /** Enable deduplication of Redis get requests via internal in-memory cache
+   * @default true
+   */
   redisGetDeduplication?: boolean;
+  /** Time in milliseconds to cache Redis get results in memory. Set this to 0 to disable in-memory caching completely
+   * @default 10000
+   */
   inMemoryCachingTime?: number;
+  /** Default stale age in seconds for cached items
+   * @default 1209600 (14 days)
+   */
   defaultStaleAge?: number;
+  /** Function to calculate expire age (redis TTL value) from stale age
+   * @default Production: staleAge * 2, Other: staleAge * 1.2
+   */
   estimateExpireAge?: (staleAge: number) => number;
 };
 
+// Identifier prefix used by Next.js to mark automatically generated cache tags
+// These tags are created internally by Next.js for route-based invalidation
 const NEXT_CACHE_IMPLICIT_TAG_ID = '_N_T_';
-const REVALIDATED_TAGS_KEY = '__revalidated_tags__';
 
-function isImplicitTag(tag: string): boolean {
-  return tag.startsWith(NEXT_CACHE_IMPLICIT_TAG_ID);
-}
+// Redis key used to store a map of tags and their last revalidation timestamps
+// This helps track when specific tags were last invalidated
+const REVALIDATED_TAGS_KEY = '__revalidated_tags__';
 
 export function getTimeoutRedisCommandOptions(
   timeoutMs: number,
@@ -39,7 +70,7 @@ export function getTimeoutRedisCommandOptions(
   return commandOptions({ signal: AbortSignal.timeout(timeoutMs) });
 }
 
-export default class RedisStringsHandler implements CacheHandler {
+export default class RedisStringsHandler {
   private client: Client;
   private sharedTagsMap: SyncedMap<string[]>;
   private revalidatedTagsMap: SyncedMap<number>;
@@ -63,14 +94,14 @@ export default class RedisStringsHandler implements CacheHandler {
     database = process.env.VERCEL_ENV === 'production' ? 0 : 1,
     keyPrefix = process.env.VERCEL_URL || 'UNDEFINED_URL_',
     sharedTagsKey = '__sharedTags__',
-    timeoutMs = 5000,
+    timeoutMs = 5_000,
     revalidateTagQuerySize = 250,
-    avgResyncIntervalMs = 60 * 60 * 1000,
+    avgResyncIntervalMs = 60 * 60 * 1_000,
     redisGetDeduplication = true,
     inMemoryCachingTime = 10_000,
     defaultStaleAge = 60 * 60 * 24 * 14,
     estimateExpireAge = (staleAge) =>
-      process.env.VERCEL_ENV === 'preview' ? staleAge * 1.2 : staleAge * 2,
+      process.env.VERCEL_ENV === 'production' ? staleAge * 2 : staleAge * 1.2,
   }: CreateRedisStringsHandlerOptions) {
     this.keyPrefix = keyPrefix;
     this.timeoutMs = timeoutMs;
@@ -96,9 +127,12 @@ export default class RedisStringsHandler implements CacheHandler {
         .then(() => {
           console.info('Redis client connected.');
         })
-        .catch((error) => {
-          console.error('Failed to connect Redis client:', error);
-          this.client.disconnect();
+        .catch(() => {
+          this.client.connect().catch((error) => {
+            console.error('Failed to connect Redis client:', error);
+            this.client.disconnect();
+            throw error;
+          });
         });
     } catch (error: unknown) {
       console.error('Failed to initialize Redis client');
@@ -160,9 +194,8 @@ export default class RedisStringsHandler implements CacheHandler {
     this.deduplicatedRedisGet =
       this.redisDeduplicationHandler.deduplicatedFunction;
   }
-  resetRequestCache(...args: never[]): void {
-    console.warn('WARNING resetRequestCache() was called', args);
-  }
+
+  resetRequestCache(): void { }
 
   private async assertClientIsReady(): Promise<void> {
     await Promise.all([
@@ -174,110 +207,273 @@ export default class RedisStringsHandler implements CacheHandler {
     }
   }
 
-  public async get(key: GetParams[0], ctx: GetParams[1]) {
+  public async get(
+    key: string,
+    ctx:
+      | {
+        kind: 'APP_ROUTE' | 'APP_PAGE';
+        isRoutePPREnabled: boolean;
+        isFallback: boolean;
+      }
+      | {
+        kind: 'FETCH';
+        revalidate: number;
+        fetchUrl: string;
+        fetchIdx: number;
+        tags: string[];
+        softTags: string[];
+        isFallback: boolean;
+      },
+  ): Promise<CacheEntry | null> {
+    if (
+      ctx.kind !== 'APP_ROUTE' &&
+      ctx.kind !== 'APP_PAGE' &&
+      ctx.kind !== 'FETCH'
+    ) {
+      console.warn(
+        'RedisStringsHandler.get() called with',
+        key,
+        ctx,
+        ' this cache handler is only designed and tested for kind APP_ROUTE and APP_PAGE and not for kind ',
+        (ctx as { kind: string })?.kind,
+      );
+    }
+
+    debug('green', 'RedisStringsHandler.get() called with', key, ctx);
     await this.assertClientIsReady();
 
     const clientGet = this.redisGetDeduplication
       ? this.deduplicatedRedisGet(key)
       : this.redisGet;
-    const result = await clientGet(
+    const serializedCacheEntry = await clientGet(
       getTimeoutRedisCommandOptions(this.timeoutMs),
       this.keyPrefix + key,
     );
 
-    if (!result) {
+    debug(
+      'green',
+      'RedisStringsHandler.get() finished with result (serializedCacheEntry)',
+      serializedCacheEntry?.substring(0, 200),
+    );
+
+    if (!serializedCacheEntry) {
       return null;
     }
 
-    const cacheValue = JSON.parse(result) as
-      | (CacheHandlerValue & { lastModified: number })
-      | null;
+    const cacheEntry: CacheEntry | null = JSON.parse(
+      serializedCacheEntry,
+      bufferReviver,
+    );
 
-    if (!cacheValue) {
+    debug(
+      'green',
+      'RedisStringsHandler.get() finished with result (cacheEntry)',
+      JSON.stringify(cacheEntry).substring(0, 200),
+    );
+
+    if (!cacheEntry) {
       return null;
     }
 
-    if (cacheValue.value?.kind === 'FETCH') {
-      cacheValue.value.data.body = Buffer.from(
-        cacheValue.value.data.body,
-      ).toString('base64');
+    if (!cacheEntry?.tags) {
+      console.warn(
+        'RedisStringsHandler.get() called with',
+        key,
+        ctx,
+        'cacheEntry is mall formed (missing tags)',
+      );
+    }
+    if (!cacheEntry?.value) {
+      console.warn(
+        'RedisStringsHandler.get() called with',
+        key,
+        ctx,
+        'cacheEntry is mall formed (missing value)',
+      );
+    }
+    if (!cacheEntry?.lastModified) {
+      console.warn(
+        'RedisStringsHandler.get() called with',
+        key,
+        ctx,
+        'cacheEntry is mall formed (missing lastModified)',
+      );
     }
 
-    const combinedTags = new Set([
-      ...(ctx?.softTags || []),
-      ...(ctx?.tags || []),
-    ]);
+    if (ctx.kind === 'FETCH') {
+      const combinedTags = new Set([
+        ...(ctx?.softTags || []),
+        ...(ctx?.tags || []),
+      ]);
 
-    if (combinedTags.size === 0) {
-      return cacheValue;
-    }
+      if (combinedTags.size === 0) {
+        return cacheEntry;
+      }
 
-    for (const tag of combinedTags) {
-      // TODO: check how this revalidatedTagsMap is used or if it can be deleted
-      const revalidationTime = this.revalidatedTagsMap.get(tag);
-      if (revalidationTime && revalidationTime > cacheValue.lastModified) {
-        const redisKey = this.keyPrefix + key;
-        // Do not await here as this can happen in the background while we can already serve the cacheValue
-        this.client
-          .unlink(getTimeoutRedisCommandOptions(this.timeoutMs), redisKey)
-          .catch((err) => {
-            console.error(
-              'Error occurred while unlinking stale data. Retrying now. Error was:',
-              err,
-            );
-            this.client.unlink(
-              getTimeoutRedisCommandOptions(this.timeoutMs),
-              redisKey,
-            );
-          })
-          .finally(async () => {
-            await this.sharedTagsMap.delete(key);
-            await this.revalidatedTagsMap.delete(tag);
-          });
-        return null;
+      // INFO: implicit tags (revalidate of nested fetch in api route/page on revalidatePath call of the page/api route). See revalidateTag() for more information
+      //
+      // This code checks if any of the cache tags associated with this entry (normally the internal tag of the parent page/api route containing the fetch request)
+      // have been revalidated since the entry was last modified. If any tag was revalidated more recently than the entry's
+      // lastModified timestamp, then the cached content is considered stale (therefore return null) and should be removed.
+      for (const tag of combinedTags) {
+        // Get the last revalidation time for this tag from our revalidatedTagsMap
+        const revalidationTime = this.revalidatedTagsMap.get(tag);
+
+        // If we have a revalidation time for this tag and it's more recent than when
+        // this cache entry was last modified, the entry is stale
+        if (revalidationTime && revalidationTime > cacheEntry.lastModified) {
+          const redisKey = this.keyPrefix + key;
+
+          // We don't await this cleanup since it can happen asynchronously in the background.
+          // The cache entry is already considered invalid at this point.
+          this.client
+            .unlink(getTimeoutRedisCommandOptions(this.timeoutMs), redisKey)
+            .catch((err) => {
+              // If the first unlink fails, log the error and try one more time
+              console.error(
+                'Error occurred while unlinking stale data. Retrying now. Error was:',
+                err,
+              );
+              this.client.unlink(
+                getTimeoutRedisCommandOptions(this.timeoutMs),
+                redisKey,
+              );
+            })
+            .finally(async () => {
+              // Clean up our tag tracking maps after the Redis key is removed
+              await this.sharedTagsMap.delete(key);
+              await this.revalidatedTagsMap.delete(tag);
+            });
+
+          debug(
+            'green',
+            'RedisStringsHandler.get() found revalidation time for tag. Cache entry is stale and will be deleted and "null" will be returned.',
+            tag,
+            redisKey,
+            revalidationTime,
+            cacheEntry,
+          );
+
+          // Return null to indicate no valid cache entry was found
+          return null;
+        }
       }
     }
 
-    return cacheValue;
+    return cacheEntry;
   }
   public async set(
-    key: SetParams[0],
-    data: SetParams[1] & { lastModified: number },
-    ctx: SetParams[2],
+    key: string,
+    data:
+      | {
+        kind: 'APP_PAGE';
+        status: number;
+        headers: {
+          'x-nextjs-stale-time': string; // timestamp in ms
+          'x-next-cache-tags': string; // comma separated paths (tags)
+        };
+        html: string;
+        rscData: Buffer;
+        segmentData: unknown;
+        postboned: unknown;
+      }
+      | {
+        kind: 'APP_ROUTE';
+        status: number;
+        headers: {
+          'cache-control'?: string;
+          'x-nextjs-stale-time': string; // timestamp in ms
+          'x-next-cache-tags': string; // comma separated paths (tags)
+        };
+        body: Buffer;
+      }
+      | {
+        kind: 'FETCH';
+        data: {
+          headers: Record<string, string>;
+          body: string; // base64 encoded
+          status: number;
+          url: string;
+        };
+        revalidate: number | false;
+      },
+    ctx: {
+      revalidate: number | false;
+      isRoutePPREnabled: boolean;
+      isFallback: boolean;
+      tags?: string[];
+    },
   ) {
-    if (data.kind === 'FETCH') {
-      console.time('encoding' + key);
-      data.data.body = Buffer.from(data.data.body, 'base64').toString();
-      console.timeEnd('encoding' + key);
+    if (
+      data.kind !== 'APP_ROUTE' &&
+      data.kind !== 'APP_PAGE' &&
+      data.kind !== 'FETCH'
+    ) {
+      console.warn(
+        'RedisStringsHandler.set() called with',
+        key,
+        ctx,
+        data,
+        ' this cache handler is only designed and tested for kind APP_ROUTE and APP_PAGE and not for kind ',
+        (data as { kind: string })?.kind,
+      );
     }
+
     await this.assertClientIsReady();
 
-    data.lastModified = Date.now();
+    if (data.kind === 'APP_PAGE' || data.kind === 'APP_ROUTE') {
+      const tags = data.headers['x-next-cache-tags']?.split(',');
+      ctx.tags = [...(ctx.tags || []), ...(tags || [])];
+    }
 
-    const value = JSON.stringify(data);
+    // Constructing and serializing the value for storing it in redis
+    const cacheEntry: CacheEntry = {
+      lastModified: Date.now(),
+      tags: ctx?.tags || [],
+      value: data,
+    };
+    const serializedCacheEntry = JSON.stringify(cacheEntry, bufferReplacer);
 
     // pre seed data into deduplicated get client. This will reduce redis load by not requesting
     // the same value from redis which was just set.
     if (this.redisGetDeduplication) {
-      this.redisDeduplicationHandler.seedRequestReturn(key, value);
+      this.redisDeduplicationHandler.seedRequestReturn(
+        key,
+        serializedCacheEntry,
+      );
     }
 
+    // Constructing the expire time for the cache entry
     const expireAt =
       ctx.revalidate &&
-      Number.isSafeInteger(ctx.revalidate) &&
-      ctx.revalidate > 0
+        Number.isSafeInteger(ctx.revalidate) &&
+        ctx.revalidate > 0
         ? this.estimateExpireAge(ctx.revalidate)
         : this.estimateExpireAge(this.defaultStaleAge);
+
+    // Setting the cache entry in redis
     const options = getTimeoutRedisCommandOptions(this.timeoutMs);
     const setOperation: Promise<string | null> = this.client.set(
       options,
       this.keyPrefix + key,
-      value,
+      serializedCacheEntry,
       {
         EX: expireAt,
       },
     );
 
+    debug(
+      'blue',
+      'RedisStringsHandler.set() will set the following serializedCacheEntry',
+      this.keyPrefix,
+      key,
+      data,
+      ctx,
+      serializedCacheEntry?.substring(0, 200),
+      expireAt,
+    );
+
+    // Setting the tags for the cache entry in the sharedTagsMap (locally stored hashmap synced via redis)
     let setTagsOperation: Promise<void> | undefined;
     if (ctx.tags && ctx.tags.length > 0) {
       const currentTags = this.sharedTagsMap.get(key);
@@ -294,47 +490,92 @@ export default class RedisStringsHandler implements CacheHandler {
       }
     }
 
+    debug(
+      'blue',
+      'RedisStringsHandler.set() will set the following sharedTagsMap',
+      key,
+      ctx.tags as string[],
+    );
+
     await Promise.all([setOperation, setTagsOperation]);
   }
-  public async revalidateTag(tagOrTags: RevalidateParams[0]) {
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  public async revalidateTag(tagOrTags: string | string[], ...rest: any[]) {
+    debug(
+      'red',
+      'RedisStringsHandler.revalidateTag() called with',
+      tagOrTags,
+      rest,
+    );
     const tags = new Set([tagOrTags || []].flat());
     await this.assertClientIsReady();
 
-    // TODO: check how this revalidatedTagsMap is used or if it can be deleted
+    // find all keys that are related to this tag
+    const keysToDelete: Set<string> = new Set();
+
     for (const tag of tags) {
-      if (isImplicitTag(tag)) {
+      // INFO: implicit tags (revalidate of nested fetch in api route/page on revalidatePath call of the page/api route)
+      //
+      // Invalidation logic for fetch requests that are related to a invalidated page.
+      // revalidateTag is called for the page tag (_N_T_...) and the fetch request needs to be invalidated as well
+      // unfortunately this is not possible since the revalidateTag is not called with any data that would allow us to find the cache entry of the fetch request
+      // in case of a fetch request get method call, the get method of the cache handler is called with some information about the pages/routes the fetch request is inside
+      // therefore we only mark the page/route as stale here (with help of the revalidatedTagsMap) 
+      // and delete the cache entry of the fetch request on the next request to the get function
+      if (tag.startsWith(NEXT_CACHE_IMPLICIT_TAG_ID)) {
         const now = Date.now();
+        debug(
+          'red',
+          'RedisStringsHandler.revalidateTag() set revalidation time for tag',
+          tag,
+          'to',
+          now,
+        );
         await this.revalidatedTagsMap.set(tag, now);
       }
     }
 
-    const keysToDelete: string[] = [];
-
+    // Scan the whole sharedTagsMap for keys that are dependent on any of the revalidated tags
     for (const [key, sharedTags] of this.sharedTagsMap.entries()) {
       if (sharedTags.some((tag) => tags.has(tag))) {
-        keysToDelete.push(key);
+        keysToDelete.add(key);
       }
     }
 
-    if (keysToDelete.length === 0) {
+    debug(
+      'red',
+      'RedisStringsHandler.revalidateTag() found',
+      keysToDelete,
+      'keys to delete',
+    );
+
+    // exit early if no keys are related to this tag
+    if (keysToDelete.size === 0) {
       return;
     }
 
-    const fullRedisKeys = keysToDelete.map((key) => this.keyPrefix + key);
-
+    // prepare deletion of all keys in redis that are related to this tag
+    const redisKeys = Array.from(keysToDelete);
+    const fullRedisKeys = redisKeys.map((key) => this.keyPrefix + key);
     const options = getTimeoutRedisCommandOptions(this.timeoutMs);
-
     const deleteKeysOperation = this.client.unlink(options, fullRedisKeys);
 
-    // delete entries from in-memory deduplication cache
+    // also delete entries from in-memory deduplication cache if they get revalidated
     if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
       for (const key of keysToDelete) {
         this.inMemoryDeduplicationCache.delete(key);
       }
     }
 
-    const deleteTagsOperation = this.sharedTagsMap.delete(keysToDelete);
+    // prepare deletion of entries from shared tags map if they get revalidated so that the map will not grow indefinitely
+    const deleteTagsOperation = this.sharedTagsMap.delete(redisKeys);
 
+    // execute keys and tag maps deletion
     await Promise.all([deleteKeysOperation, deleteTagsOperation]);
+    debug(
+      'red',
+      'RedisStringsHandler.revalidateTag() finished delete operations',
+    );
   }
 }

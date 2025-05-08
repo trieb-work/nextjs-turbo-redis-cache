@@ -1,5 +1,6 @@
 // SyncedMap.ts
 import { Client, getTimeoutRedisCommandOptions } from './RedisStringsHandler';
+import { debugVerbose, debug } from './utils/debug';
 
 type CustomizedSync = {
   withoutRedisHashmap?: boolean;
@@ -169,18 +170,60 @@ export class SyncedMap<V> {
       }
     };
 
-    const keyEventHandler = async (_channel: string, message: string) => {
-      const key = message;
+    const keyEventHandler = async (key: string, message: string) => {
+      debug(
+        'yellow',
+        'SyncedMap.keyEventHandler() called with message',
+        this.redisKey,
+        message,
+        key,
+      );
+      // const key = message;
       if (key.startsWith(this.keyPrefix)) {
         const keyInMap = key.substring(this.keyPrefix.length);
         if (this.filterKeys(keyInMap)) {
+          debugVerbose(
+            'SyncedMap.keyEventHandler() key matches filter and will be deleted',
+            this.redisKey,
+            message,
+            key,
+          );
           await this.delete(keyInMap, true);
         }
+      } else {
+        debugVerbose(
+          'SyncedMap.keyEventHandler() key does not have prefix',
+          this.redisKey,
+          message,
+          key,
+        );
       }
     };
 
     try {
-      await this.subscriberClient.connect();
+      await this.subscriberClient.connect().catch(async () => {
+        await this.subscriberClient.connect();
+      });
+
+      // Check if keyspace event configuration is set correctly
+      const keyspaceEventConfig = (
+        await this.subscriberClient.configGet('notify-keyspace-events')
+      )?.['notify-keyspace-events'];
+      if (!keyspaceEventConfig.includes('E')) {
+        throw new Error(
+          "Keyspace event configuration has to include 'E' for Keyevent events, published with __keyevent@<db>__ prefix. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
+        );
+      }
+      if (
+        !keyspaceEventConfig.includes('A') &&
+        !(
+          keyspaceEventConfig.includes('x') && keyspaceEventConfig.includes('e')
+        )
+      ) {
+        throw new Error(
+          "Keyspace event configuration has to include 'A' or 'x' and 'e' for expired and evicted events. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
+        );
+      }
 
       await Promise.all([
         // We use a custom channel for insert/delete For the following reason:
@@ -188,7 +231,7 @@ export class SyncedMap<V> {
         // could get thousands of messages for one revalidateTag (For example revalidateTag("algolia") would send an enormous amount of network packages)
         // Also we can send the value in the message for insert
         this.subscriberClient.subscribe(this.syncChannel, syncHandler),
-        // Subscribe to Redis keyspace notifications for evicted and expired keys
+        // Subscribe to Redis keyevent notifications for evicted and expired keys
         this.subscriberClient.subscribe(
           `__keyevent@${this.database}__:evicted`,
           keyEventHandler,
@@ -224,10 +267,20 @@ export class SyncedMap<V> {
   }
 
   public get(key: string): V | undefined {
+    debugVerbose(
+      'SyncedMap.get() called with key',
+      key,
+      JSON.stringify(this.map.get(key))?.substring(0, 100),
+    );
     return this.map.get(key);
   }
 
   public async set(key: string, value: V): Promise<void> {
+    debugVerbose(
+      'SyncedMap.set() called with key',
+      key,
+      JSON.stringify(value)?.substring(0, 100),
+    );
     this.map.set(key, value);
     const operations = [];
 
@@ -258,10 +311,20 @@ export class SyncedMap<V> {
     await Promise.all(operations);
   }
 
+  // /api/revalidated-fetch
+  // true
+
   public async delete(
     keys: string[] | string,
     withoutSyncMessage = false,
   ): Promise<void> {
+    debugVerbose(
+      'SyncedMap.delete() called with keys',
+      this.redisKey,
+      keys,
+      withoutSyncMessage,
+    );
+
     const keysArray = Array.isArray(keys) ? keys : [keys];
     const operations = [];
 
@@ -285,7 +348,14 @@ export class SyncedMap<V> {
         this.client.publish(this.syncChannel, JSON.stringify(deletionMessage)),
       );
     }
+
     await Promise.all(operations);
+    debugVerbose(
+      'SyncedMap.delete() finished operations',
+      this.redisKey,
+      keys,
+      operations.length,
+    );
   }
 
   public has(key: string): boolean {
