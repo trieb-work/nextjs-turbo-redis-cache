@@ -469,14 +469,14 @@ describe('Next.js Turbo Redis Cache Integration', () => {
               cacheEntryKey,
             );
             expect(JSON.parse(hashmap)).toEqual([
-              'revalidated-fetch-revalidate15-nested-fetch-in-api-route',
+              'revalidated-fetch-revalidate3-nested-fetch-in-api-route',
             ]);
           });
 
           it('A request to revalidateTag API should remove the route from redis (string and hashmap)', async () => {
             const revalidateRes = await fetch(
               NEXT_START_URL +
-                '/api/revalidateTag?tag=revalidated-fetch-revalidate15-nested-fetch-in-api-route',
+                '/api/revalidateTag?tag=revalidated-fetch-revalidate3-nested-fetch-in-api-route',
             );
             const revalidateResJson: any = await revalidateRes.json();
             expect(revalidateResJson.success).toBe(true);
@@ -530,7 +530,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
               cacheEntryKey,
             );
             expect(JSON.parse(hashmap)).toEqual([
-              'revalidated-fetch-revalidate15-nested-fetch-in-api-route',
+              'revalidated-fetch-revalidate3-nested-fetch-in-api-route',
             ]);
           });
         }

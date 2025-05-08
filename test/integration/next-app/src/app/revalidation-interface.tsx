@@ -14,7 +14,7 @@ const apiRoutePaths: Record<string, string> = {
 // Define API routes with tags for tag-based revalidation
 const apiRouteTags: Record<string, string> = {
   'Revalidated Fetch in Nested API Route':
-    'revalidated-fetch-revalidate15-nested-fetch-in-api-route',
+    'revalidated-fetch-revalidate3-nested-fetch-in-api-route',
   'Revalidated Fetch API': 'revalidated-fetch-api',
   'Cached Static Fetch API': 'cached-static-fetch-api',
   'Uncached Fetch API': 'uncached-fetch-api',
