@@ -761,21 +761,33 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             '/pages/revalidated-fetch/revalidate15--default-page',
         );
         expect(keys1.length).toBe(0);
-        const keys2 = await redisClient.keys(
-          process.env.VERCEL_URL +
-            'e978cf5ddb8bf799209e828635cfe9ae6862f6735cea97f01ab752ff6fa489b4',
-        );
-        expect(keys2.length).toBe(0);
+
         const hashmap1 = await redisClient.hGet(
           process.env.VERCEL_URL + '__sharedTags__',
           '/pages/revalidated-fetch/revalidate15--default-page',
         );
         expect(hashmap1).toBeNull();
+
+        // sub-fetch-request is not removed directly but will be removed on next get request
+        const keys2 = await redisClient.keys(
+          process.env.VERCEL_URL +
+            'e978cf5ddb8bf799209e828635cfe9ae6862f6735cea97f01ab752ff6fa489b4',
+        );
+        expect(keys2.length).toBe(1);
         const hashmap2 = await redisClient.hGet(
           process.env.VERCEL_URL + '__sharedTags__',
           'e978cf5ddb8bf799209e828635cfe9ae6862f6735cea97f01ab752ff6fa489b4',
         );
-        expect(hashmap2).toBeNull();
+        expect(hashmap2).toBeDefined();
+
+        // the page should also be in revalidatedTagsMap so that the nested fetch requests knows that the page was invalidated
+        const revalidationTimestamp = await redisClient.hGet(
+          process.env.VERCEL_URL + '__revalidated_tags__',
+          '/pages/revalidated-fetch/revalidate15--default-page',
+        );
+        console.log('revalidationTimestamp', revalidationTimestamp);
+        expect(revalidationTimestamp).toBeDefined();
+        expect(Number(revalidationTimestamp)).toBeLessThan(Number(Date.now()));
 
         // API route should still be cached
         const keys3 = await redisClient.keys(
