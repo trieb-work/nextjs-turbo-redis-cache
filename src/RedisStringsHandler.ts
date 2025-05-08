@@ -195,7 +195,7 @@ export default class RedisStringsHandler {
       this.redisDeduplicationHandler.deduplicatedFunction;
   }
 
-  resetRequestCache(): void {}
+  resetRequestCache(): void { }
 
   private async assertClientIsReady(): Promise<void> {
     await Promise.all([
@@ -211,19 +211,19 @@ export default class RedisStringsHandler {
     key: string,
     ctx:
       | {
-          kind: 'APP_ROUTE' | 'APP_PAGE';
-          isRoutePPREnabled: boolean;
-          isFallback: boolean;
-        }
+        kind: 'APP_ROUTE' | 'APP_PAGE';
+        isRoutePPREnabled: boolean;
+        isFallback: boolean;
+      }
       | {
-          kind: 'FETCH';
-          revalidate: number;
-          fetchUrl: string;
-          fetchIdx: number;
-          tags: string[];
-          softTags: string[];
-          isFallback: boolean;
-        },
+        kind: 'FETCH';
+        revalidate: number;
+        fetchUrl: string;
+        fetchIdx: number;
+        tags: string[];
+        softTags: string[];
+        isFallback: boolean;
+      },
   ): Promise<CacheEntry | null> {
     if (
       ctx.kind !== 'APP_ROUTE' &&
@@ -310,9 +310,11 @@ export default class RedisStringsHandler {
         return cacheEntry;
       }
 
-      // This code checks if any of the cache tags associated with this entry have been revalidated
-      // since the entry was last modified. If any tag was revalidated more recently than the entry's
-      // lastModified timestamp, then the cached content is considered stale and should be removed.
+      // INFO: implicit tags (revalidate of nested fetch in api route/page on revalidatePath call of the page/api route). See revalidateTag() for more information
+      //
+      // This code checks if any of the cache tags associated with this entry (normally the internal tag of the parent page/api route containing the fetch request)
+      // have been revalidated since the entry was last modified. If any tag was revalidated more recently than the entry's
+      // lastModified timestamp, then the cached content is considered stale (therefore return null) and should be removed.
       for (const tag of combinedTags) {
         // Get the last revalidation time for this tag from our revalidatedTagsMap
         const revalidationTime = this.revalidatedTagsMap.get(tag);
@@ -364,37 +366,37 @@ export default class RedisStringsHandler {
     key: string,
     data:
       | {
-          kind: 'APP_PAGE';
-          status: number;
-          headers: {
-            'x-nextjs-stale-time': string; // timestamp in ms
-            'x-next-cache-tags': string; // comma separated paths (tags)
-          };
-          html: string;
-          rscData: Buffer;
-          segmentData: unknown;
-          postboned: unknown;
-        }
+        kind: 'APP_PAGE';
+        status: number;
+        headers: {
+          'x-nextjs-stale-time': string; // timestamp in ms
+          'x-next-cache-tags': string; // comma separated paths (tags)
+        };
+        html: string;
+        rscData: Buffer;
+        segmentData: unknown;
+        postboned: unknown;
+      }
       | {
-          kind: 'APP_ROUTE';
-          status: number;
-          headers: {
-            'cache-control'?: string;
-            'x-nextjs-stale-time': string; // timestamp in ms
-            'x-next-cache-tags': string; // comma separated paths (tags)
-          };
-          body: Buffer;
-        }
+        kind: 'APP_ROUTE';
+        status: number;
+        headers: {
+          'cache-control'?: string;
+          'x-nextjs-stale-time': string; // timestamp in ms
+          'x-next-cache-tags': string; // comma separated paths (tags)
+        };
+        body: Buffer;
+      }
       | {
-          kind: 'FETCH';
-          data: {
-            headers: Record<string, string>;
-            body: string; // base64 encoded
-            status: number;
-            url: string;
-          };
-          revalidate: number | false;
-        },
+        kind: 'FETCH';
+        data: {
+          headers: Record<string, string>;
+          body: string; // base64 encoded
+          status: number;
+          url: string;
+        };
+        revalidate: number | false;
+      },
     ctx: {
       revalidate: number | false;
       isRoutePPREnabled: boolean;
@@ -444,8 +446,8 @@ export default class RedisStringsHandler {
     // Constructing the expire time for the cache entry
     const expireAt =
       ctx.revalidate &&
-      Number.isSafeInteger(ctx.revalidate) &&
-      ctx.revalidate > 0
+        Number.isSafeInteger(ctx.revalidate) &&
+        ctx.revalidate > 0
         ? this.estimateExpireAge(ctx.revalidate)
         : this.estimateExpireAge(this.defaultStaleAge);
 
@@ -465,6 +467,8 @@ export default class RedisStringsHandler {
       'RedisStringsHandler.set() will set the following serializedCacheEntry',
       this.keyPrefix,
       key,
+      data,
+      ctx,
       serializedCacheEntry?.substring(0, 200),
       expireAt,
     );
@@ -510,43 +514,15 @@ export default class RedisStringsHandler {
     // find all keys that are related to this tag
     const keysToDelete: Set<string> = new Set();
 
-    // TODO right now this code is only tested for calls with revalidatePath. We need to test this code for calls with revalidateTag as well
-    // a call to revalidatePath will result in revalidateTag(_N_T_...) -> therefore we could check of tagOrTags.startsWith(_N_T_) to only execute this code for revalidatePath calls
-
     for (const tag of tags) {
-      // If a page has a fetch request inside. This fetch request needs to be revalidated as well. This is done by the following code
-      // sharedTags are containing all directly dependent tags. Need to find out the keys for these tags
-      const sharedTags = this.sharedTagsMap.get(
-        tag.replace(NEXT_CACHE_IMPLICIT_TAG_ID, ''),
-      );
-      for (const sharedTag of sharedTags || []) {
-        // Implicit tags are not stored in cache therefore we can ignore them and only look at the non-implicit tags
-        if (!sharedTag.startsWith(NEXT_CACHE_IMPLICIT_TAG_ID)) {
-          // For these non-implicit tags we then need to find the keys that are dependent on each of these tags
-          for (const [
-            dependentKey,
-            sharedTagsForDependentKey,
-          ] of this.sharedTagsMap.entries()) {
-            // We can do so by scanning the whole sharedTagsMap for keys that contain this tag in there sharedTags array
-            if (sharedTagsForDependentKey.includes(sharedTag)) {
-              keysToDelete.add(dependentKey);
-            }
-          }
-        }
-      }
-
-      debug(
-        'red',
-        'RedisStringsHandler.revalidateTag() directly dependent keys',
-        tag,
-        sharedTags?.filter(
-          (tag) => !tag.startsWith(NEXT_CACHE_IMPLICIT_TAG_ID),
-        ) || [],
-      );
-
-      // TODO check if this can be deleted with the new logic --> Seems like it can not be deleted --> above implementation only works for pages and not for api routes
-      // For Next.js implicit tags (route-based), store the revalidation timestamp
-      // This is used to track when routes were last invalidated
+      // INFO: implicit tags (revalidate of nested fetch in api route/page on revalidatePath call of the page/api route)
+      //
+      // Invalidation logic for fetch requests that are related to a invalidated page.
+      // revalidateTag is called for the page tag (_N_T_...) and the fetch request needs to be invalidated as well
+      // unfortunately this is not possible since the revalidateTag is not called with any data that would allow us to find the cache entry of the fetch request
+      // in case of a fetch request get method call, the get method of the cache handler is called with some information about the pages/routes the fetch request is inside
+      // therefore we only mark the page/route as stale here (with help of the revalidatedTagsMap) 
+      // and delete the cache entry of the fetch request on the next request to the get function
       if (tag.startsWith(NEXT_CACHE_IMPLICIT_TAG_ID)) {
         const now = Date.now();
         debug(

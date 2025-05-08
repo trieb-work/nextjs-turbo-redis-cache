@@ -10,7 +10,7 @@ export async function GET() {
     `http://localhost:${process.env.NEXT_START_PORT || 3000}/api/uncached-fetch`,
     {
       next: {
-        revalidate: 3,
+        revalidate: 15,
         tags: ['revalidated-fetch-revalidate15-nested-fetch-in-api-route'],
       },
     },

@@ -36,8 +36,7 @@ export class DeduplicatedRequestHandler<
 
   // Method to handle deduplicated requests
   deduplicatedFunction = (key: string): T => {
-    debug(
-      'cyan',
+    debugVerbose(
       'DeduplicatedRequestHandler.deduplicatedFunction() called with',
       key,
     );
@@ -83,8 +82,7 @@ export class DeduplicatedRequestHandler<
       try {
         const ts = performance.now();
         const result = await promise;
-        debug(
-          'cyan',
+        debugVerbose(
           'DeduplicatedRequestHandler.deduplicatedFunction().dedupedFn ',
           key,
           'promise resolved (in ',
