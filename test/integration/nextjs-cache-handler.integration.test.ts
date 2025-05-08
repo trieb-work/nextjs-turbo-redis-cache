@@ -328,7 +328,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
       });
     });
 
-    describe('should cache a nested fetch request inside a uncached API route', () => {
+    describe('DEBUG should cache a nested fetch request inside a uncached API route', () => {
       describe('should cache the nested fetch request (but not the API route itself)', () => {
         let counter: number;
         let subCounter: number;

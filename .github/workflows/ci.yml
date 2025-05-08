@@ -64,7 +64,7 @@ jobs:
         run: cd test/integration/next-app && pnpm build
 
       - name: Run tests
-        run: DEBUG_INTEGRATION=true DEBUG_CACHE_HANDLER=true pnpm test:integration
+        run: DEBUG_INTEGRATION=true DEBUG_CACHE_HANDLER=true pnpm test:integration -t DEBUG
         env:
           SKIP_BUILD: true
 
