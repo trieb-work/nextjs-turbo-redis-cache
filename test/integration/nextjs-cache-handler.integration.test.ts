@@ -4,14 +4,13 @@ import fetch from 'node-fetch';
 import { createClient } from 'redis';
 import { join } from 'path';
 import { CacheEntry } from '../../src/RedisStringsHandler';
-import { a } from 'vitest/dist/chunks/suite.B2jumIFP.js';
 
 const NEXT_APP_DIR = join(__dirname, 'next-app');
 console.log('NEXT_APP_DIR', NEXT_APP_DIR);
 const NEXT_START_PORT = 3055;
 const NEXT_START_URL = `http://localhost:${NEXT_START_PORT}`;
 
-const REDIS_BACKGROUND_SYNC_DELAY = 100; // 100ms delay to prevent flaky tests in slow CI environments
+const REDIS_BACKGROUND_SYNC_DELAY = 250; //ms delay to prevent flaky tests in slow CI environments
 
 let nextProcess;
 let redisClient;
