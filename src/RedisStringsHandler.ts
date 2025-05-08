@@ -60,6 +60,10 @@ export type CreateRedisStringsHandlerOptions = {
 // These tags are created internally by Next.js for route-based invalidation
 const NEXT_CACHE_IMPLICIT_TAG_ID = '_N_T_';
 
+// Redis key used to store a map of tags and their last revalidation timestamps
+// This helps track when specific tags were last invalidated
+const REVALIDATED_TAGS_KEY = '__revalidated_tags__';
+
 export function getTimeoutRedisCommandOptions(
   timeoutMs: number,
 ): CommandOptions {
@@ -69,6 +73,7 @@ export function getTimeoutRedisCommandOptions(
 export default class RedisStringsHandler {
   private client: Client;
   private sharedTagsMap: SyncedMap<string[]>;
+  private revalidatedTagsMap: SyncedMap<number>;
   private inMemoryDeduplicationCache: SyncedMap<
     Promise<ReturnType<Client['get']>>
   >;
@@ -134,7 +139,8 @@ export default class RedisStringsHandler {
       throw error;
     }
 
-    const filterKeys = (key: string): boolean => key !== sharedTagsKey;
+    const filterKeys = (key: string): boolean =>
+      key !== REVALIDATED_TAGS_KEY && key !== sharedTagsKey;
 
     this.sharedTagsMap = new SyncedMap<string[]>({
       client: this.client,
@@ -146,6 +152,20 @@ export default class RedisStringsHandler {
       filterKeys,
       resyncIntervalMs:
         avgResyncIntervalMs -
+        avgResyncIntervalMs / 10 +
+        Math.random() * (avgResyncIntervalMs / 10),
+    });
+
+    this.revalidatedTagsMap = new SyncedMap<number>({
+      client: this.client,
+      keyPrefix,
+      redisKey: REVALIDATED_TAGS_KEY,
+      database,
+      timeoutMs,
+      querySize: revalidateTagQuerySize,
+      filterKeys,
+      resyncIntervalMs:
+        avgResyncIntervalMs +
         avgResyncIntervalMs / 10 +
         Math.random() * (avgResyncIntervalMs / 10),
     });
@@ -178,7 +198,10 @@ export default class RedisStringsHandler {
   resetRequestCache(): void {}
 
   private async assertClientIsReady(): Promise<void> {
-    await Promise.all([this.sharedTagsMap.waitUntilReady()]);
+    await Promise.all([
+      this.sharedTagsMap.waitUntilReady(),
+      this.revalidatedTagsMap.waitUntilReady(),
+    ]);
     if (!this.client.isReady) {
       throw new Error('Redis client is not ready yet or connection is lost.');
     }
@@ -287,7 +310,52 @@ export default class RedisStringsHandler {
         return cacheEntry;
       }
 
-      return cacheEntry;
+      // This code checks if any of the cache tags associated with this entry have been revalidated
+      // since the entry was last modified. If any tag was revalidated more recently than the entry's
+      // lastModified timestamp, then the cached content is considered stale and should be removed.
+      for (const tag of combinedTags) {
+        // Get the last revalidation time for this tag from our revalidatedTagsMap
+        const revalidationTime = this.revalidatedTagsMap.get(tag);
+
+        // If we have a revalidation time for this tag and it's more recent than when
+        // this cache entry was last modified, the entry is stale
+        if (revalidationTime && revalidationTime > cacheEntry.lastModified) {
+          const redisKey = this.keyPrefix + key;
+
+          // We don't await this cleanup since it can happen asynchronously in the background.
+          // The cache entry is already considered invalid at this point.
+          this.client
+            .unlink(getTimeoutRedisCommandOptions(this.timeoutMs), redisKey)
+            .catch((err) => {
+              // If the first unlink fails, log the error and try one more time
+              console.error(
+                'Error occurred while unlinking stale data. Retrying now. Error was:',
+                err,
+              );
+              this.client.unlink(
+                getTimeoutRedisCommandOptions(this.timeoutMs),
+                redisKey,
+              );
+            })
+            .finally(async () => {
+              // Clean up our tag tracking maps after the Redis key is removed
+              await this.sharedTagsMap.delete(key);
+              await this.revalidatedTagsMap.delete(tag);
+            });
+
+          debug(
+            'green',
+            'RedisStringsHandler.get() found revalidation time for tag. Cache entry is stale and will be deleted and "null" will be returned.',
+            tag,
+            redisKey,
+            revalidationTime,
+            cacheEntry,
+          );
+
+          // Return null to indicate no valid cache entry was found
+          return null;
+        }
+      }
     }
 
     return cacheEntry;
@@ -475,6 +543,21 @@ export default class RedisStringsHandler {
           (tag) => !tag.startsWith(NEXT_CACHE_IMPLICIT_TAG_ID),
         ) || [],
       );
+
+      // TODO check if this can be deleted with the new logic --> Seems like it can not be deleted --> above implementation only works for pages and not for api routes
+      // For Next.js implicit tags (route-based), store the revalidation timestamp
+      // This is used to track when routes were last invalidated
+      if (tag.startsWith(NEXT_CACHE_IMPLICIT_TAG_ID)) {
+        const now = Date.now();
+        debug(
+          'red',
+          'RedisStringsHandler.revalidateTag() set revalidation time for tag',
+          tag,
+          'to',
+          now,
+        );
+        await this.revalidatedTagsMap.set(tag, now);
+      }
     }
 
     // Scan the whole sharedTagsMap for keys that are dependent on any of the revalidated tags

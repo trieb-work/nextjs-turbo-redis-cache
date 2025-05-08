@@ -328,7 +328,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
       });
     });
 
-    describe('DEBUG should cache a nested fetch request inside a uncached API route', () => {
+    describe('should cache a nested fetch request inside a uncached API route', () => {
       describe('should cache the nested fetch request (but not the API route itself)', () => {
         let counter: number;
         let subCounter: number;
@@ -435,7 +435,6 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           });
 
           it('A new request after the revalidation should increment the counter (because the route was re-evaluated)', async () => {
-            await delay(2000);
             const res = await fetch(
               NEXT_START_URL +
                 '/api/nested-fetch-in-api-route/revalidated-fetch',
