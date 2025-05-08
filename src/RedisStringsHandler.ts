@@ -178,7 +178,7 @@ export default class RedisStringsHandler {
   resetRequestCache(): void {}
 
   private async assertClientIsReady(): Promise<void> {
-    await this.sharedTagsMap.waitUntilReady();
+    await Promise.all([this.sharedTagsMap.waitUntilReady()]);
     if (!this.client.isReady) {
       throw new Error('Redis client is not ready yet or connection is lost.');
     }
@@ -466,6 +466,15 @@ export default class RedisStringsHandler {
           }
         }
       }
+
+      debug(
+        'red',
+        'RedisStringsHandler.revalidateTag() directly dependent keys',
+        tag,
+        sharedTags?.filter(
+          (tag) => !tag.startsWith(NEXT_CACHE_IMPLICIT_TAG_ID),
+        ) || [],
+      );
     }
 
     // Scan the whole sharedTagsMap for keys that are dependent on any of the revalidated tags
