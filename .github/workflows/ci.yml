@@ -16,6 +16,7 @@ permissions:
   statuses: write
   issues: write
   actions: write
+  discussions: write
 
 jobs:
   build:
