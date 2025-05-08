@@ -352,7 +352,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             counter = data1.counter;
           }
 
-          // API route counter of revalidated sub-fetch-request should be the same (request deduplication)
+          // API route counter of revalidated sub-fetch-request should be the same (request deduplication of fetch requests)
           expect(data1.subFetchData.counter).toBe(data1.subFetchData.counter);
           subCounter = data1.subFetchData.counter;
         });
@@ -366,6 +366,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
                 '/api/nested-fetch-in-api-route/revalidated-fetch',
             );
             const data: any = await res.json();
+            console.log('data1', data);
             expect(data.counter).toBe(counter + 1);
             expect(data.subFetchData.counter).toBe(subCounter);
           });
@@ -388,6 +389,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
                 '/api/nested-fetch-in-api-route/revalidated-fetch',
             );
             const data2: any = await res2.json();
+            console.log('data2', data1, data2);
             expect(data2.counter).toBe(counter + 3);
             expect(data2.subFetchData.counter).toBe(subCounter + 1);
           });
@@ -421,8 +423,8 @@ describe('Next.js Turbo Redis Cache Integration', () => {
                 '/api/nested-fetch-in-api-route/revalidated-fetch',
             );
             const data: any = await res.json();
+            console.log('data3', data);
             expect(data.counter).toBe(counter + 4);
-            // subFetchData counter should be 3 because the sub-fetch-request was re-evaluated. If revalidate would not work, it would be 2.
             expect(data.subFetchData.counter).toBe(subCounter + 2);
           });
 
@@ -475,8 +477,8 @@ describe('Next.js Turbo Redis Cache Integration', () => {
                 '/api/nested-fetch-in-api-route/revalidated-fetch',
             );
             const data: any = await res.json();
+            console.log('data4', data);
             expect(data.counter).toBe(counter + 5);
-            // subFetchData counter should be 4 because the sub-fetch-request was re-evaluated. If revalidate would not work, it would be 3.
             expect(data.subFetchData.counter).toBe(subCounter + 3);
           });
 
