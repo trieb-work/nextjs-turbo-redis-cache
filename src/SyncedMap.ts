@@ -1,6 +1,6 @@
 // SyncedMap.ts
 import { Client, getTimeoutRedisCommandOptions } from './RedisStringsHandler';
-import { debug } from './utils/debug';
+import { debugVerbose, debug } from './utils/debug';
 
 type CustomizedSync = {
   withoutRedisHashmap?: boolean;
@@ -172,6 +172,7 @@ export class SyncedMap<V> {
 
     const keyEventHandler = async (key: string, message: string) => {
       debug(
+        'yellow',
         'SyncedMap.keyEventHandler() called with message',
         this.redisKey,
         message,
@@ -181,7 +182,7 @@ export class SyncedMap<V> {
       if (key.startsWith(this.keyPrefix)) {
         const keyInMap = key.substring(this.keyPrefix.length);
         if (this.filterKeys(keyInMap)) {
-          debug(
+          debugVerbose(
             'SyncedMap.keyEventHandler() key matches filter and will be deleted',
             this.redisKey,
             message,
@@ -190,7 +191,7 @@ export class SyncedMap<V> {
           await this.delete(keyInMap, true);
         }
       } else {
-        debug(
+        debugVerbose(
           'SyncedMap.keyEventHandler() key does not have prefix',
           this.redisKey,
           message,
@@ -266,7 +267,7 @@ export class SyncedMap<V> {
   }
 
   public get(key: string): V | undefined {
-    debug(
+    debugVerbose(
       'SyncedMap.get() called with key',
       key,
       JSON.stringify(this.map.get(key))?.substring(0, 100),
@@ -275,7 +276,7 @@ export class SyncedMap<V> {
   }
 
   public async set(key: string, value: V): Promise<void> {
-    debug(
+    debugVerbose(
       'SyncedMap.set() called with key',
       key,
       JSON.stringify(value)?.substring(0, 100),
@@ -317,7 +318,7 @@ export class SyncedMap<V> {
     keys: string[] | string,
     withoutSyncMessage = false,
   ): Promise<void> {
-    debug(
+    debugVerbose(
       'SyncedMap.delete() called with keys',
       this.redisKey,
       keys,
@@ -349,7 +350,7 @@ export class SyncedMap<V> {
     }
 
     await Promise.all(operations);
-    debug(
+    debugVerbose(
       'SyncedMap.delete() finished operations',
       this.redisKey,
       keys,

@@ -1,12 +1,15 @@
 export const dynamic = 'force-dynamic';
 
 export default async function TestPage() {
-  const res = await fetch('http://localhost:3000/api/cached-static-fetch', {
-    next: {
-      revalidate: 15,
-      tags: ['cached-static-fetch-revalidate15-force-dynamic-page'],
+  const res = await fetch(
+    `http://localhost:${process.env.NEXT_START_PORT || 3000}/api/cached-static-fetch`,
+    {
+      next: {
+        revalidate: 15,
+        tags: ['cached-static-fetch-revalidate15-force-dynamic-page'],
+      },
     },
-  });
+  );
   const data = await res.json();
   return (
     <main

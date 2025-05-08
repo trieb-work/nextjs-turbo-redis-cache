@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "export VERCEL_URL=\"dev-test-$RANDOM\" && echo $VERCEL_URL && cd ../../.. && pnpm build && cd test/integration/next-app && pnpm i && pnpm build && REDISHOST=localhost REDISPORT=6379 DEBUG_CACHE_HANDLER=true pnpm start",
+    "dev": "export VERCEL_URL=\"dev-test-$RANDOM\" && echo $VERCEL_URL && cd ../../.. && pnpm build && cd test/integration/next-app && pnpm i && pnpm build && VERCEL_ENV=production REDISHOST=localhost REDISPORT=6379 DEBUG_CACHE_HANDLER=true pnpm start",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

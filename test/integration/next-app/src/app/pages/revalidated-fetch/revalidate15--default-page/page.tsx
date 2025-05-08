@@ -1,3 +1,6 @@
+// This page will inherit the revalidate from it's subsequent fetch request
+// meaning that the page will be revalidated after 15 seconds
+
 export default async function TestPage() {
   try {
     const res = await fetch(

@@ -1,7 +1,7 @@
 import RedisStringsHandler, {
   CreateRedisStringsHandlerOptions,
 } from './RedisStringsHandler';
-import { debug } from './utils/debug';
+import { debugVerbose } from './utils/debug';
 
 let cachedHandler: RedisStringsHandler;
 
@@ -15,19 +15,19 @@ export default class CachedHandler {
   get(
     ...args: Parameters<RedisStringsHandler['get']>
   ): ReturnType<RedisStringsHandler['get']> {
-    debug('CachedHandler.get called with', args);
+    debugVerbose('CachedHandler.get called with', args);
     return cachedHandler.get(...args);
   }
   set(
     ...args: Parameters<RedisStringsHandler['set']>
   ): ReturnType<RedisStringsHandler['set']> {
-    debug('CachedHandler.set called with', args);
+    debugVerbose('CachedHandler.set called with', args);
     return cachedHandler.set(...args);
   }
   revalidateTag(
     ...args: Parameters<RedisStringsHandler['revalidateTag']>
   ): ReturnType<RedisStringsHandler['revalidateTag']> {
-    debug('CachedHandler.revalidateTag called with', args);
+    debugVerbose('CachedHandler.revalidateTag called with', args);
     return cachedHandler.revalidateTag(...args);
   }
   resetRequestCache(

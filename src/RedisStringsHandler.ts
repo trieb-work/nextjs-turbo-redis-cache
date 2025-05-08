@@ -56,12 +56,13 @@ export type CreateRedisStringsHandlerOptions = {
   estimateExpireAge?: (staleAge: number) => number;
 };
 
+// Identifier prefix used by Next.js to mark automatically generated cache tags
+// These tags are created internally by Next.js for route-based invalidation
 const NEXT_CACHE_IMPLICIT_TAG_ID = '_N_T_';
-const REVALIDATED_TAGS_KEY = '__revalidated_tags__';
 
-function isImplicitTag(tag: string): boolean {
-  return tag.startsWith(NEXT_CACHE_IMPLICIT_TAG_ID);
-}
+// Redis key used to store a map of tags and their last revalidation timestamps
+// This helps track when specific tags were last invalidated
+const REVALIDATED_TAGS_KEY = '__revalidated_tags__';
 
 export function getTimeoutRedisCommandOptions(
   timeoutMs: number,
@@ -238,7 +239,7 @@ export default class RedisStringsHandler {
       );
     }
 
-    debug('RedisStringsHandler.get() called with', key, ctx);
+    debug('green', 'RedisStringsHandler.get() called with', key, ctx);
     await this.assertClientIsReady();
 
     const clientGet = this.redisGetDeduplication
@@ -250,6 +251,7 @@ export default class RedisStringsHandler {
     );
 
     debug(
+      'green',
       'RedisStringsHandler.get() finished with result (serializedCacheEntry)',
       serializedCacheEntry?.substring(0, 200),
     );
@@ -264,6 +266,7 @@ export default class RedisStringsHandler {
     );
 
     debug(
+      'green',
       'RedisStringsHandler.get() finished with result (cacheEntry)',
       JSON.stringify(cacheEntry).substring(0, 200),
     );
@@ -307,15 +310,24 @@ export default class RedisStringsHandler {
         return cacheEntry;
       }
 
-      // TODO: check how this revalidatedTagsMap is used or if it can be deleted
+      // This code checks if any of the cache tags associated with this entry have been revalidated
+      // since the entry was last modified. If any tag was revalidated more recently than the entry's
+      // lastModified timestamp, then the cached content is considered stale and should be removed.
       for (const tag of combinedTags) {
+        // Get the last revalidation time for this tag from our revalidatedTagsMap
         const revalidationTime = this.revalidatedTagsMap.get(tag);
+
+        // If we have a revalidation time for this tag and it's more recent than when
+        // this cache entry was last modified, the entry is stale
         if (revalidationTime && revalidationTime > cacheEntry.lastModified) {
           const redisKey = this.keyPrefix + key;
-          // Do not await here as this can happen in the background while we can already serve the cacheValue
+
+          // We don't await this cleanup since it can happen asynchronously in the background.
+          // The cache entry is already considered invalid at this point.
           this.client
             .unlink(getTimeoutRedisCommandOptions(this.timeoutMs), redisKey)
             .catch((err) => {
+              // If the first unlink fails, log the error and try one more time
               console.error(
                 'Error occurred while unlinking stale data. Retrying now. Error was:',
                 err,
@@ -326,9 +338,21 @@ export default class RedisStringsHandler {
               );
             })
             .finally(async () => {
+              // Clean up our tag tracking maps after the Redis key is removed
               await this.sharedTagsMap.delete(key);
               await this.revalidatedTagsMap.delete(tag);
             });
+
+          debug(
+            'green',
+            'RedisStringsHandler.get() found revalidation time for tag. Cache entry is stale and will be deleted and "null" will be returned.',
+            tag,
+            redisKey,
+            revalidationTime,
+            cacheEntry,
+          );
+
+          // Return null to indicate no valid cache entry was found
           return null;
         }
       }
@@ -384,7 +408,7 @@ export default class RedisStringsHandler {
       data.kind !== 'FETCH'
     ) {
       console.warn(
-        'RedisStringsHandler.get() called with',
+        'RedisStringsHandler.set() called with',
         key,
         ctx,
         data,
@@ -402,15 +426,11 @@ export default class RedisStringsHandler {
 
     // Constructing and serializing the value for storing it in redis
     const cacheEntry: CacheEntry = {
-      value: data,
       lastModified: Date.now(),
       tags: ctx?.tags || [],
+      value: data,
     };
     const serializedCacheEntry = JSON.stringify(cacheEntry, bufferReplacer);
-    debug(
-      'RedisStringsHandler.set() will set the following serializedCacheEntry',
-      serializedCacheEntry?.substring(0, 200),
-    );
 
     // pre seed data into deduplicated get client. This will reduce redis load by not requesting
     // the same value from redis which was just set.
@@ -440,6 +460,15 @@ export default class RedisStringsHandler {
       },
     );
 
+    debug(
+      'blue',
+      'RedisStringsHandler.set() will set the following serializedCacheEntry',
+      this.keyPrefix,
+      key,
+      serializedCacheEntry?.substring(0, 200),
+      expireAt,
+    );
+
     // Setting the tags for the cache entry in the sharedTagsMap (locally stored hashmap synced via redis)
     let setTagsOperation: Promise<void> | undefined;
     if (ctx.tags && ctx.tags.length > 0) {
@@ -457,44 +486,102 @@ export default class RedisStringsHandler {
       }
     }
 
+    debug(
+      'blue',
+      'RedisStringsHandler.set() will set the following sharedTagsMap',
+      key,
+      ctx.tags as string[],
+    );
+
     await Promise.all([setOperation, setTagsOperation]);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public async revalidateTag(tagOrTags: string | string[], ...rest: any[]) {
-    debug('RedisStringsHandler.revalidateTag() called with', tagOrTags, rest);
+    debug(
+      'red',
+      'RedisStringsHandler.revalidateTag() called with',
+      tagOrTags,
+      rest,
+    );
     const tags = new Set([tagOrTags || []].flat());
     await this.assertClientIsReady();
 
-    // TODO: check how this revalidatedTagsMap is used or if it can be deleted
+    // find all keys that are related to this tag
+    const keysToDelete: Set<string> = new Set();
+
+    // TODO right now this code is only tested for calls with revalidatePath. We need to test this code for calls with revalidateTag as well
+    // a call to revalidatePath will result in revalidateTag(_N_T_...) -> therefore we could check of tagOrTags.startsWith(_N_T_) to only execute this code for revalidatePath calls
+
     for (const tag of tags) {
-      if (isImplicitTag(tag)) {
+      // If a page has a fetch request inside. This fetch request needs to be revalidated as well. This is done by the following code
+      // sharedTags are containing all directly dependent tags. Need to find out the keys for these tags
+      const sharedTags = this.sharedTagsMap.get(
+        tag.replace(NEXT_CACHE_IMPLICIT_TAG_ID, ''),
+      );
+      for (const sharedTag of sharedTags || []) {
+        // Implicit tags are not stored in cache therefore we can ignore them and only look at the non-implicit tags
+        if (!sharedTag.startsWith(NEXT_CACHE_IMPLICIT_TAG_ID)) {
+          // For these non-implicit tags we then need to find the keys that are dependent on each of these tags
+          for (const [
+            dependentKey,
+            sharedTagsForDependentKey,
+          ] of this.sharedTagsMap.entries()) {
+            // We can do so by scanning the whole sharedTagsMap for keys that contain this tag in there sharedTags array
+            if (sharedTagsForDependentKey.includes(sharedTag)) {
+              keysToDelete.add(dependentKey);
+            }
+          }
+        }
+      }
+
+      debug(
+        'red',
+        'RedisStringsHandler.revalidateTag() directly dependent keys',
+        tag,
+        sharedTags?.filter(
+          (tag) => !tag.startsWith(NEXT_CACHE_IMPLICIT_TAG_ID),
+        ) || [],
+      );
+
+      // TODO check if this can be deleted with the new logic --> I think yes but tests should be added first
+      // For Next.js implicit tags (route-based), store the revalidation timestamp
+      // This is used to track when routes were last invalidated
+      if (tag.startsWith(NEXT_CACHE_IMPLICIT_TAG_ID)) {
         const now = Date.now();
+        debug(
+          'red',
+          'RedisStringsHandler.revalidateTag() set revalidation time for tag',
+          tag,
+          'to',
+          now,
+        );
         await this.revalidatedTagsMap.set(tag, now);
       }
     }
 
-    // find all keys that are related to this tag
-    const keysToDelete: string[] = [];
+    // Scan the whole sharedTagsMap for keys that are dependent on any of the revalidated tags
     for (const [key, sharedTags] of this.sharedTagsMap.entries()) {
       if (sharedTags.some((tag) => tags.has(tag))) {
-        keysToDelete.push(key);
+        keysToDelete.add(key);
       }
     }
 
     debug(
+      'red',
       'RedisStringsHandler.revalidateTag() found',
       keysToDelete,
       'keys to delete',
     );
 
     // exit early if no keys are related to this tag
-    if (keysToDelete.length === 0) {
+    if (keysToDelete.size === 0) {
       return;
     }
 
     // prepare deletion of all keys in redis that are related to this tag
-    const fullRedisKeys = keysToDelete.map((key) => this.keyPrefix + key);
+    const redisKeys = Array.from(keysToDelete);
+    const fullRedisKeys = redisKeys.map((key) => this.keyPrefix + key);
     const options = getTimeoutRedisCommandOptions(this.timeoutMs);
     const deleteKeysOperation = this.client.unlink(options, fullRedisKeys);
 
@@ -506,10 +593,13 @@ export default class RedisStringsHandler {
     }
 
     // prepare deletion of entries from shared tags map if they get revalidated so that the map will not grow indefinitely
-    const deleteTagsOperation = this.sharedTagsMap.delete(keysToDelete);
+    const deleteTagsOperation = this.sharedTagsMap.delete(redisKeys);
 
     // execute keys and tag maps deletion
     await Promise.all([deleteKeysOperation, deleteTagsOperation]);
-    debug('RedisStringsHandler.revalidateTag() finished delete operations');
+    debug(
+      'red',
+      'RedisStringsHandler.revalidateTag() finished delete operations',
+    );
   }
 }

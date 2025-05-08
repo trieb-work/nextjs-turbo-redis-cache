@@ -156,6 +156,7 @@ By accepting and tolerating this eventual consistency, the performance of the ca
 1. Run `pnpm lint` to lint the project
 1. Run `pnpm format` to format the project
 1. Run `pnpm run-dev-server` to test and develop the caching handler using the nextjs integration test project
+1. If you make changes to the cache handler, you need to stop `pnpm run-dev-server` and run it again.
 
 ## Testing
 

@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 export default async function TestPage() {
-  const res = await fetch('http://localhost:3000/api/cached-static-fetch');
+  const res = await fetch(
+    `http://localhost:${process.env.NEXT_START_PORT || 3000}/api/cached-static-fetch`,
+  );
   const data = await res.json();
   return (
     <main

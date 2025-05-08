@@ -17,7 +17,7 @@ async function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function runCommand(cmd, args, cwd) {
+async function runCommand(cmd: string, args: string[], cwd: string) {
   return new Promise((resolve, reject) => {
     let stderr = '';
     let stdout = '';
@@ -195,7 +195,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         expect(bodyJson.counter).toBe(counter1);
       });
 
-      it('A request to revalidatePage API should remove the route from redis (string and hashmap)', async () => {
+      it('A request to revalidatePath API should remove the route from redis (string and hashmap)', async () => {
         const revalidateRes = await fetch(
           NEXT_START_URL + '/api/revalidatePath?path=/api/cached-static-fetch',
         );
@@ -504,6 +504,14 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         }
       });
     });
+
+    // describe('With a API route that has a unstable_cacheTag', () => {
+    //   // TODO: implement API route for this test as well as the test itself
+    // });
+
+    // describe('With a API route that has a unstable_cacheLife', () => {
+    //   // TODO: implement API route for this test as well as the test itself
+    // });
   });
 
   describe('should have the correct caching behavior for pages', () => {
@@ -649,25 +657,165 @@ describe('Next.js Turbo Redis Cache Integration', () => {
       });
     });
 
-    describe('With a cached static fetch request inside a page', () => {
-      // TODO: implement
-      it('should cache the nested fetch request (but not the API route itself)', () => {
-        // TODO: implement
-      });
-    });
-
-    describe('With a uncached fetch request inside a page', () => {
-      // TODO: implement
-      it('should cache the nested fetch request (but not the API route itself)', () => {
-        // TODO: implement
-      });
-    });
+    // describe('With a cached static fetch request inside a page', () => {
+    //   // TODO: implement test for `test/integration/next-app/src/app/pages/cached-static-fetch`
+    // });
 
     describe('With a cached revalidation fetch request inside a page', () => {
-      // TODO: implement
-      it('should cache the nested fetch request (but not the API route itself)', () => {
-        // TODO: implement
+      let firstTimestamp: string;
+      let firstCounter: string;
+
+      it('should set all cache entries for this page after request is finished', async () => {
+        const pageRes = await fetch(
+          NEXT_START_URL +
+            '/pages/revalidated-fetch/revalidate15--default-page',
+        );
+        const pageText = await pageRes.text();
+        console.log('pageText', pageText);
+        const timestamp = pageText.match(/Timestamp: <!-- -->(\d+)/)?.[1];
+        const counter = pageText.match(/Counter: <!-- -->(\d+)/)?.[1];
+        expect(timestamp).toBeDefined();
+        expect(counter).toBeDefined();
+        firstTimestamp = timestamp!;
+        firstCounter = counter!;
+
+        // test cache entry for 3 keys are set
+        const keys1 = await redisClient.keys(
+          process.env.VERCEL_URL +
+            '/pages/revalidated-fetch/revalidate15--default-page',
+        );
+        expect(keys1.length).toBe(1);
+        const keys2 = await redisClient.keys(
+          process.env.VERCEL_URL +
+            'e978cf5ddb8bf799209e828635cfe9ae6862f6735cea97f01ab752ff6fa489b4',
+        );
+        console.log('keys2', keys2, process.env.VERCEL_URL);
+        expect(keys2.length).toBe(1);
+        const keys3 = await redisClient.keys(
+          process.env.VERCEL_URL + '/api/revalidated-fetch',
+        );
+        expect(keys3.length).toBe(1);
+
+        // test shared tag hashmap to be set for all keys
+        const hashmap1 = await redisClient.hGet(
+          process.env.VERCEL_URL + '__sharedTags__',
+          '/pages/revalidated-fetch/revalidate15--default-page',
+        );
+        expect(JSON.parse(hashmap1)).toEqual([
+          '_N_T_/layout',
+          '_N_T_/pages/layout',
+          '_N_T_/pages/revalidated-fetch/layout',
+          '_N_T_/pages/revalidated-fetch/revalidate15--default-page/layout',
+          '_N_T_/pages/revalidated-fetch/revalidate15--default-page/page',
+          '_N_T_/pages/revalidated-fetch/revalidate15--default-page',
+          'revalidated-fetch-revalidate15-default-page',
+        ]);
+        const hashmap2 = await redisClient.hGet(
+          process.env.VERCEL_URL + '__sharedTags__',
+          'e978cf5ddb8bf799209e828635cfe9ae6862f6735cea97f01ab752ff6fa489b4',
+        );
+        expect(JSON.parse(hashmap2)).toEqual([
+          'revalidated-fetch-revalidate15-default-page',
+        ]);
+        const hashmap3 = await redisClient.hGet(
+          process.env.VERCEL_URL + '__sharedTags__',
+          '/api/revalidated-fetch',
+        );
+        expect(JSON.parse(hashmap3)).toEqual([
+          '_N_T_/layout',
+          '_N_T_/api/layout',
+          '_N_T_/api/revalidated-fetch/layout',
+          '_N_T_/api/revalidated-fetch/route',
+          '_N_T_/api/revalidated-fetch',
+        ]);
+      });
+
+      it('a new request should return the same timestamp as the first request', async () => {
+        const pageRes = await fetch(
+          NEXT_START_URL +
+            '/pages/revalidated-fetch/revalidate15--default-page',
+        );
+        const pageText = await pageRes.text();
+        const timestamp = pageText.match(/Timestamp: <!-- -->(\d+)/)?.[1];
+        expect(timestamp).toBeDefined();
+        expect(timestamp).toBe(firstTimestamp);
+      });
+
+      it('A request to revalidatePath API should remove the page from redis (string and hashmap) but not the api route', async () => {
+        const revalidateRes = await fetch(
+          NEXT_START_URL +
+            '/api/revalidatePath?path=/pages/revalidated-fetch/revalidate15--default-page',
+        );
+        const revalidateResJson: any = await revalidateRes.json();
+        expect(revalidateResJson.success).toBe(true);
+
+        // test no cache entry for 2 keys
+        const keys1 = await redisClient.keys(
+          process.env.VERCEL_URL +
+            '/pages/revalidated-fetch/revalidate15--default-page',
+        );
+        expect(keys1.length).toBe(0);
+        const keys2 = await redisClient.keys(
+          process.env.VERCEL_URL +
+            'e978cf5ddb8bf799209e828635cfe9ae6862f6735cea97f01ab752ff6fa489b4',
+        );
+        expect(keys2.length).toBe(0);
+        const hashmap1 = await redisClient.hGet(
+          process.env.VERCEL_URL + '__sharedTags__',
+          '/pages/revalidated-fetch/revalidate15--default-page',
+        );
+        expect(hashmap1).toBeNull();
+        const hashmap2 = await redisClient.hGet(
+          process.env.VERCEL_URL + '__sharedTags__',
+          'e978cf5ddb8bf799209e828635cfe9ae6862f6735cea97f01ab752ff6fa489b4',
+        );
+        expect(hashmap2).toBeNull();
+
+        // API route should still be cached
+        const keys3 = await redisClient.keys(
+          process.env.VERCEL_URL + '/api/revalidated-fetch',
+        );
+        expect(keys3.length).toBe(1);
+        const hashmap3 = await redisClient.hGet(
+          process.env.VERCEL_URL + '__sharedTags__',
+          '/api/revalidated-fetch',
+        );
+        expect(JSON.parse(hashmap3)).toEqual([
+          '_N_T_/layout',
+          '_N_T_/api/layout',
+          '_N_T_/api/revalidated-fetch/layout',
+          '_N_T_/api/revalidated-fetch/route',
+          '_N_T_/api/revalidated-fetch',
+        ]);
+      });
+
+      it('a new request should return a newer timestamp as the first request (which was invalidated by revalidatePath)', async () => {
+        const pageRes = await fetch(
+          NEXT_START_URL +
+            '/pages/revalidated-fetch/revalidate15--default-page',
+        );
+        const pageText = await pageRes.text();
+        const timestamp = pageText.match(/Timestamp: <!-- -->(\d+)/)?.[1];
+        const secondCounter = pageText.match(/Counter: <!-- -->(\d+)/)?.[1];
+        expect(timestamp).toBeDefined();
+        expect(Number(timestamp)).toBeGreaterThan(Number(firstTimestamp));
+
+        //but the new request should not have a higher counter than the first request (because the cache of the API route should not be invalidated)
+        expect(secondCounter).toBeDefined();
+        expect(secondCounter).toBe(firstCounter);
       });
     });
+
+    // describe('With a uncached fetch request inside a page', () => {
+    //   // TODO: implement test for `test/integration/next-app/src/app/pages/uncached-fetch`
+    // });
+
+    // describe('With a page that has a unstable_cacheTag', () => {
+    //   // TODO: implement page for this test as well as the test itself
+    // });
+
+    // describe('With a page that has a unstable_cacheLife', () => {
+    //   // TODO: implement page for this test as well as the test itself
+    // });
   });
 });
