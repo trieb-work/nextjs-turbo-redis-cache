@@ -4,11 +4,14 @@ import fetch from 'node-fetch';
 import { createClient } from 'redis';
 import { join } from 'path';
 import { CacheEntry } from '../../src/RedisStringsHandler';
+import { a } from 'vitest/dist/chunks/suite.B2jumIFP.js';
 
 const NEXT_APP_DIR = join(__dirname, 'next-app');
 console.log('NEXT_APP_DIR', NEXT_APP_DIR);
 const NEXT_START_PORT = 3055;
 const NEXT_START_URL = `http://localhost:${NEXT_START_PORT}`;
+
+const REDIS_BACKGROUND_SYNC_DELAY = 100; // 100ms delay to prevent flaky tests in slow CI environments
 
 let nextProcess;
 let redisClient;
@@ -202,7 +205,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         );
         const revalidateResJson: any = await revalidateRes.json();
         expect(revalidateResJson.success).toBe(true);
-        await delay(250);
+        await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
         // check Redis keys
         const keys = await redisClient.keys(
@@ -356,37 +359,28 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             counter = data1.counter;
           }
 
-          console.log('data0', data1, data2);
-          // local
-          // data0 { counter: 1, subFetchData: { counter: 3 } } { counter: 2, subFetchData: { counter: 3 } }
-          // CI
-
           // API route counter of revalidated sub-fetch-request should be the same (request deduplication of fetch requests)
           expect(data1.subFetchData.counter).toBe(data1.subFetchData.counter);
           subCounter = data1.subFetchData.counter;
         });
 
         if (process.env.SKIP_OPTIONAL_LONG_RUNNER_TESTS !== 'true') {
-          it('should return the same subFetchData after 2 seconds (regular caching within revalidation interval works)', async () => {
+          it('should return the same subFetchData after 2 seconds (regular caching within revalidation interval (=3s) works)', async () => {
             // make another request after 2 seconds, it should return the same subFetchData
-            await delay(2000);
+            await delay(2000); // 2s < 3s (revalidate interval)
             const res = await fetch(
               NEXT_START_URL +
                 '/api/nested-fetch-in-api-route/revalidated-fetch',
             );
             const data: any = await res.json();
-            console.log('data1', data);
-            // local
-            // data1 { counter: 3, subFetchData: { counter: 3 } }
-            // CI
-            // data1 { counter: 3, subFetchData: { counter: 3 } }
+
             expect(data.counter).toBe(counter + 1);
             expect(data.subFetchData.counter).toBe(subCounter);
           });
 
           it('should return the same subFetchData after 2 seconds and new data after another 2 seconds (caching while revalidation works)', async () => {
-            // make another request after another 2 seconds, it should return the same subFetchData (caching while revalidation works
-            await delay(2000);
+            // make another request after another 2 seconds, it should return the same subFetchData (caching while revalidation works)
+            await delay(2000); // 2s+2s < 3s*2 (=TTL = revalidate=3s*2)
             const res1 = await fetch(
               NEXT_START_URL +
                 '/api/nested-fetch-in-api-route/revalidated-fetch',
@@ -395,18 +389,13 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             expect(data1.counter).toBe(counter + 2);
             expect(data1.subFetchData.counter).toBe(subCounter);
 
-            // make another request after another 2 seconds, it should return new data (caching while revalidation works)
-            await delay(2000);
+            // make another request directly after first request which was still in TTL, it should return new data (caching while revalidation works)
+            await delay(REDIS_BACKGROUND_SYNC_DELAY);
             const res2 = await fetch(
               NEXT_START_URL +
                 '/api/nested-fetch-in-api-route/revalidated-fetch',
             );
             const data2: any = await res2.json();
-            console.log('data2', data1, data2);
-            // local
-            // data2 { counter: 4, subFetchData: { counter: 3 } } { counter: 5, subFetchData: { counter: 4 } }
-            // CI
-            // data2 { counter: 4, subFetchData: { counter: 3 } } { counter: 5, subFetchData: { counter: 4 } }
             expect(data2.counter).toBe(counter + 3);
             expect(data2.subFetchData.counter).toBe(subCounter + 1);
           });
@@ -418,7 +407,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             );
             const revalidateResJson: any = await revalidateRes.json();
             expect(revalidateResJson.success).toBe(true);
-            await delay(250);
+            await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
             // check Redis keys
             const keys = await redisClient.keys(
@@ -440,14 +429,6 @@ describe('Next.js Turbo Redis Cache Integration', () => {
                 '/api/nested-fetch-in-api-route/revalidated-fetch',
             );
             const data: any = await res.json();
-            console.log('data3', data);
-            // local
-            // data3 { counter: 6, subFetchData: { counter: 5 } }
-            // data3 { counter: 6, subFetchData: { counter: 5 } }
-            // data3 { counter: 6, subFetchData: { counter: 4 } } <- nach nodemodules + build
-            // data3 { counter: 6, subFetchData: { counter: 4 } }
-            // CI
-            // data3 { counter: 6, subFetchData: { counter: 4 } }
             expect(data.counter).toBe(counter + 4);
             expect(data.subFetchData.counter).toBe(subCounter + 2); // <- fails in CI only
           });
@@ -480,7 +461,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             );
             const revalidateResJson: any = await revalidateRes.json();
             expect(revalidateResJson.success).toBe(true);
-            await delay(250);
+            await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
             // check Redis keys
             const keys = await redisClient.keys(
@@ -502,18 +483,12 @@ describe('Next.js Turbo Redis Cache Integration', () => {
                 '/api/nested-fetch-in-api-route/revalidated-fetch',
             );
             const data: any = await res.json();
-            console.log('data4', data);
-            // local
-            // data4 { counter: 7, subFetchData: { counter: 6 } }
-            // data4 { counter: 7, subFetchData: { counter: 6 } } <- auch nach nodemodules + build
-            // CI
-            // data4 { counter: 7, subFetchData: { counter: 5 } }
             expect(data.counter).toBe(counter + 5);
             expect(data.subFetchData.counter).toBe(subCounter + 3); // <- fails in CI only
           });
 
           it('After the new request was made the redis key and hashmap should be set again', async () => {
-            await delay(250);
+            await delay(REDIS_BACKGROUND_SYNC_DELAY);
             // This cache entry key is the key of the sub-fetch-request, it will be generated by nextjs based on the headers/payload etc.
             // So it should stay the same unless nextjs will change something in there implementation
             const cacheEntryKey =
@@ -642,7 +617,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           );
           const revalidateResJson: any = await revalidateRes.json();
           expect(revalidateResJson.success).toBe(true);
-          await delay(250);
+          await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
           // check Redis keys
           const keys = await redisClient.keys(
@@ -779,7 +754,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         );
         const revalidateResJson: any = await revalidateRes.json();
         expect(revalidateResJson.success).toBe(true);
-        await delay(250);
+        await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
         // test no cache entry for 2 keys
         const keys1 = await redisClient.keys(
