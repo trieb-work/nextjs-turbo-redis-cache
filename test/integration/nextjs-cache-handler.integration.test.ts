@@ -441,7 +441,6 @@ describe('Next.js Turbo Redis Cache Integration', () => {
               process.env.VERCEL_URL + '__sharedTags__',
               cacheEntryKey,
             );
-            console.log('hashmap', hashmap);
             expect(JSON.parse(hashmap)).toEqual([
               'revalidated-fetch-revalidate15-nested-fetch-in-api-route',
             ]);
@@ -496,7 +495,6 @@ describe('Next.js Turbo Redis Cache Integration', () => {
               process.env.VERCEL_URL + '__sharedTags__',
               cacheEntryKey,
             );
-            console.log('hashmap', hashmap);
             expect(JSON.parse(hashmap)).toEqual([
               'revalidated-fetch-revalidate15-nested-fetch-in-api-route',
             ]);
@@ -671,7 +669,6 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             '/pages/revalidated-fetch/revalidate15--default-page',
         );
         const pageText = await pageRes.text();
-        console.log('pageText', pageText);
         const timestamp = pageText.match(/Timestamp: <!-- -->(\d+)/)?.[1];
         const counter = pageText.match(/Counter: <!-- -->(\d+)/)?.[1];
         expect(timestamp).toBeDefined();
@@ -689,7 +686,6 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           process.env.VERCEL_URL +
             'e978cf5ddb8bf799209e828635cfe9ae6862f6735cea97f01ab752ff6fa489b4',
         );
-        console.log('keys2', keys2, process.env.VERCEL_URL);
         expect(keys2.length).toBe(1);
         const keys3 = await redisClient.keys(
           process.env.VERCEL_URL + '/api/revalidated-fetch',
