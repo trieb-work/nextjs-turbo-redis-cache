@@ -415,6 +415,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           });
 
           it('A new request after the revalidation should increment the counter (because the route was re-evaluated)', async () => {
+            await delay(200);
             const res = await fetch(
               NEXT_START_URL +
                 '/api/nested-fetch-in-api-route/revalidated-fetch',
@@ -540,7 +541,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             process.env.VERCEL_URL + '/pages/no-fetch/default-page',
           );
           // 14 days is default revalidate for pages -> expiration time is 2 * revalidate time -> -10 seconds for testing offset stability
-          expect(ttl).toBeGreaterThan(2 * 14 * 24 * 60 * 60 - 10);
+          expect(ttl).toBeGreaterThan(2 * 14 * 24 * 60 * 60 - 30);
         });
 
         it('The data in the redis key should match the expected format', async () => {

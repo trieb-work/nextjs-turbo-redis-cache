@@ -188,6 +188,8 @@ The integration tests will start a Next.js server and test the caching handler. 
 - SKIP_OPTIONAL_LONG_RUNNER_TESTS: If set to true, the integration tests will not run the optional long runner tests.
 - DEBUG_INTEGRATION: If set to true, the integration tests will print debug information of the test itself to the console.
 
+Integration tests may have dependencies between test cases, so individual test failures should be evaluated in the context of the full test suite rather than in isolation.
+
 ## Some words on nextjs caching internals
 
 Nextjs will use different caching objects for different pages and api routes. Currently supported are kind: APP_ROUTE and APP_PAGE.
