@@ -198,7 +198,7 @@ export default function HomePage() {
             >
               <strong>API Route:</strong> None
               <br />
-              These pages don't make any API requests and are statically
+              These pages don&apos;t make any API requests and are statically
               generated without external data.
             </div>
             <ul
@@ -364,8 +364,8 @@ export default function HomePage() {
               <strong>API Route:</strong> <code>/api/uncached-fetch</code>
               <br />
               These pages fetch data from the uncached API route with{' '}
-              <code>dynamic: 'force-dynamic'</code> setting, causing a new fetch
-              on every request.
+              <code>dynamic: &apos;force-dynamic&apos;</code> setting, causing a
+              new fetch on every request.
             </div>
             <ul
               style={{
