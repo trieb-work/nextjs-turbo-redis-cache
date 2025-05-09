@@ -443,7 +443,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             );
             const data: any = await res.json();
             expect(data.counter).toBe(counter + 4);
-            expect(data.subFetchData.counter).toBe(subCounter + 2); // <- fails in CI only
+            expect(data.subFetchData.counter).toBe(subCounter + 2);
           });
 
           it('After the new request was made the redis key and hashmap should be set again', async () => {
@@ -499,7 +499,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             );
             const data: any = await res.json();
             expect(data.counter).toBe(counter + 5);
-            expect(data.subFetchData.counter).toBe(subCounter + 3); // <- fails in CI only
+            expect(data.subFetchData.counter).toBe(subCounter + 3);
           });
 
           it('After the new request was made the redis key and hashmap should be set again', async () => {

@@ -14,7 +14,7 @@ let cachedHandler: RedisStringsHandler;
 export default class CachedHandler {
   constructor(options: CreateRedisStringsHandlerOptions) {
     if (!cachedHandler) {
-      console.log('created cached handler');
+      console.log('created development cached handler');
       cachedHandler = new RedisStringsHandler(options);
     }
   }
