@@ -395,10 +395,12 @@ export default class RedisStringsHandler {
           revalidate: number | false;
         },
     ctx: {
-      revalidate: number | false;
       isRoutePPREnabled: boolean;
       isFallback: boolean;
       tags?: string[];
+      // Different versions of Next.js use different arguments for the same functionality
+      revalidate?: number | false; // Version 15.0.3
+      cacheControl?: { revalidate: 5; expire: undefined }; // Version 15.0.3
     },
   ) {
     if (
@@ -440,12 +442,12 @@ export default class RedisStringsHandler {
       );
     }
 
+    // TODO: implement expiration based on cacheControl.expire argument, -> probably relevant for cacheLife and "use cache" etc.: https://nextjs.org/docs/app/api-reference/functions/cacheLife
     // Constructing the expire time for the cache entry
+    const revalidate = ctx.revalidate || ctx.cacheControl?.revalidate;
     const expireAt =
-      ctx.revalidate &&
-      Number.isSafeInteger(ctx.revalidate) &&
-      ctx.revalidate > 0
-        ? this.estimateExpireAge(ctx.revalidate)
+      revalidate && Number.isSafeInteger(revalidate) && revalidate > 0
+        ? this.estimateExpireAge(revalidate)
         : this.estimateExpireAge(this.defaultStaleAge);
 
     // Setting the cache entry in redis
