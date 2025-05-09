@@ -195,7 +195,7 @@ export default class RedisStringsHandler {
       this.redisDeduplicationHandler.deduplicatedFunction;
   }
 
-  resetRequestCache(): void { }
+  resetRequestCache(): void {}
 
   private async assertClientIsReady(): Promise<void> {
     await Promise.all([
@@ -211,19 +211,19 @@ export default class RedisStringsHandler {
     key: string,
     ctx:
       | {
-        kind: 'APP_ROUTE' | 'APP_PAGE';
-        isRoutePPREnabled: boolean;
-        isFallback: boolean;
-      }
+          kind: 'APP_ROUTE' | 'APP_PAGE';
+          isRoutePPREnabled: boolean;
+          isFallback: boolean;
+        }
       | {
-        kind: 'FETCH';
-        revalidate: number;
-        fetchUrl: string;
-        fetchIdx: number;
-        tags: string[];
-        softTags: string[];
-        isFallback: boolean;
-      },
+          kind: 'FETCH';
+          revalidate: number;
+          fetchUrl: string;
+          fetchIdx: number;
+          tags: string[];
+          softTags: string[];
+          isFallback: boolean;
+        },
   ): Promise<CacheEntry | null> {
     if (
       ctx.kind !== 'APP_ROUTE' &&
@@ -329,14 +329,11 @@ export default class RedisStringsHandler {
           this.client
             .unlink(getTimeoutRedisCommandOptions(this.timeoutMs), redisKey)
             .catch((err) => {
-              // If the first unlink fails, log the error and try one more time
+              // If the first unlink fails, only log the error
+              // Never implement a retry here as the cache entry will be updated directly after this get request
               console.error(
-                'Error occurred while unlinking stale data. Retrying now. Error was:',
+                'Error occurred while unlinking stale data. Error was:',
                 err,
-              );
-              this.client.unlink(
-                getTimeoutRedisCommandOptions(this.timeoutMs),
-                redisKey,
               );
             })
             .finally(async () => {
@@ -366,42 +363,44 @@ export default class RedisStringsHandler {
     key: string,
     data:
       | {
-        kind: 'APP_PAGE';
-        status: number;
-        headers: {
-          'x-nextjs-stale-time': string; // timestamp in ms
-          'x-next-cache-tags': string; // comma separated paths (tags)
-        };
-        html: string;
-        rscData: Buffer;
-        segmentData: unknown;
-        postboned: unknown;
-      }
-      | {
-        kind: 'APP_ROUTE';
-        status: number;
-        headers: {
-          'cache-control'?: string;
-          'x-nextjs-stale-time': string; // timestamp in ms
-          'x-next-cache-tags': string; // comma separated paths (tags)
-        };
-        body: Buffer;
-      }
-      | {
-        kind: 'FETCH';
-        data: {
-          headers: Record<string, string>;
-          body: string; // base64 encoded
+          kind: 'APP_PAGE';
           status: number;
-          url: string;
-        };
-        revalidate: number | false;
-      },
+          headers: {
+            'x-nextjs-stale-time': string; // timestamp in ms
+            'x-next-cache-tags': string; // comma separated paths (tags)
+          };
+          html: string;
+          rscData: Buffer;
+          segmentData: unknown;
+          postboned: unknown;
+        }
+      | {
+          kind: 'APP_ROUTE';
+          status: number;
+          headers: {
+            'cache-control'?: string;
+            'x-nextjs-stale-time': string; // timestamp in ms
+            'x-next-cache-tags': string; // comma separated paths (tags)
+          };
+          body: Buffer;
+        }
+      | {
+          kind: 'FETCH';
+          data: {
+            headers: Record<string, string>;
+            body: string; // base64 encoded
+            status: number;
+            url: string;
+          };
+          revalidate: number | false;
+        },
     ctx: {
-      revalidate: number | false;
       isRoutePPREnabled: boolean;
       isFallback: boolean;
       tags?: string[];
+      // Different versions of Next.js use different arguments for the same functionality
+      revalidate?: number | false; // Version 15.0.3
+      cacheControl?: { revalidate: 5; expire: undefined }; // Version 15.0.3
     },
   ) {
     if (
@@ -443,12 +442,12 @@ export default class RedisStringsHandler {
       );
     }
 
+    // TODO: implement expiration based on cacheControl.expire argument, -> probably relevant for cacheLife and "use cache" etc.: https://nextjs.org/docs/app/api-reference/functions/cacheLife
     // Constructing the expire time for the cache entry
+    const revalidate = ctx.revalidate || ctx.cacheControl?.revalidate;
     const expireAt =
-      ctx.revalidate &&
-        Number.isSafeInteger(ctx.revalidate) &&
-        ctx.revalidate > 0
-        ? this.estimateExpireAge(ctx.revalidate)
+      revalidate && Number.isSafeInteger(revalidate) && revalidate > 0
+        ? this.estimateExpireAge(revalidate)
         : this.estimateExpireAge(this.defaultStaleAge);
 
     // Setting the cache entry in redis
@@ -521,7 +520,7 @@ export default class RedisStringsHandler {
       // revalidateTag is called for the page tag (_N_T_...) and the fetch request needs to be invalidated as well
       // unfortunately this is not possible since the revalidateTag is not called with any data that would allow us to find the cache entry of the fetch request
       // in case of a fetch request get method call, the get method of the cache handler is called with some information about the pages/routes the fetch request is inside
-      // therefore we only mark the page/route as stale here (with help of the revalidatedTagsMap) 
+      // therefore we only mark the page/route as stale here (with help of the revalidatedTagsMap)
       // and delete the cache entry of the fetch request on the next request to the get function
       if (tag.startsWith(NEXT_CACHE_IMPLICIT_TAG_ID)) {
         const now = Date.now();
