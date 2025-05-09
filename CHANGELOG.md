@@ -1,3 +1,20 @@
+# [1.4.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.3.0...v1.4.0) (2025-05-09)
+
+
+### Bug Fixes
+
+* add tests ([225fc49](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/225fc49eff26d631c4b8d50a15ef2c864213f36b))
+* comment ([321ddec](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/321ddec4ee9b6a6e2cf1f78062d05d2cc7b45e4c))
+* remove retry ([ca4ff6c](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/ca4ff6c4072e675da42dbcfe36d3ff422dc54f12))
+* remove retry ([3a1cf7d](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/3a1cf7dc5fd315ff3c84460052af20b8e40014ec))
+* remove retry ([207413b](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/207413b81cb51143e04dff9a2310a185d6bba568))
+* tests and ci ([b0841ad](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/b0841ad9bc2c4b3ab9edde7047259cd45fbd5f02))
+
+
+### Features
+
+* add support for nextjs 15.3.2 ([fcd8bb5](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/fcd8bb5469bbefcd88397d3ef86ce3eb0fee7c02))
+
 # [1.3.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.2.1...v1.3.0) (2025-05-08)
 
 
