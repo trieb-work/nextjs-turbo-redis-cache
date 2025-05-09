@@ -839,7 +839,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
 
         //but the new request should not have a higher counter than the first request (because the cache of the API route should not be invalidated)
         expect(secondCounter).toBeDefined();
-        expect(secondCounter).toBe(firstCounter); // could be that this changes in the new implementation
+        expect(secondCounter).toBe(firstCounter);
       });
     });
 
