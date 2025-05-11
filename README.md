@@ -26,7 +26,8 @@ Tested versions are:
 - 15.0.3
 - 15.2.4
 - 15.3.2
-  Currently PPR, 'use cache', cacheLife and cacheTag are not tested. Use these operations with caution and your own risk.
+
+Currently PPR, 'use cache', cacheLife and cacheTag are not tested. Use these operations with caution and your own risk.
 
 ## Available Options (needs Option B of getting started)
 
