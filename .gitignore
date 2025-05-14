@@ -3,3 +3,4 @@ dist
 .env
 coverage
 .DS_Store
+.idea
