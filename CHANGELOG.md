@@ -1,3 +1,15 @@
+# [1.5.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.4.0...v1.5.0) (2025-05-16)
+
+
+### Bug Fixes
+
+* improving log fitting the new redis url option ([59b7e59](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/59b7e5921c724ceff58917d712e310b18a23b464))
+
+
+### Features
+
+* add redis_url param ([cea59a1](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/cea59a10f0f2e1b73b8005683ea65f22ba95edc7))
+
 # [1.4.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.3.0...v1.4.0) (2025-05-09)
 
 
