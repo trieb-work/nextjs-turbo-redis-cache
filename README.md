@@ -26,22 +26,6 @@ Tested versions are:
 
 Currently PPR, 'use cache', cacheLife and cacheTag are not tested. Use these operations with caution and your own risk.
 
-## Available Options (needs Option B of getting started)
-
-| Option                 | Description                                                                                                       | Default Value                                                                                                                                                   |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| redis_url              | Redis connection url                                                                                              | `process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST ? `redis://${process.env.REDISHOST}:${process.env.REDISPORT}` : 'redis://localhost:6379'` |
-| database               | Redis database number to use. Uses DB 0 for production, DB 1 otherwise                                            | `process.env.VERCEL_ENV === 'production' ? 0 : 1`                                                                                                               |
-| keyPrefix              | Prefix added to all Redis keys                                                                                    | `process.env.VERCEL_URL    \|\| 'UNDEFINED_URL_'`                                                                                                               |
-| sharedTagsKey          | Key used to store shared tags hash map in Redis                                                                   | `'__sharedTags__'`                                                                                                                                              |
-| timeoutMs              | Timeout in milliseconds for Redis operations                                                                      | `5000`                                                                                                                                                          |
-| revalidateTagQuerySize | Number of entries to query in one batch during full sync of shared tags hash map                                  | `250`                                                                                                                                                           |
-| avgResyncIntervalMs    | Average interval in milliseconds between tag map full re-syncs                                                    | `3600000` (1 hour)                                                                                                                                              |
-| redisGetDeduplication  | Enable deduplication of Redis get requests via internal in-memory cache.                                          | `true`                                                                                                                                                          |
-| inMemoryCachingTime    | Time in milliseconds to cache Redis get results in memory. Set this to 0 to disable in-memory caching completely. | `10000`                                                                                                                                                         |
-| defaultStaleAge        | Default stale age in seconds for cached items                                                                     | `1209600` (14 days)                                                                                                                                             |
-| estimateExpireAge      | Function to calculate expire age (redis TTL value) from stale age                                                 | Production: `staleAge * 2`<br> Other: `staleAge * 1.2`                                                                                                          |
-
 ## Getting started
 
 ### Enable redis key-space notifications for Expire and Evict events
@@ -73,6 +57,8 @@ const nextConfig = {
   ...
 }
 ```
+
+Make sure to set either REDIS_URL or REDISHOST and REDISPORT environment variables.
 
 ### Option B: create a wrapper file to change options
 
@@ -127,6 +113,22 @@ const nextConfig = {
 
 A working example of above can be found in the `test/integration/next-app-customized` folder.
 
+## Available Options
+
+| Option                 | Description                                                                                                       | Default Value                                                                                                                                                 |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| redis_url              | Redis connection url                                                                                              | `process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST ? redis://${process.env.REDISHOST}:${process.env.REDISPORT} : 'redis://localhost:6379'` |
+| database               | Redis database number to use. Uses DB 0 for production, DB 1 otherwise                                            | `process.env.VERCEL_ENV === 'production' ? 0 : 1`                                                                                                             |
+| keyPrefix              | Prefix added to all Redis keys                                                                                    | `process.env.VERCEL_URL    \|\| 'UNDEFINED_URL_'`                                                                                                             |
+| sharedTagsKey          | Key used to store shared tags hash map in Redis                                                                   | `'__sharedTags__'`                                                                                                                                            |
+| timeoutMs              | Timeout in milliseconds for Redis operations                                                                      | `5000`                                                                                                                                                        |
+| revalidateTagQuerySize | Number of entries to query in one batch during full sync of shared tags hash map                                  | `250`                                                                                                                                                         |
+| avgResyncIntervalMs    | Average interval in milliseconds between tag map full re-syncs                                                    | `3600000` (1 hour)                                                                                                                                            |
+| redisGetDeduplication  | Enable deduplication of Redis get requests via internal in-memory cache.                                          | `true`                                                                                                                                                        |
+| inMemoryCachingTime    | Time in milliseconds to cache Redis get results in memory. Set this to 0 to disable in-memory caching completely. | `10000`                                                                                                                                                       |
+| defaultStaleAge        | Default stale age in seconds for cached items                                                                     | `1209600` (14 days)                                                                                                                                           |
+| estimateExpireAge      | Function to calculate expire age (redis TTL value) from stale age                                                 | Production: `staleAge * 2`<br> Other: `staleAge * 1.2`                                                                                                        |
+
 ## Consistency of Redis and this caching implementation
 
 To understand consistency levels of this caching implementation we first have to understand the consistency of redis itself:
@@ -168,7 +170,9 @@ By accepting and tolerating this eventual consistency, the performance of the ca
 
 ## Testing
 
-To run all tests you can use the following command:
+Run `pnpm run-dev-server` to start the nextjs integration test project.
+
+To run all tests you can use the following command in a second terminal:
 
 ```bash
 pnpm test
