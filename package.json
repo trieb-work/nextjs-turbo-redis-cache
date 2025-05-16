@@ -12,7 +12,7 @@
     "run-dev-server-15-0-3": "cd ./test/integration/next-app-15-0-3 && pnpm dev",
     "build": "tsup",
     "lint": "eslint -c eslint.config.mjs --fix",
-    "fmt": "prettier --write 'src/**/*.ts' 'src/*.ts'",
+    "format": "prettier --write 'src/**/*.ts' 'src/*.ts'",
     "test": "vitest --coverage --config vite.config.ts",
     "test:ui": "vitest --ui  --config vite.config.ts",
     "test:unit": "vitest --config vite.config.ts src/**/*.test.ts src/**/*.test.tsx",
