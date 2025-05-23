@@ -51,7 +51,7 @@
   ],
   "author": "Designed for speed, scalability, and optimized performance, nextjs-turbo-redis-cache is your go-to solution for Next.js caching in demanding production environments.",
   "license": "ISC",
-  "description": "",
+  "description": "Next.js redis cache handler",
   "publishConfig": {
     "access": "public"
   },
