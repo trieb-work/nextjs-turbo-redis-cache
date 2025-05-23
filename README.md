@@ -1,9 +1,8 @@
 # nextjs-turbo-redis-cache
-
 [![npm version](https://img.shields.io/npm/v/@trieb.work/nextjs-turbo-redis-cache.svg)](https://www.npmjs.com/package/@trieb.work/nextjs-turbo-redis-cache)
 ![Turbo redis cache image](https://github.com/user-attachments/assets/98e0dfd9-f38a-42ad-a355-9843740cc2d6)
 
-The ultimate Redis caching solution for Next.js. Built for production-ready, large-scale projects, it delivers unparalleled performance and efficiency with features tailored for high-traffic applications. This package has been created after extensibly testing the @neshca package and finding several major issues with it.
+The ultimate Redis caching solution for Next.js 15 and the app router. Built for production-ready, large-scale projects, it delivers unparalleled performance and efficiency with features tailored for high-traffic applications. This package has been created after extensibly testing the @neshca package and finding several major issues with it.
 
 Key Features:
 
@@ -12,6 +11,8 @@ Key Features:
 - _In-Memory Caching_: Includes local caching for Redis get operations to reduce latency further. Don't request redis for the same key multiple times.
 - _Efficient Tag Management_: in-memory tags map for lightning-fast revalidate operations with minimal Redis overhead.
 - _Intelligent Key-Space Notifications_: Automatic update of in-memory tags map for expired or evicted keys.
+
+This library offers you an easy and high performant caching solution for docker, Kubernetes or Google Cloud Run deployments of Next.js.
 
 ## Compatibility
 
