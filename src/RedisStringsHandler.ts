@@ -97,8 +97,8 @@ export default class RedisStringsHandler {
   private estimateExpireAge: (staleAge: number) => number;
 
   constructor({
-    redisUrl = process.env.redisUrl
-      ? process.env.redisUrl
+    redisUrl = process.env.REDIS_URL
+      ? process.env.REDIS_URL
       : process.env.REDISHOST
         ? `redis://${process.env.REDISHOST}:${process.env.REDISPORT}`
         : 'redis://localhost:6379',
