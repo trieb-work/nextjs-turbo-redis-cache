@@ -206,23 +206,28 @@ export class SyncedMap<V> {
       });
 
       // Check if keyspace event configuration is set correctly
-      const keyspaceEventConfig = (
-        await this.subscriberClient.configGet('notify-keyspace-events')
-      )?.['notify-keyspace-events'];
-      if (!keyspaceEventConfig.includes('E')) {
-        throw new Error(
-          "Keyspace event configuration has to include 'E' for Keyevent events, published with __keyevent@<db>__ prefix. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
-        );
-      }
       if (
-        !keyspaceEventConfig.includes('A') &&
-        !(
-          keyspaceEventConfig.includes('x') && keyspaceEventConfig.includes('e')
-        )
+        (process.env.SKIP_KEYSPACE_CONFIG_CHECK || '').toUpperCase() !== 'TRUE'
       ) {
-        throw new Error(
-          "Keyspace event configuration has to include 'A' or 'x' and 'e' for expired and evicted events. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
-        );
+        const keyspaceEventConfig = (
+          await this.subscriberClient.configGet('notify-keyspace-events')
+        )?.['notify-keyspace-events'];
+        if (!keyspaceEventConfig.includes('E')) {
+          throw new Error(
+            "Keyspace event configuration has to include 'E' for Keyevent events, published with __keyevent@<db>__ prefix. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
+          );
+        }
+        if (
+          !keyspaceEventConfig.includes('A') &&
+          !(
+            keyspaceEventConfig.includes('x') &&
+            keyspaceEventConfig.includes('e')
+          )
+        ) {
+          throw new Error(
+            "Keyspace event configuration has to include 'A' or 'x' and 'e' for expired and evicted events. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
+          );
+        }
       }
 
       await Promise.all([
