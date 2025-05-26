@@ -172,7 +172,7 @@ By accepting and tolerating this eventual consistency, the performance of the ca
 
 ## Testing
 
-To run all tests you can use the following command in a second terminal:
+To run all tests you can use the following command:
 
 ```bash
 pnpm build && pnpm test
