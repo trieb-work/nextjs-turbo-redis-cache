@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.6.0...v1.7.0) (2025-05-26)
+
+
+### Features
+
+* add TLS/SSL support with Redis client configuration options ([9f80dd6](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/9f80dd6b53659ea488af6948a9c952ce0cda7490))
+
 # [1.6.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.5.1...v1.6.0) (2025-05-26)
 
 
