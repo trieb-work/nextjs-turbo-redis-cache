@@ -148,7 +148,7 @@ module.exports = class CustomizedCacheHandler {
   constructor() {
     if (!cachedHandler) {
       cachedHandler = new RedisStringsHandler({
-        redis_url: 'rediss://your-redis-host:6380', // Note the rediss:// protocol
+        redisUrl: 'rediss://your-redis-host:6380', // Note the rediss:// protocol
         socketOptions: {
           tls: true,
           rejectUnauthorized: false, // Only use this if you want to skip certificate validation
