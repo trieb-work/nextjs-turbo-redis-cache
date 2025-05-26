@@ -15,7 +15,7 @@ export type CacheEntry = {
 
 export type CreateRedisStringsHandlerOptions = {
   /** Redis redisUrl to use.
-   * @default process.env.redisUrl? process.env.redisUrl : process.env.REDISHOST
+   * @default process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST
           ? `redis://${process.env.REDISHOST}:${process.env.REDISPORT}`
           : 'redis://localhost:6379'
    */
