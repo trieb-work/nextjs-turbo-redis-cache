@@ -1,4 +1,4 @@
-import { commandOptions, createClient } from 'redis';
+import { commandOptions, createClient, RedisClientOptions } from 'redis';
 import { SyncedMap } from './SyncedMap';
 import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
 import { debug } from './utils/debug';
@@ -60,6 +60,14 @@ export type CreateRedisStringsHandlerOptions = {
    * @default Production: staleAge * 2, Other: staleAge * 1.2
    */
   estimateExpireAge?: (staleAge: number) => number;
+  /** Additional Redis client socket options
+   * @example { tls: true, rejectUnauthorized: false }
+   */
+  socketOptions?: RedisClientOptions['socket'];
+  /** Additional Redis client options to be passed directly to createClient
+   * @example { username: 'user', password: 'pass' }
+   */
+  clientOptions?: Omit<RedisClientOptions, 'url' | 'database' | 'socket'>;
 };
 
 // Identifier prefix used by Next.js to mark automatically generated cache tags
@@ -113,6 +121,8 @@ export default class RedisStringsHandler {
     defaultStaleAge = 60 * 60 * 24 * 14,
     estimateExpireAge = (staleAge) =>
       process.env.VERCEL_ENV === 'production' ? staleAge * 2 : staleAge * 1.2,
+    socketOptions,
+    clientOptions,
   }: CreateRedisStringsHandlerOptions) {
     this.keyPrefix = keyPrefix;
     this.timeoutMs = timeoutMs;
@@ -122,9 +132,12 @@ export default class RedisStringsHandler {
     this.estimateExpireAge = estimateExpireAge;
 
     try {
+      // Create Redis client with properly typed configuration
       this.client = createClient({
-        ...(database !== 0 ? { database } : {}),
         url: redisUrl,
+        ...(database !== 0 ? { database } : {}),
+        ...(socketOptions ? { socket: socketOptions } : {}),
+        ...(clientOptions || {}),
       });
 
       this.client.on('error', (error) => {

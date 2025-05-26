@@ -132,6 +132,33 @@ A working example of above can be found in the `test/integration/next-app-custom
 | inMemoryCachingTime    | Time in milliseconds to cache Redis get results in memory. Set this to 0 to disable in-memory caching completely. | `10000`                                                                                                                                                       |
 | defaultStaleAge        | Default stale age in seconds for cached items                                                                     | `1209600` (14 days)                                                                                                                                           |
 | estimateExpireAge      | Function to calculate expire age (redis TTL value) from stale age                                                 | Production: `staleAge * 2`<br> Other: `staleAge * 1.2`                                                                                                        |
+| socketOptions          | Redis client socket options for TLS/SSL configuration (e.g., `{ tls: true, rejectUnauthorized: false }`)          | `undefined`                                                                                                                                                   |
+| clientOptions          | Additional Redis client options (e.g., username, password)                                                        | `undefined`                                                                                                                                                   |
+
+## TLS Configuration
+
+To connect to Redis using TLS/SSL (e.g., when using Redis over `rediss://` URLs), you can configure the socket options. Here's an example:
+
+```javascript
+const { RedisStringsHandler } = require('@trieb.work/nextjs-turbo-redis-cache');
+
+let cachedHandler;
+
+module.exports = class CustomizedCacheHandler {
+  constructor() {
+    if (!cachedHandler) {
+      cachedHandler = new RedisStringsHandler({
+        redisUrl: 'rediss://your-redis-host:6380', // Note the rediss:// protocol
+        socketOptions: {
+          tls: true,
+          rejectUnauthorized: false, // Only use this if you want to skip certificate validation
+        },
+      });
+    }
+  }
+  // ... rest of the handler implementation
+};
+```
 
 ## Consistency of Redis and this caching implementation
 
