@@ -60,7 +60,7 @@ const nextConfig = {
 }
 ```
 
-Make sure to set either redisUrl or REDISHOST and REDISPORT environment variables.
+Make sure to set either REDIS_URL or REDISHOST and REDISPORT environment variables.
 
 ### Option B: create a wrapper file to change options
 
@@ -119,7 +119,7 @@ A working example of above can be found in the `test/integration/next-app-custom
 
 | Option                 | Description                                                                                                       | Default Value                                                                                                                                                 |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| redis_url              | Redis connection url                                                                                              | `process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST ? redis://${process.env.REDISHOST}:${process.env.REDISPORT} : 'redis://localhost:6379'` |
+| redisUrl               | Redis connection url                                                                                              | `process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST ? redis://${process.env.REDISHOST}:${process.env.REDISPORT} : 'redis://localhost:6379'` |
 | database               | Redis database number to use. Uses DB 0 for production, DB 1 otherwise                                            | `process.env.VERCEL_ENV === 'production' ? 0 : 1`                                                                                                             |
 | keyPrefix              | Prefix added to all Redis keys                                                                                    | `process.env.VERCEL_URL    \|\| 'UNDEFINED_URL_'`                                                                                                             |
 | sharedTagsKey          | Key used to store shared tags hash map in Redis                                                                   | `'__sharedTags__'`                                                                                                                                            |
