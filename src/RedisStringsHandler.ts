@@ -14,12 +14,12 @@ export type CacheEntry = {
 };
 
 export type CreateRedisStringsHandlerOptions = {
-  /** Redis redis_url to use.
+  /** Redis redisUrl to use.
    * @default process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST
           ? `redis://${process.env.REDISHOST}:${process.env.REDISPORT}`
           : 'redis://localhost:6379'
    */
-  redis_url?: string;
+  redisUrl?: string;
   /** Redis database number to use. Uses DB 0 for production, DB 1 otherwise
    * @default process.env.VERCEL_ENV === 'production' ? 0 : 1
    */
@@ -97,7 +97,7 @@ export default class RedisStringsHandler {
   private estimateExpireAge: (staleAge: number) => number;
 
   constructor({
-    redis_url = process.env.REDIS_URL
+    redisUrl = process.env.REDIS_URL
       ? process.env.REDIS_URL
       : process.env.REDISHOST
         ? `redis://${process.env.REDISHOST}:${process.env.REDISPORT}`
@@ -124,7 +124,7 @@ export default class RedisStringsHandler {
     try {
       this.client = createClient({
         ...(database !== 0 ? { database } : {}),
-        url: redis_url,
+        url: redisUrl,
       });
 
       this.client.on('error', (error) => {

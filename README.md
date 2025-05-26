@@ -1,4 +1,5 @@
 # nextjs-turbo-redis-cache
+
 [![npm version](https://img.shields.io/npm/v/@trieb.work/nextjs-turbo-redis-cache.svg)](https://www.npmjs.com/package/@trieb.work/nextjs-turbo-redis-cache)
 ![Turbo redis cache image](https://github.com/user-attachments/assets/98e0dfd9-f38a-42ad-a355-9843740cc2d6)
 
@@ -118,7 +119,7 @@ A working example of above can be found in the `test/integration/next-app-custom
 
 | Option                 | Description                                                                                                       | Default Value                                                                                                                                                 |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| redis_url              | Redis connection url                                                                                              | `process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST ? redis://${process.env.REDISHOST}:${process.env.REDISPORT} : 'redis://localhost:6379'` |
+| redisUrl               | Redis connection url                                                                                              | `process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST ? redis://${process.env.REDISHOST}:${process.env.REDISPORT} : 'redis://localhost:6379'` |
 | database               | Redis database number to use. Uses DB 0 for production, DB 1 otherwise                                            | `process.env.VERCEL_ENV === 'production' ? 0 : 1`                                                                                                             |
 | keyPrefix              | Prefix added to all Redis keys                                                                                    | `process.env.VERCEL_URL    \|\| 'UNDEFINED_URL_'`                                                                                                             |
 | sharedTagsKey          | Key used to store shared tags hash map in Redis                                                                   | `'__sharedTags__'`                                                                                                                                            |
@@ -171,12 +172,10 @@ By accepting and tolerating this eventual consistency, the performance of the ca
 
 ## Testing
 
-Run `pnpm run-dev-server` to start the nextjs integration test project.
-
-To run all tests you can use the following command in a second terminal:
+To run all tests you can use the following command:
 
 ```bash
-pnpm test
+pnpm build && pnpm test
 ```
 
 ### Unit tests
@@ -184,7 +183,7 @@ pnpm test
 To run unit tests you can use the following command:
 
 ```bash
-pnpm test:unit
+pnpm build && pnpm test:unit
 ```
 
 ### Integration tests
@@ -192,7 +191,7 @@ pnpm test:unit
 To run integration tests you can use the following command:
 
 ```bash
-pnpm test:integration
+pnpm build && pnpm test:integration
 ```
 
 The integration tests will start a Next.js server and test the caching handler. You can modify testing behavior by setting the following environment variables:
