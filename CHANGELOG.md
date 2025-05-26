@@ -1,3 +1,20 @@
+# [1.6.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.5.1...v1.6.0) (2025-05-26)
+
+
+### Bug Fixes
+
+* config ([d326ef4](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/d326ef46298a96535720f78d562a20b27e7b3c8f))
+* config ([311d492](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/311d492c41d8c05b89d675753d79413632fc0019))
+* process.env.redisUrl ([a57fd6a](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/a57fd6a6b641015726edf11a00fa5c020dea0cca))
+* readme ([2901ab0](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/2901ab0e0d646839e1779107aa9bea80deacf6c8))
+* readme test startup ([e291666](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/e291666ed7b9d77c0f3baa68c3638bbad264a868))
+* rename redis_url to redisUrl to align with other config option naming convention + fix: readme ([2e3f20d](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/2e3f20dce31a678b781913d230581461b3d67a07))
+
+
+### Features
+
+* disable keyspace config check ([0b8878d](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/0b8878d321808d00140664f51fc1d2d904cc4664))
+
 ## [1.5.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.5.0...v1.5.1) (2025-05-23)
 
 
