@@ -60,7 +60,7 @@ const nextConfig = {
 }
 ```
 
-Make sure to set either REDIS_URL or REDISHOST and REDISPORT environment variables.
+Make sure to set either redisUrl or REDISHOST and REDISPORT environment variables.
 
 ### Option B: create a wrapper file to change options
 
