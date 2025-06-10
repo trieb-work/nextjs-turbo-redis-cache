@@ -1,3 +1,10 @@
+# [1.8.0-beta.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.7.1...v1.8.0-beta.1) (2025-06-10)
+
+
+### Features
+
+* improve error handling ([dd591da](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/dd591daab9539e6ba96da1d1c493a1e771ba272d))
+
 ## [1.7.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.7.0...v1.7.1) (2025-06-10)
 
 ### Bug Fixes
