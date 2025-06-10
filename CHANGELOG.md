@@ -1,3 +1,12 @@
+## [1.7.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.7.0...v1.7.1) (2025-06-10)
+
+
+### Bug Fixes
+
+* revalidate times for fetch entries from context is outdated ([4538f9f](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/4538f9f8bf58b97727e83f2026929db11be470ec))
+* revalidate times from data parameter for fetch entries ([e48f0d1](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/e48f0d19b81b65ae2564453fd75251372080407e))
+* revalidate times from data parameter for fetch entries ([3c38335](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/3c3833561863ec4f07252ba7b9b30b42518b7485))
+
 # [1.7.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.6.0...v1.7.0) (2025-05-26)
 
 
