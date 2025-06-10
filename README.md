@@ -18,13 +18,13 @@ This library offers you an easy and high performant caching solution for docker,
 ## Compatibility
 
 This package is compatible with Next.js 15.0.3 and above while using App Router. It is not compatible with Next.js 14.x. or 15-canary or if you are using Pages Router.
-Redis need to have Redis Version 2.8.0 or higher and have to be configured with `notify-keyspace-events` to be able to use the key-space notifications feature.
+Redis Server need to have Redis Server Version 2.8.0 or higher and have to be configured with `notify-keyspace-events` to be able to use the key-space notifications feature.
 
 Tested versions are:
 
-- 15.0.3
-- 15.2.4
-- 15.3.2
+- Nextjs 15.0.3 + redis client 4.7.0
+- Nextjs 15.2.4 + redis client 4.7.0
+- Nextjs 15.3.2 + redis client 4.7.0
 
 Currently PPR, 'use cache', cacheLife and cacheTag are not tested. Use these operations with caution and your own risk.
 
