@@ -466,7 +466,11 @@ export default class RedisStringsHandler {
 
     // TODO: implement expiration based on cacheControl.expire argument, -> probably relevant for cacheLife and "use cache" etc.: https://nextjs.org/docs/app/api-reference/functions/cacheLife
     // Constructing the expire time for the cache entry
-    const revalidate = ctx.revalidate || ctx.cacheControl?.revalidate;
+    const revalidate =
+      // For fetch requests in newest versions, the revalidate context property never used, and instead the revalidate property of the passed-in data is used
+      (data.kind === 'FETCH' && data.revalidate) ||
+      ctx.revalidate ||
+      ctx.cacheControl?.revalidate;
     const expireAt =
       revalidate && Number.isSafeInteger(revalidate) && revalidate > 0
         ? this.estimateExpireAge(revalidate)
