@@ -70,6 +70,7 @@ jobs:
           SKIP_BUILD: true
 
       - name: Code Coverage Comments
+        if: github.event_name == 'pull_request'
         uses: kcjpop/coverage-comments@v2.2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
