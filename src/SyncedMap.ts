@@ -202,7 +202,11 @@ export class SyncedMap<V> {
 
     try {
       await this.subscriberClient.connect().catch(async () => {
-        await this.subscriberClient.connect();
+        console.error('Failed to connect subscriber client. Retrying...');
+        await this.subscriberClient.connect().catch((error) => {
+          console.error('Failed to connect subscriber client.', error);
+          throw error;
+        });
       });
 
       // Check if keyspace event configuration is set correctly
@@ -214,7 +218,9 @@ export class SyncedMap<V> {
         )?.['notify-keyspace-events'];
         if (!keyspaceEventConfig.includes('E')) {
           throw new Error(
-            "Keyspace event configuration has to include 'E' for Keyevent events, published with __keyevent@<db>__ prefix. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
+            'Keyspace event configuration is set to "' +
+              keyspaceEventConfig +
+              "\" but has to include 'E' for Keyevent events, published with __keyevent@<db>__ prefix. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
           );
         }
         if (
@@ -225,7 +231,9 @@ export class SyncedMap<V> {
           )
         ) {
           throw new Error(
-            "Keyspace event configuration has to include 'A' or 'x' and 'e' for expired and evicted events. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
+            'Keyspace event configuration is set to "' +
+              keyspaceEventConfig +
+              "\" but has to include 'A' or 'x' and 'e' for expired and evicted events. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
           );
         }
       }
@@ -315,9 +323,6 @@ export class SyncedMap<V> {
     );
     await Promise.all(operations);
   }
-
-  // /api/revalidated-fetch
-  // true
 
   public async delete(
     keys: string[] | string,
