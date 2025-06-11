@@ -1,3 +1,10 @@
+# [1.8.0-beta.2](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.8.0-beta.1...v1.8.0-beta.2) (2025-06-11)
+
+
+### Bug Fixes
+
+* remove connect timeout ([4dceda1](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/4dceda15a0ae8ca3c5fcdddf861263ef7ca237ce))
+
 # [1.8.0-beta.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.7.1...v1.8.0-beta.1) (2025-06-10)
 
 
