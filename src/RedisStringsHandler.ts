@@ -149,11 +149,9 @@ export default class RedisStringsHandler {
         // Create Redis client with properly typed configuration
         this.client = createClient({
           url: redisUrl,
-          pingInterval: 5000, // Useful with Redis deployments that do not use TCP Keep-Alive. Restarts the connection if it is idle for too long.
+          pingInterval: 10_000, // Useful with Redis deployments that do not use TCP Keep-Alive. Restarts the connection if it is idle for too long.
           ...(database !== 0 ? { database } : {}),
-          ...(socketOptions
-            ? { socket: { connectTimeout: timeoutMs, ...socketOptions } }
-            : { connectTimeout: timeoutMs }),
+          ...(socketOptions ? { socket: { ...socketOptions } } : {}),
           ...(clientOptions || {}),
         });
 
