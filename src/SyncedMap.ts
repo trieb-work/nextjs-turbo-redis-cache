@@ -89,11 +89,26 @@ export class SyncedMap<V> {
 
     try {
       do {
-        const remoteItems = await this.client.hScan(
-          getTimeoutRedisCommandOptions(this.timeoutMs),
-          this.keyPrefix + this.redisKey,
-          cursor,
-          hScanOptions,
+        const remoteItems = await redisErrorHandler(
+          'SyncedMap.initialSync(), operation: hScan ' +
+            this.syncChannel +
+            ' ' +
+            this.timeoutMs +
+            'ms' +
+            ' ' +
+            this.keyPrefix +
+            ' ' +
+            this.redisKey +
+            ' ' +
+            cursor +
+            ' ' +
+            this.querySize,
+          this.client.hScan(
+            getTimeoutRedisCommandOptions(this.timeoutMs),
+            this.keyPrefix + this.redisKey,
+            cursor,
+            hScanOptions,
+          ),
         );
         for (const { field, value } of remoteItems.tuples) {
           if (this.filterKeys(field)) {
@@ -118,10 +133,17 @@ export class SyncedMap<V> {
     let remoteKeys: string[] = [];
     try {
       do {
-        const remoteKeysPortion = await this.client.scan(
-          getTimeoutRedisCommandOptions(this.timeoutMs),
-          cursor,
-          scanOptions,
+        const remoteKeysPortion = await redisErrorHandler(
+          'SyncedMap.cleanupKeysNotInRedis(), operation: scan ' +
+            this.timeoutMs +
+            'ms' +
+            ' ' +
+            this.keyPrefix,
+          this.client.scan(
+            getTimeoutRedisCommandOptions(this.timeoutMs),
+            cursor,
+            scanOptions,
+          ),
         );
         remoteKeys = remoteKeys.concat(remoteKeysPortion.keys);
         cursor = remoteKeysPortion.cursor;
