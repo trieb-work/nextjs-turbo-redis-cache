@@ -369,7 +369,7 @@ export class SyncedMap<V> {
     }
 
     if (!this.customizedSync?.withoutRedisHashmap) {
-      const options = getTimeoutRedisCommandOptions(this.timeoutMs);
+      const options = getTimeoutRedisCommandOptions(this.timeoutMs * 10);
       operations.push(
         redisErrorHandler(
           'SyncedMap.delete(), operation: hDel ' +
@@ -379,6 +379,8 @@ export class SyncedMap<V> {
             'ms' +
             ' ' +
             this.keyPrefix +
+            ' ' +
+            this.redisKey +
             ' ' +
             keysArray,
           this.client.hDel(options, this.keyPrefix + this.redisKey, keysArray),

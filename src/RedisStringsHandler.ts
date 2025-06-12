@@ -17,11 +17,31 @@ export function redisErrorHandler<T extends Promise<unknown>>(
   debugInfo: string,
   redisCommandResult: T,
 ): T {
+  const beforeTimestamp = performance.now();
   return redisCommandResult.catch((error) => {
-    console.error('Redis command error', debugInfo, error);
+    console.error(
+      'Redis command error',
+      (performance.now() - beforeTimestamp).toFixed(2),
+      'ms',
+      debugInfo,
+      error,
+    );
     throw error;
   }) as T;
 }
+
+// This is a test to check if the event loop is lagging. Increase CPU
+setInterval(() => {
+  const start = performance.now();
+  setImmediate(() => {
+    const duration = performance.now() - start;
+    if (duration > 100) {
+      console.warn(
+        `RedisStringsHandler detected an event loop lag of: ${duration.toFixed(2)}ms`,
+      );
+    }
+  });
+}, 1000);
 
 export type CreateRedisStringsHandlerOptions = {
   /** Redis redisUrl to use.
