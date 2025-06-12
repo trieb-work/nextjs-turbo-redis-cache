@@ -1,3 +1,10 @@
+# [1.8.0-beta.3](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.8.0-beta.2...v1.8.0-beta.3) (2025-06-12)
+
+
+### Features
+
+* add redis commands debug logging ([4c8a0d7](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/4c8a0d7f82573bbaab63bdd380063244c641735f))
+
 # [1.8.0-beta.2](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.8.0-beta.1...v1.8.0-beta.2) (2025-06-11)
 
 
