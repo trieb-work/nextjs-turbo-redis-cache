@@ -13,6 +13,16 @@ export type CacheEntry = {
   tags: string[];
 };
 
+export function redisErrorHandler<T extends Promise<unknown>>(
+  debugInfo: string,
+  redisCommandResult: T,
+): T {
+  return redisCommandResult.catch((error) => {
+    console.error('Redis command error', debugInfo, error);
+    throw error;
+  }) as T;
+}
+
 export type CreateRedisStringsHandlerOptions = {
   /** Redis redisUrl to use.
    * @default process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST
@@ -352,9 +362,19 @@ export default class RedisStringsHandler {
       const clientGet = this.redisGetDeduplication
         ? this.deduplicatedRedisGet(key)
         : this.redisGet;
-      const serializedCacheEntry = await clientGet(
-        getTimeoutRedisCommandOptions(this.timeoutMs),
-        this.keyPrefix + key,
+      const serializedCacheEntry = await redisErrorHandler(
+        'RedisStringsHandler.get(), operation: get' +
+          (this.redisGetDeduplication ? 'deduplicated' : '') +
+          this.timeoutMs +
+          'ms' +
+          ' ' +
+          this.keyPrefix +
+          ' ' +
+          key,
+        clientGet(
+          getTimeoutRedisCommandOptions(this.timeoutMs),
+          this.keyPrefix + key,
+        ),
       );
 
       debug(
@@ -595,13 +615,17 @@ export default class RedisStringsHandler {
 
       // Setting the cache entry in redis
       const options = getTimeoutRedisCommandOptions(this.timeoutMs);
-      const setOperation: Promise<string | null> = this.client.set(
-        options,
-        this.keyPrefix + key,
-        serializedCacheEntry,
-        {
+      const setOperation: Promise<string | null> = redisErrorHandler(
+        'RedisStringsHandler.set(), operation: set' +
+          this.timeoutMs +
+          'ms' +
+          ' ' +
+          this.keyPrefix +
+          ' ' +
+          key,
+        this.client.set(options, this.keyPrefix + key, serializedCacheEntry, {
           EX: expireAt,
-        },
+        }),
       );
 
       debug(
@@ -725,7 +749,16 @@ export default class RedisStringsHandler {
       const redisKeys = Array.from(keysToDelete);
       const fullRedisKeys = redisKeys.map((key) => this.keyPrefix + key);
       const options = getTimeoutRedisCommandOptions(this.timeoutMs);
-      const deleteKeysOperation = this.client.unlink(options, fullRedisKeys);
+      const deleteKeysOperation = redisErrorHandler(
+        'RedisStringsHandler.revalidateTag(), operation: unlink' +
+          this.timeoutMs +
+          'ms' +
+          ' ' +
+          this.keyPrefix +
+          ' ' +
+          fullRedisKeys,
+        this.client.unlink(options, fullRedisKeys),
+      );
 
       // also delete entries from in-memory deduplication cache if they get revalidated
       if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {

@@ -1,5 +1,9 @@
 // SyncedMap.ts
-import { Client, getTimeoutRedisCommandOptions } from './RedisStringsHandler';
+import {
+  Client,
+  getTimeoutRedisCommandOptions,
+  redisErrorHandler,
+} from './RedisStringsHandler';
 import { debugVerbose, debug } from './utils/debug';
 
 type CustomizedSync = {
@@ -304,11 +308,22 @@ export class SyncedMap<V> {
     if (!this.customizedSync?.withoutRedisHashmap) {
       const options = getTimeoutRedisCommandOptions(this.timeoutMs);
       operations.push(
-        this.client.hSet(
-          options,
-          this.keyPrefix + this.redisKey,
-          key as unknown as string,
-          JSON.stringify(value),
+        redisErrorHandler(
+          'SyncedMap.set(), operation: hSet ' +
+            this.syncChannel +
+            ' ' +
+            this.timeoutMs +
+            'ms' +
+            ' ' +
+            this.keyPrefix +
+            ' ' +
+            key,
+          this.client.hSet(
+            options,
+            this.keyPrefix + this.redisKey,
+            key as unknown as string,
+            JSON.stringify(value),
+          ),
         ),
       );
     }
@@ -319,7 +334,18 @@ export class SyncedMap<V> {
       value,
     };
     operations.push(
-      this.client.publish(this.syncChannel, JSON.stringify(insertMessage)),
+      redisErrorHandler(
+        'SyncedMap.set(), operation: publish ' +
+          this.syncChannel +
+          ' ' +
+          this.timeoutMs +
+          'ms' +
+          ' ' +
+          this.keyPrefix +
+          ' ' +
+          key,
+        this.client.publish(this.syncChannel, JSON.stringify(insertMessage)),
+      ),
     );
     await Promise.all(operations);
   }
@@ -345,7 +371,18 @@ export class SyncedMap<V> {
     if (!this.customizedSync?.withoutRedisHashmap) {
       const options = getTimeoutRedisCommandOptions(this.timeoutMs);
       operations.push(
-        this.client.hDel(options, this.keyPrefix + this.redisKey, keysArray),
+        redisErrorHandler(
+          'SyncedMap.delete(), operation: hDel ' +
+            this.syncChannel +
+            ' ' +
+            this.timeoutMs +
+            'ms' +
+            ' ' +
+            this.keyPrefix +
+            ' ' +
+            keysArray,
+          this.client.hDel(options, this.keyPrefix + this.redisKey, keysArray),
+        ),
       );
     }
 
@@ -355,7 +392,21 @@ export class SyncedMap<V> {
         keys: keysArray,
       };
       operations.push(
-        this.client.publish(this.syncChannel, JSON.stringify(deletionMessage)),
+        redisErrorHandler(
+          'SyncedMap.delete(), operation: publish ' +
+            this.syncChannel +
+            ' ' +
+            this.timeoutMs +
+            'ms' +
+            ' ' +
+            this.keyPrefix +
+            ' ' +
+            keysArray,
+          this.client.publish(
+            this.syncChannel,
+            JSON.stringify(deletionMessage),
+          ),
+        ),
       );
     }
 
