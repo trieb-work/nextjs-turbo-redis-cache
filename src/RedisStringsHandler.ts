@@ -41,7 +41,7 @@ setInterval(() => {
       );
     }
   });
-}, 1000);
+}, 10);
 
 export type CreateRedisStringsHandlerOptions = {
   /** Redis redisUrl to use.
