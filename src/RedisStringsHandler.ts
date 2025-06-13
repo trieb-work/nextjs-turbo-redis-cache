@@ -30,7 +30,7 @@ export function redisErrorHandler<T extends Promise<unknown>>(
   }) as T;
 }
 
-// This is a test to check if the event loop is lagging. Increase CPU
+// This is a test to check if the event loop is lagging. If it lags, increase CPU of container
 setInterval(() => {
   const start = performance.now();
   setImmediate(() => {
@@ -58,10 +58,12 @@ export type CreateRedisStringsHandlerOptions = {
    * @default process.env.VERCEL_URL || 'UNDEFINED_URL_'
    */
   keyPrefix?: string;
-  /** Timeout in milliseconds for Redis operations
-   * @default 5000
+  /** Timeout in milliseconds for time critical Redis operations (during cache get, which blocks site rendering).
+   *  If redis get is not fulfilled within this time, the cache handler will return null so site rendering will
+   *  not be blocked further and site can fallback to re-render/re-fetch the content.
+   * @default 500
    */
-  timeoutMs?: number;
+  getTimeoutMs?: number;
   /** Number of entries to query in one batch during full sync of shared tags hash map
    * @default 250
    */
@@ -112,12 +114,6 @@ const NEXT_CACHE_IMPLICIT_TAG_ID = '_N_T_';
 // This helps track when specific tags were last invalidated
 const REVALIDATED_TAGS_KEY = '__revalidated_tags__';
 
-export function getTimeoutRedisCommandOptions(
-  timeoutMs: number,
-): CommandOptions {
-  return commandOptions({ signal: AbortSignal.timeout(timeoutMs) });
-}
-
 let killContainerOnErrorCount: number = 0;
 export default class RedisStringsHandler {
   private client: Client;
@@ -126,13 +122,13 @@ export default class RedisStringsHandler {
   private inMemoryDeduplicationCache: SyncedMap<
     Promise<ReturnType<Client['get']>>
   >;
+  private getTimeoutMs: number;
   private redisGet: Client['get'];
   private redisDeduplicationHandler: DeduplicatedRequestHandler<
     Client['get'],
     string | Buffer | null
   >;
   private deduplicatedRedisGet: (key: string) => Client['get'];
-  private timeoutMs: number;
   private keyPrefix: string;
   private redisGetDeduplication: boolean;
   private inMemoryCachingTime: number;
@@ -149,9 +145,9 @@ export default class RedisStringsHandler {
     database = process.env.VERCEL_ENV === 'production' ? 0 : 1,
     keyPrefix = process.env.VERCEL_URL || 'UNDEFINED_URL_',
     sharedTagsKey = '__sharedTags__',
-    timeoutMs = process.env.REDIS_COMMAND_TIMEOUT_MS
-      ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 5_000)
-      : 5_000,
+    getTimeoutMs = process.env.REDIS_COMMAND_TIMEOUT_MS
+      ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 500)
+      : 500,
     revalidateTagQuerySize = 250,
     avgResyncIntervalMs = 60 * 60 * 1_000,
     redisGetDeduplication = true,
@@ -168,12 +164,12 @@ export default class RedisStringsHandler {
   }: CreateRedisStringsHandlerOptions) {
     try {
       this.keyPrefix = keyPrefix;
-      this.timeoutMs = timeoutMs;
       this.redisGetDeduplication = redisGetDeduplication;
       this.inMemoryCachingTime = inMemoryCachingTime;
       this.defaultStaleAge = defaultStaleAge;
       this.estimateExpireAge = estimateExpireAge;
       this.killContainerOnErrorThreshold = killContainerOnErrorThreshold;
+      this.getTimeoutMs = getTimeoutMs;
 
       try {
         // Create Redis client with properly typed configuration
@@ -243,7 +239,6 @@ export default class RedisStringsHandler {
         keyPrefix,
         redisKey: sharedTagsKey,
         database,
-        timeoutMs,
         querySize: revalidateTagQuerySize,
         filterKeys,
         resyncIntervalMs:
@@ -257,7 +252,6 @@ export default class RedisStringsHandler {
         keyPrefix,
         redisKey: REVALIDATED_TAGS_KEY,
         database,
-        timeoutMs,
         querySize: revalidateTagQuerySize,
         filterKeys,
         resyncIntervalMs:
@@ -271,7 +265,6 @@ export default class RedisStringsHandler {
         keyPrefix,
         redisKey: 'inMemoryDeduplicationCache',
         database,
-        timeoutMs,
         querySize: revalidateTagQuerySize,
         filterKeys,
         customizedSync: {
@@ -332,7 +325,7 @@ export default class RedisStringsHandler {
               'assertClientIsReady: Timeout waiting for Redis maps to be ready',
             ),
           );
-        }, this.timeoutMs * 5),
+        }, 30_000),
       ),
     ]);
     this.clientReadyCalls = 0;
@@ -385,14 +378,14 @@ export default class RedisStringsHandler {
       const serializedCacheEntry = await redisErrorHandler(
         'RedisStringsHandler.get(), operation: get' +
           (this.redisGetDeduplication ? 'deduplicated' : '') +
-          this.timeoutMs +
-          'ms' +
           ' ' +
+          this.getTimeoutMs +
+          'ms ' +
           this.keyPrefix +
           ' ' +
           key,
         clientGet(
-          getTimeoutRedisCommandOptions(this.timeoutMs),
+          commandOptions({ signal: AbortSignal.timeout(this.getTimeoutMs) }),
           this.keyPrefix + key,
         ),
       );
@@ -474,10 +467,11 @@ export default class RedisStringsHandler {
             // We don't await this cleanup since it can happen asynchronously in the background.
             // The cache entry is already considered invalid at this point.
             this.client
-              .unlink(getTimeoutRedisCommandOptions(this.timeoutMs), redisKey)
+              .unlink(redisKey)
               .catch((err) => {
-                // If the first unlink fails, only log the error
-                // Never implement a retry here as the cache entry will be updated directly after this get request
+                // Log error but don't retry deletion since the cache entry will likely be
+                // updated immediately after via set(). A retry could dangerously execute
+                // after the new value is set.
                 console.error(
                   'Error occurred while unlinking stale data. Error was:',
                   err,
@@ -634,16 +628,12 @@ export default class RedisStringsHandler {
           : this.estimateExpireAge(this.defaultStaleAge);
 
       // Setting the cache entry in redis
-      const options = getTimeoutRedisCommandOptions(this.timeoutMs);
       const setOperation: Promise<string | null> = redisErrorHandler(
-        'RedisStringsHandler.set(), operation: set' +
-          this.timeoutMs +
-          'ms' +
-          ' ' +
+        'RedisStringsHandler.set(), operation: set ' +
           this.keyPrefix +
           ' ' +
           key,
-        this.client.set(options, this.keyPrefix + key, serializedCacheEntry, {
+        this.client.set(this.keyPrefix + key, serializedCacheEntry, {
           EX: expireAt,
         }),
       );
@@ -768,16 +758,12 @@ export default class RedisStringsHandler {
       // prepare deletion of all keys in redis that are related to this tag
       const redisKeys = Array.from(keysToDelete);
       const fullRedisKeys = redisKeys.map((key) => this.keyPrefix + key);
-      const options = getTimeoutRedisCommandOptions(this.timeoutMs);
       const deleteKeysOperation = redisErrorHandler(
-        'RedisStringsHandler.revalidateTag(), operation: unlink' +
-          this.timeoutMs +
-          'ms' +
-          ' ' +
+        'RedisStringsHandler.revalidateTag(), operation: unlink ' +
           this.keyPrefix +
           ' ' +
           fullRedisKeys,
-        this.client.unlink(options, fullRedisKeys),
+        this.client.unlink(fullRedisKeys),
       );
 
       // also delete entries from in-memory deduplication cache if they get revalidated

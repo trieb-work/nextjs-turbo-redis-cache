@@ -1,9 +1,5 @@
 // SyncedMap.ts
-import {
-  Client,
-  getTimeoutRedisCommandOptions,
-  redisErrorHandler,
-} from './RedisStringsHandler';
+import { Client, redisErrorHandler } from './RedisStringsHandler';
 import { debugVerbose, debug } from './utils/debug';
 
 type CustomizedSync = {
@@ -16,7 +12,6 @@ type SyncedMapOptions = {
   keyPrefix: string;
   redisKey: string; // Redis Hash key
   database: number;
-  timeoutMs: number;
   querySize: number;
   filterKeys: (key: string) => boolean;
   resyncIntervalMs?: number;
@@ -39,7 +34,6 @@ export class SyncedMap<V> {
   private syncChannel: string;
   private redisKey: string;
   private database: number;
-  private timeoutMs: number;
   private querySize: number;
   private filterKeys: (key: string) => boolean;
   private resyncIntervalMs?: number;
@@ -54,7 +48,6 @@ export class SyncedMap<V> {
     this.redisKey = options.redisKey;
     this.syncChannel = `${options.keyPrefix}${SYNC_CHANNEL_SUFFIX}${options.redisKey}`;
     this.database = options.database;
-    this.timeoutMs = options.timeoutMs;
     this.querySize = options.querySize;
     this.filterKeys = options.filterKeys;
     this.resyncIntervalMs = options.resyncIntervalMs;
@@ -93,9 +86,6 @@ export class SyncedMap<V> {
           'SyncedMap.initialSync(), operation: hScan ' +
             this.syncChannel +
             ' ' +
-            this.timeoutMs +
-            'ms' +
-            ' ' +
             this.keyPrefix +
             ' ' +
             this.redisKey +
@@ -104,7 +94,6 @@ export class SyncedMap<V> {
             ' ' +
             this.querySize,
           this.client.hScan(
-            getTimeoutRedisCommandOptions(this.timeoutMs),
             this.keyPrefix + this.redisKey,
             cursor,
             hScanOptions,
@@ -135,15 +124,8 @@ export class SyncedMap<V> {
       do {
         const remoteKeysPortion = await redisErrorHandler(
           'SyncedMap.cleanupKeysNotInRedis(), operation: scan ' +
-            this.timeoutMs +
-            'ms' +
-            ' ' +
             this.keyPrefix,
-          this.client.scan(
-            getTimeoutRedisCommandOptions(this.timeoutMs),
-            cursor,
-            scanOptions,
-          ),
+          this.client.scan(cursor, scanOptions),
         );
         remoteKeys = remoteKeys.concat(remoteKeysPortion.keys);
         cursor = remoteKeysPortion.cursor;
@@ -328,20 +310,15 @@ export class SyncedMap<V> {
       return;
     }
     if (!this.customizedSync?.withoutRedisHashmap) {
-      const options = getTimeoutRedisCommandOptions(this.timeoutMs);
       operations.push(
         redisErrorHandler(
           'SyncedMap.set(), operation: hSet ' +
             this.syncChannel +
             ' ' +
-            this.timeoutMs +
-            'ms' +
-            ' ' +
             this.keyPrefix +
             ' ' +
             key,
           this.client.hSet(
-            options,
             this.keyPrefix + this.redisKey,
             key as unknown as string,
             JSON.stringify(value),
@@ -359,9 +336,6 @@ export class SyncedMap<V> {
       redisErrorHandler(
         'SyncedMap.set(), operation: publish ' +
           this.syncChannel +
-          ' ' +
-          this.timeoutMs +
-          'ms' +
           ' ' +
           this.keyPrefix +
           ' ' +
@@ -391,21 +365,17 @@ export class SyncedMap<V> {
     }
 
     if (!this.customizedSync?.withoutRedisHashmap) {
-      const options = getTimeoutRedisCommandOptions(this.timeoutMs * 10);
       operations.push(
         redisErrorHandler(
           'SyncedMap.delete(), operation: hDel ' +
             this.syncChannel +
-            ' ' +
-            this.timeoutMs +
-            'ms' +
             ' ' +
             this.keyPrefix +
             ' ' +
             this.redisKey +
             ' ' +
             keysArray,
-          this.client.hDel(options, this.keyPrefix + this.redisKey, keysArray),
+          this.client.hDel(this.keyPrefix + this.redisKey, keysArray),
         ),
       );
     }
@@ -419,9 +389,6 @@ export class SyncedMap<V> {
         redisErrorHandler(
           'SyncedMap.delete(), operation: publish ' +
             this.syncChannel +
-            ' ' +
-            this.timeoutMs +
-            'ms' +
             ' ' +
             this.keyPrefix +
             ' ' +
