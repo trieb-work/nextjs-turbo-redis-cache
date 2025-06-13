@@ -1,3 +1,20 @@
+# [1.8.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.7.1...v1.8.0) (2025-06-13)
+
+
+### Bug Fixes
+
+* improve logs ([92508b6](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/92508b6697c87cad4a8720fb5380f41fe9ec2257))
+* remove connect timeout ([4dceda1](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/4dceda15a0ae8ca3c5fcdddf861263ef7ca237ce))
+* scan+hscan logging ([56c82c3](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/56c82c3dd62257e8686fedc25dea45a0b7fec18e))
+
+
+### Features
+
+* add redis commands debug logging ([4c8a0d7](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/4c8a0d7f82573bbaab63bdd380063244c641735f))
+* improve error handling ([dd591da](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/dd591daab9539e6ba96da1d1c493a1e771ba272d))
+* performance and stability improvements ([69c2b90](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/69c2b9035a526407f8dd5a73104be1132281aa2a))
+* remove general timeoutMs and replace it with getTimeoutMs (for faster non-blocking rendering) ([02deb64](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/02deb649fce40085495c6fec5e8750cba42d2428))
+
 # [1.8.0-beta.6](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.8.0-beta.5...v1.8.0-beta.6) (2025-06-13)
 
 
