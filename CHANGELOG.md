@@ -1,3 +1,10 @@
+# [1.8.0-beta.6](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.8.0-beta.5...v1.8.0-beta.6) (2025-06-13)
+
+
+### Features
+
+* remove general timeoutMs and replace it with getTimeoutMs (for faster non-blocking rendering) ([02deb64](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/02deb649fce40085495c6fec5e8750cba42d2428))
+
 # [1.8.0-beta.5](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.8.0-beta.4...v1.8.0-beta.5) (2025-06-12)
 
 
