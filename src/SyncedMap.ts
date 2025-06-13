@@ -1,5 +1,5 @@
 // SyncedMap.ts
-import { Client, getTimeoutRedisCommandOptions } from './RedisStringsHandler';
+import { Client, redisErrorHandler } from './RedisStringsHandler';
 import { debugVerbose, debug } from './utils/debug';
 
 type CustomizedSync = {
@@ -12,7 +12,6 @@ type SyncedMapOptions = {
   keyPrefix: string;
   redisKey: string; // Redis Hash key
   database: number;
-  timeoutMs: number;
   querySize: number;
   filterKeys: (key: string) => boolean;
   resyncIntervalMs?: number;
@@ -35,7 +34,6 @@ export class SyncedMap<V> {
   private syncChannel: string;
   private redisKey: string;
   private database: number;
-  private timeoutMs: number;
   private querySize: number;
   private filterKeys: (key: string) => boolean;
   private resyncIntervalMs?: number;
@@ -50,7 +48,6 @@ export class SyncedMap<V> {
     this.redisKey = options.redisKey;
     this.syncChannel = `${options.keyPrefix}${SYNC_CHANNEL_SUFFIX}${options.redisKey}`;
     this.database = options.database;
-    this.timeoutMs = options.timeoutMs;
     this.querySize = options.querySize;
     this.filterKeys = options.filterKeys;
     this.resyncIntervalMs = options.resyncIntervalMs;
@@ -85,11 +82,22 @@ export class SyncedMap<V> {
 
     try {
       do {
-        const remoteItems = await this.client.hScan(
-          getTimeoutRedisCommandOptions(this.timeoutMs),
-          this.keyPrefix + this.redisKey,
-          cursor,
-          hScanOptions,
+        const remoteItems = await redisErrorHandler(
+          'SyncedMap.initialSync(), operation: hScan ' +
+            this.syncChannel +
+            ' ' +
+            this.keyPrefix +
+            ' ' +
+            this.redisKey +
+            ' ' +
+            cursor +
+            ' ' +
+            this.querySize,
+          this.client.hScan(
+            this.keyPrefix + this.redisKey,
+            cursor,
+            hScanOptions,
+          ),
         );
         for (const { field, value } of remoteItems.tuples) {
           if (this.filterKeys(field)) {
@@ -114,10 +122,10 @@ export class SyncedMap<V> {
     let remoteKeys: string[] = [];
     try {
       do {
-        const remoteKeysPortion = await this.client.scan(
-          getTimeoutRedisCommandOptions(this.timeoutMs),
-          cursor,
-          scanOptions,
+        const remoteKeysPortion = await redisErrorHandler(
+          'SyncedMap.cleanupKeysNotInRedis(), operation: scan ' +
+            this.keyPrefix,
+          this.client.scan(cursor, scanOptions),
         );
         remoteKeys = remoteKeys.concat(remoteKeysPortion.keys);
         cursor = remoteKeysPortion.cursor;
@@ -202,7 +210,11 @@ export class SyncedMap<V> {
 
     try {
       await this.subscriberClient.connect().catch(async () => {
-        await this.subscriberClient.connect();
+        console.error('Failed to connect subscriber client. Retrying...');
+        await this.subscriberClient.connect().catch((error) => {
+          console.error('Failed to connect subscriber client.', error);
+          throw error;
+        });
       });
 
       // Check if keyspace event configuration is set correctly
@@ -214,7 +226,9 @@ export class SyncedMap<V> {
         )?.['notify-keyspace-events'];
         if (!keyspaceEventConfig.includes('E')) {
           throw new Error(
-            "Keyspace event configuration has to include 'E' for Keyevent events, published with __keyevent@<db>__ prefix. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
+            'Keyspace event configuration is set to "' +
+              keyspaceEventConfig +
+              "\" but has to include 'E' for Keyevent events, published with __keyevent@<db>__ prefix. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
           );
         }
         if (
@@ -225,7 +239,9 @@ export class SyncedMap<V> {
           )
         ) {
           throw new Error(
-            "Keyspace event configuration has to include 'A' or 'x' and 'e' for expired and evicted events. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
+            'Keyspace event configuration is set to "' +
+              keyspaceEventConfig +
+              "\" but has to include 'A' or 'x' and 'e' for expired and evicted events. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
           );
         }
       }
@@ -294,13 +310,19 @@ export class SyncedMap<V> {
       return;
     }
     if (!this.customizedSync?.withoutRedisHashmap) {
-      const options = getTimeoutRedisCommandOptions(this.timeoutMs);
       operations.push(
-        this.client.hSet(
-          options,
-          this.keyPrefix + this.redisKey,
-          key as unknown as string,
-          JSON.stringify(value),
+        redisErrorHandler(
+          'SyncedMap.set(), operation: hSet ' +
+            this.syncChannel +
+            ' ' +
+            this.keyPrefix +
+            ' ' +
+            key,
+          this.client.hSet(
+            this.keyPrefix + this.redisKey,
+            key as unknown as string,
+            JSON.stringify(value),
+          ),
         ),
       );
     }
@@ -311,13 +333,18 @@ export class SyncedMap<V> {
       value,
     };
     operations.push(
-      this.client.publish(this.syncChannel, JSON.stringify(insertMessage)),
+      redisErrorHandler(
+        'SyncedMap.set(), operation: publish ' +
+          this.syncChannel +
+          ' ' +
+          this.keyPrefix +
+          ' ' +
+          key,
+        this.client.publish(this.syncChannel, JSON.stringify(insertMessage)),
+      ),
     );
     await Promise.all(operations);
   }
-
-  // /api/revalidated-fetch
-  // true
 
   public async delete(
     keys: string[] | string,
@@ -338,9 +365,18 @@ export class SyncedMap<V> {
     }
 
     if (!this.customizedSync?.withoutRedisHashmap) {
-      const options = getTimeoutRedisCommandOptions(this.timeoutMs);
       operations.push(
-        this.client.hDel(options, this.keyPrefix + this.redisKey, keysArray),
+        redisErrorHandler(
+          'SyncedMap.delete(), operation: hDel ' +
+            this.syncChannel +
+            ' ' +
+            this.keyPrefix +
+            ' ' +
+            this.redisKey +
+            ' ' +
+            keysArray,
+          this.client.hDel(this.keyPrefix + this.redisKey, keysArray),
+        ),
       );
     }
 
@@ -350,7 +386,18 @@ export class SyncedMap<V> {
         keys: keysArray,
       };
       operations.push(
-        this.client.publish(this.syncChannel, JSON.stringify(deletionMessage)),
+        redisErrorHandler(
+          'SyncedMap.delete(), operation: publish ' +
+            this.syncChannel +
+            ' ' +
+            this.keyPrefix +
+            ' ' +
+            keysArray,
+          this.client.publish(
+            this.syncChannel,
+            JSON.stringify(deletionMessage),
+          ),
+        ),
       );
     }
 
