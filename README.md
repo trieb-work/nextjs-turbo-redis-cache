@@ -52,7 +52,7 @@ There exists also the SKIP_KEYSPACE_CONFIG_CHECK environment variable to skip th
 
 KILL_CONTAINER_ON_ERROR_THRESHOLD: Optional environment variable that defines how many Redis client errors should occur before the process exits with code 1. This is useful in container environments like Kubernetes where you want the container to restart if Redis connectivity issues persist. Set to 0 (default) to disable this feature. For example, setting KILL_CONTAINER_ON_ERROR_THRESHOLD=10 will exit the process after 10 Redis client errors, allowing the container orchestrator to restart the container.
 
-REDIS_COMMAND_TIMEOUT_MS: Optional environment variable that sets the timeout in milliseconds for Redis commands. If not set, defaults to 5000ms (5 seconds). The value is parsed as an integer, and if parsing fails, falls back to the 5000ms default.
+REDIS_COMMAND_TIMEOUT_MS: Optional environment variable that sets the timeout in milliseconds for Redis get command. If not set, defaults to 500ms. The value is parsed as an integer, and if parsing fails, falls back to the 500ms default.
 
 ### Option A: minimum implementation with default options
 
