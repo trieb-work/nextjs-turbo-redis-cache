@@ -30,18 +30,21 @@ export function redisErrorHandler<T extends Promise<unknown>>(
   }) as T;
 }
 
-// This is a test to check if the event loop is lagging. If it lags, increase CPU of container
-setInterval(() => {
-  const start = performance.now();
-  setImmediate(() => {
-    const duration = performance.now() - start;
-    if (duration > 100) {
-      console.warn(
-        `RedisStringsHandler detected an event loop lag of: ${duration.toFixed(2)}ms`,
-      );
-    }
-  });
-}, 10);
+if (process.env.DEBUG_CACHE_HANDLER) {
+  // This is a test to check if the event loop is lagging. If it lags, increase CPU of container
+  setInterval(() => {
+    const start = performance.now();
+    setImmediate(() => {
+      const duration = performance.now() - start;
+      if (duration > 100) {
+        debug(
+          'yellow',
+          `RedisStringsHandler detected an event loop lag of: ${duration.toFixed(2)}ms. If your container is hosted in a cloud provider with container suspension this is normal. If not you should increase the CPU of your container.`,
+        );
+      }
+    });
+  }, 500);
+}
 
 export type CreateRedisStringsHandlerOptions = {
   /** Redis redisUrl to use.
