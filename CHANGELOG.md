@@ -1,3 +1,10 @@
+## [1.8.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.8.0...v1.8.1) (2025-06-16)
+
+
+### Bug Fixes
+
+* logging ([28af595](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/28af5955da1db30293b486211cf1a64d6529511e))
+
 # [1.8.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.7.1...v1.8.0) (2025-06-13)
 
 
