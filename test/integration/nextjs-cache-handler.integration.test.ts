@@ -6,8 +6,10 @@ import { join } from 'path';
 import { CacheEntry } from '../../src/RedisStringsHandler';
 import { revalidate as next1503_revalidatedFetch_route } from './next-app-15-0-3/src/app/api/revalidated-fetch/route';
 
-// const NEXT_APP_DIR = join(__dirname, 'next-app-15-0-3');
-const NEXT_APP_DIR = join(__dirname, 'next-app-15-4-7');
+// Select which Next.js test app to use. Can be overridden via NEXT_TEST_APP env var
+// Examples: next-app-15-0-3, next-app-15-3-2, next-app-15-4-7
+const NEXT_TEST_APP = process.env.NEXT_TEST_APP || 'next-app-15-4-7';
+const NEXT_APP_DIR = join(__dirname, NEXT_TEST_APP);
 console.log('NEXT_APP_DIR', NEXT_APP_DIR);
 const NEXT_START_PORT = 3055;
 const NEXT_START_URL = `http://localhost:${NEXT_START_PORT}`;
