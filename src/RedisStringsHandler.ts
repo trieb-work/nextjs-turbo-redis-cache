@@ -220,7 +220,7 @@ export default class RedisStringsHandler {
         this.client
           .connect()
           .then(() => {
-            console.info('Redis client connected.');
+            debug('green', 'Redis client connected.');
           })
           .catch(() => {
             this.client.connect().catch((error) => {
