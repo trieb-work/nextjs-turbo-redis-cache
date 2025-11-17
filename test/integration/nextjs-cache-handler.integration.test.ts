@@ -7,7 +7,7 @@ import { CacheEntry } from '../../src/RedisStringsHandler';
 import { revalidate as next1503_revalidatedFetch_route } from './next-app-15-0-3/src/app/api/revalidated-fetch/route';
 
 // const NEXT_APP_DIR = join(__dirname, 'next-app-15-0-3');
-const NEXT_APP_DIR = join(__dirname, 'next-app-15-3-2');
+const NEXT_APP_DIR = join(__dirname, 'next-app-15-4-7');
 console.log('NEXT_APP_DIR', NEXT_APP_DIR);
 const NEXT_START_PORT = 3055;
 const NEXT_START_URL = `http://localhost:${NEXT_START_PORT}`;
@@ -574,8 +574,9 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           expect(data).toBeDefined();
           const cacheEntry: CacheEntry = JSON.parse(data);
 
-          // The format should be as expected
-          expect(cacheEntry).toEqual({
+          // The format should be as expected. We intentionally do not assert on an optional status field here
+          // so that different Next.js versions (which may include or omit it) are both supported.
+          expect(cacheEntry).toMatchObject({
             value: {
               kind: 'APP_PAGE',
               html: expect.any(String),
@@ -587,7 +588,6 @@ describe('Next.js Turbo Redis Cache Integration', () => {
                 'x-next-cache-tags':
                   '_N_T_/layout,_N_T_/pages/layout,_N_T_/pages/no-fetch/layout,_N_T_/pages/no-fetch/default-page/layout,_N_T_/pages/no-fetch/default-page/page,_N_T_/pages/no-fetch/default-page',
               },
-              status: 200,
             },
             lastModified: expect.any(Number),
             tags: [

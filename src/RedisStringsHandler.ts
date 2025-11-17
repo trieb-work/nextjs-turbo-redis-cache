@@ -538,7 +538,7 @@ export default class RedisStringsHandler {
     data:
       | {
           kind: 'APP_PAGE';
-          status: number;
+          status?: number;
           headers: {
             'x-nextjs-stale-time': string; // timestamp in ms
             'x-next-cache-tags': string; // comma separated paths (tags)
