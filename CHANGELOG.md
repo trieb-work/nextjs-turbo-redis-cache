@@ -1,3 +1,10 @@
+## [1.8.2](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.8.1...v1.8.2) (2025-11-17)
+
+
+### Bug Fixes
+
+* replace console.info with debug for Redis connection logging ([eebc88e](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/eebc88e77f346f33de4fe9e0ab29f3929229a700))
+
 ## [1.8.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.8.0...v1.8.1) (2025-06-16)
 
 
