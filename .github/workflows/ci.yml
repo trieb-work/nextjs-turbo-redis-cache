@@ -23,6 +23,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write # Grant write access to pull request comments
+    strategy:
+      matrix:
+        next-test-app:
+          - next-app-15-0-3
+          - next-app-15-3-2
+          - next-app-15-4-7
 
     steps:
       - name: Checkout code
@@ -59,15 +65,16 @@ jobs:
         run: redis-cli config set notify-keyspace-events Exe
 
       - name: Install Integration Test Project
-        run: cd test/integration/next-app-15-3-2 && pnpm install
+        run: cd test/integration/${{ matrix.next-test-app }} && pnpm install
 
       - name: Build Integration Test Project
-        run: cd test/integration/next-app-15-3-2 && pnpm build
+        run: cd test/integration/${{ matrix.next-test-app }} && pnpm build
 
       - name: Run tests
         run: pnpm test
         env:
           SKIP_BUILD: true
+          NEXT_TEST_APP: ${{ matrix.next-test-app }}
 
       - name: Code Coverage Comments
         if: github.event_name == 'pull_request'
