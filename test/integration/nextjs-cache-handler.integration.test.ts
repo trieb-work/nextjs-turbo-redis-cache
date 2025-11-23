@@ -319,6 +319,63 @@ describe('Next.js Turbo Redis Cache Integration', () => {
       }
     });
 
+    // Next 16-only caching API tests. These routes exist only in the Next 16 test app
+    // and exercise the new revalidateTag profiles and updateTag semantics.
+    if (NEXT_TEST_APP.includes('16.')) {
+      describe('Next 16 caching APIs', () => {
+        const cachedStaticPath = '/api/cached-static-fetch';
+
+        async function assertCachedStaticFetchCleared() {
+          await delay(REDIS_BACKGROUND_SYNC_DELAY);
+          const keys = await redisClient.keys(
+            process.env.VERCEL_URL + cachedStaticPath,
+          );
+          expect(keys.length).toBe(0);
+
+          const hashmap = await redisClient.hGet(
+            process.env.VERCEL_URL + '__sharedTags__',
+            cachedStaticPath,
+          );
+          expect(hashmap).toBeNull();
+        }
+
+        it('revalidateTag(tag, "max") should invalidate cached-static-fetch by tag', async () => {
+          // Warm up cache and sharedTagsMap for cached-static-fetch
+          await fetch(NEXT_START_URL + cachedStaticPath);
+          await delay(REDIS_BACKGROUND_SYNC_DELAY);
+
+          // Use explicit tag for this route as set by Next.js
+          const tag = '_N_T_/api/cached-static-fetch';
+          const res = await fetch(
+            `${NEXT_START_URL}/api/revalidateTag?tag=${encodeURIComponent(
+              tag,
+            )}&profile=max`,
+          );
+          const json: any = await res.json();
+          expect(json.success).toBe(true);
+
+          await assertCachedStaticFetchCleared();
+        });
+
+        it('revalidateTag(tag, { expire: 60 }) should also invalidate cached-static-fetch', async () => {
+          // Warm up cache again
+          await fetch(NEXT_START_URL + cachedStaticPath);
+          await delay(REDIS_BACKGROUND_SYNC_DELAY);
+
+          const tag = '_N_T_/api/cached-static-fetch';
+          const res = await fetch(
+            `${NEXT_START_URL}/api/revalidateTag?tag=${encodeURIComponent(
+              tag,
+            )}&profile=expire`,
+          );
+          const json: any = await res.json();
+          expect(json.success).toBe(true);
+
+          await assertCachedStaticFetchCleared();
+        });
+      });
+    }
+
     describe('should not cache uncached API routes in Redis', () => {
       let counter1: number;
 

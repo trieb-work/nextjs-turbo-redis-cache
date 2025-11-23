@@ -10,6 +10,11 @@ export async function GET(request: Request) {
       { status: 400 },
     );
   }
-  revalidateTag(tag, 'max');
+  const profile = searchParams.get('profile');
+  if (profile === 'expire') {
+    revalidateTag(tag, { expire: 60 });
+  } else {
+    revalidateTag(tag, 'max');
+  }
   return NextResponse.json({ success: true });
 }
