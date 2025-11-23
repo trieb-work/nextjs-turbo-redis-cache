@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn } from 'child_process';
 import fetch from 'node-fetch';
-import { createClient } from 'redis';
+import { createClient, RedisClientType } from 'redis';
 import { join } from 'path';
 import { CacheEntry } from '../../src/RedisStringsHandler';
 import { revalidate as next1503_revalidatedFetch_route } from './next-app-15-0-3/src/app/api/revalidated-fetch/route';
@@ -17,7 +17,7 @@ const NEXT_START_URL = `http://localhost:${NEXT_START_PORT}`;
 const REDIS_BACKGROUND_SYNC_DELAY = 250; //ms delay to prevent flaky tests in slow CI environments
 
 let nextProcess;
-let redisClient;
+let redisClient: RedisClientType;
 
 async function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
