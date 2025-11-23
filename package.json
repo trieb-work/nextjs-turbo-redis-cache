@@ -19,7 +19,8 @@
     "test:unit": "vitest --config vite.config.ts src/**/*.test.ts src/**/*.test.tsx",
     "test:integration": "vitest --config vite.config.ts ./test/integration/nextjs-cache-handler.integration.test.ts",
     "prepare": "./scripts/prepare.sh",
-    "test:browser": "vitest --config=vitest.browser.config.ts"
+    "test:browser": "vitest --config=vitest.browser.config.ts",
+    "test:e2e": "playwright test"
   },
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -69,13 +70,13 @@
   "devDependencies": {
     "@commitlint/cli": "^19.6.0",
     "@commitlint/config-conventional": "^19.6.0",
+    "@playwright/test": "^1.56.1",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/git": "^10.0.1",
     "@semantic-release/github": "^11.0.1",
     "@semantic-release/npm": "^12.0.1",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
-    "@vitest/browser-playwright": "^4.0.13",
     "@vitest/coverage-v8": "^4.0.13",
     "@vitest/ui": "^4.0.13",
     "eslint": "^9.15.0",

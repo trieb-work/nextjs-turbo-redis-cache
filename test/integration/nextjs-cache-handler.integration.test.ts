@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { spawn } from 'child_process';
+import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import fetch from 'node-fetch';
 import { createClient, RedisClientType } from 'redis';
 import { join } from 'path';
@@ -16,7 +16,7 @@ const NEXT_START_URL = `http://localhost:${NEXT_START_PORT}`;
 
 const REDIS_BACKGROUND_SYNC_DELAY = 250; //ms delay to prevent flaky tests in slow CI environments
 
-let nextProcess;
+let nextProcess: ChildProcessWithoutNullStreams;
 let redisClient: RedisClientType;
 
 async function delay(ms: number) {
@@ -167,9 +167,9 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         expect(keys.length).toBeGreaterThan(0);
 
         // check the content of redis key
-        const value = await redisClient.get(
+        const value = (await redisClient.get(
           process.env.VERCEL_URL + '/api/cached-static-fetch',
-        );
+        )) as string;
         expect(value).toBeDefined();
         const cacheEntry: CacheEntry = JSON.parse(value);
 
@@ -240,10 +240,10 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         );
         expect(keys.length).toBe(1);
 
-        const hashmap = await redisClient.hGet(
+        const hashmap = (await redisClient.hGet(
           process.env.VERCEL_URL + '__sharedTags__',
           '/api/cached-static-fetch',
-        );
+        )) as string;
         expect(JSON.parse(hashmap)).toEqual([
           '_N_T_/layout',
           '_N_T_/api/layout',
@@ -519,10 +519,10 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             );
             expect(keys.length).toBe(1);
 
-            const hashmap = await redisClient.hGet(
+            const hashmap = (await redisClient.hGet(
               process.env.VERCEL_URL + '__sharedTags__',
               cacheEntryKey,
-            );
+            )) as string;
             expect(JSON.parse(hashmap)).toEqual([
               'revalidated-fetch-revalidate3-nested-fetch-in-api-route',
             ]);
@@ -574,10 +574,10 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             );
             expect(keys.length).toBe(1);
 
-            const hashmap = await redisClient.hGet(
+            const hashmap = (await redisClient.hGet(
               process.env.VERCEL_URL + '__sharedTags__',
               cacheEntryKey,
-            );
+            )) as string;
             expect(JSON.parse(hashmap)).toEqual([
               'revalidated-fetch-revalidate3-nested-fetch-in-api-route',
             ]);
@@ -627,9 +627,9 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         });
 
         it('The data in the redis key should match the expected format', async () => {
-          const data = await redisClient.get(
+          const data = (await redisClient.get(
             process.env.VERCEL_URL + '/pages/no-fetch/default-page',
-          );
+          )) as string;
           expect(data).toBeDefined();
           const cacheEntry: CacheEntry = JSON.parse(data);
 
@@ -724,10 +724,10 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           );
           expect(keys.length).toBe(1);
 
-          const hashmap = await redisClient.hGet(
+          const hashmap = (await redisClient.hGet(
             process.env.VERCEL_URL + '__sharedTags__',
             '/pages/no-fetch/default-page',
-          );
+          )) as string;
           expect(JSON.parse(hashmap)).toEqual([
             '_N_T_/layout',
             '_N_T_/pages/layout',
@@ -780,10 +780,10 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         expect(keys3.length).toBe(1);
 
         // test shared tag hashmap to be set for all keys
-        const hashmap1 = await redisClient.hGet(
+        const hashmap1 = (await redisClient.hGet(
           process.env.VERCEL_URL + '__sharedTags__',
           '/pages/revalidated-fetch/revalidate15--default-page',
-        );
+        )) as string;
         expect(JSON.parse(hashmap1)).toEqual([
           '_N_T_/layout',
           '_N_T_/pages/layout',
@@ -793,17 +793,17 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           '_N_T_/pages/revalidated-fetch/revalidate15--default-page',
           'revalidated-fetch-revalidate15-default-page',
         ]);
-        const hashmap2 = await redisClient.hGet(
+        const hashmap2 = (await redisClient.hGet(
           process.env.VERCEL_URL + '__sharedTags__',
           'e978cf5ddb8bf799209e828635cfe9ae6862f6735cea97f01ab752ff6fa489b4',
-        );
+        )) as string;
         expect(JSON.parse(hashmap2)).toEqual([
           'revalidated-fetch-revalidate15-default-page',
         ]);
-        const hashmap3 = await redisClient.hGet(
+        const hashmap3 = (await redisClient.hGet(
           process.env.VERCEL_URL + '__sharedTags__',
           '/api/revalidated-fetch',
-        );
+        )) as string;
         expect(JSON.parse(hashmap3)).toEqual([
           '_N_T_/layout',
           '_N_T_/api/layout',
@@ -872,10 +872,10 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           process.env.VERCEL_URL + '/api/revalidated-fetch',
         );
         expect(keys3.length).toBe(1);
-        const hashmap3 = await redisClient.hGet(
+        const hashmap3 = (await redisClient.hGet(
           process.env.VERCEL_URL + '__sharedTags__',
           '/api/revalidated-fetch',
-        );
+        )) as string;
         expect(JSON.parse(hashmap3)).toEqual([
           '_N_T_/layout',
           '_N_T_/api/layout',

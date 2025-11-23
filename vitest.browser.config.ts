@@ -1,13 +1,10 @@
 import { defineConfig } from 'vitest/config';
-import { playwright } from '@vitest/browser-playwright';
 
+// Browser mode disabled; Playwright is used via its own runner instead.
 export default defineConfig({
   test: {
     browser: {
-      enabled: true,
-      provider: playwright(),
-      // https://vitest.dev/config/browser/playwright
-      instances: [{ browser: 'chromium' }],
+      enabled: false,
     },
   },
 });
