@@ -1,3 +1,10 @@
+## [1.9.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.9.0...v1.9.1) (2025-11-24)
+
+
+### Bug Fixes
+
+* serialize map into json ([5a43493](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/5a43493c53370354ae3238cf589abfe2c6080c41))
+
 # [1.9.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.8.2...v1.9.0) (2025-11-18)
 
 
