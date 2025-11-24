@@ -2,7 +2,7 @@ import { commandOptions, createClient, RedisClientOptions } from 'redis';
 import { SyncedMap } from './SyncedMap';
 import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
 import { debug } from './utils/debug';
-import { bufferReviver, bufferReplacer } from './utils/json';
+import { bufferAndMapReviver, bufferAndMapReplacer } from './utils/json';
 
 export type CommandOptions = ReturnType<typeof commandOptions>;
 export type Client = ReturnType<typeof createClient>;
@@ -405,7 +405,7 @@ export default class RedisStringsHandler {
 
       const cacheEntry: CacheEntry | null = JSON.parse(
         serializedCacheEntry,
-        bufferReviver,
+        bufferAndMapReviver,
       );
 
       debug(
@@ -606,7 +606,10 @@ export default class RedisStringsHandler {
         tags: ctx?.tags || [],
         value: data,
       };
-      const serializedCacheEntry = JSON.stringify(cacheEntry, bufferReplacer);
+      const serializedCacheEntry = JSON.stringify(
+        cacheEntry,
+        bufferAndMapReplacer,
+      );
 
       // pre seed data into deduplicated get client. This will reduce redis load by not requesting
       // the same value from redis which was just set.
