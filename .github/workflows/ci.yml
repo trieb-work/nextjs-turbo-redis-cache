@@ -29,6 +29,8 @@ jobs:
           - next-app-15-0-3
           - next-app-15-3-2
           - next-app-15-4-7
+          - next-app-16-0-3
+
 
     steps:
       - name: Checkout code
