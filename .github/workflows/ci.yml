@@ -78,6 +78,12 @@ jobs:
           SKIP_BUILD: true
           NEXT_TEST_APP: ${{ matrix.next-test-app }}
 
+      - name: Run Playwright E2E tests (Next 16 only)
+        if: matrix.next-test-app == 'next-app-16-0-3'
+        run: pnpm test:e2e
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3055
+
       - name: Code Coverage Comments
         if: github.event_name == 'pull_request'
         uses: kcjpop/coverage-comments@v2.2
