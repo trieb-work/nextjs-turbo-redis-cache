@@ -78,6 +78,10 @@ jobs:
           SKIP_BUILD: true
           NEXT_TEST_APP: ${{ matrix.next-test-app }}
 
+      - name: Install Playwright browsers (Next 16 only)
+        if: matrix.next-test-app == 'next-app-16-0-3'
+        run: pnpm exec playwright install --with-deps
+
       - name: Run Playwright E2E tests (Next 16 only)
         if: matrix.next-test-app == 'next-app-16-0-3'
         run: pnpm test:e2e
