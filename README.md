@@ -25,8 +25,10 @@ Tested versions are:
 - Nextjs 15.0.3 + redis client 4.7.0
 - Nextjs 15.2.4 + redis client 4.7.0
 - Nextjs 15.3.2 + redis client 4.7.0
+- Nextjs 15.4.7 + redis client 4.7.0
+- Nextjs 16.0.3 + redis client 4.7.0 (cacheComponents: false)
 
-Currently PPR, 'use cache', cacheLife and cacheTag are not tested. Use these operations with caution and your own risk.
+Currently PPR, 'use cache', cacheLife and cacheTag are not tested. Use these operations with caution and your own risk. [Cache Components](https://nextjs.org/docs/app/getting-started/cache-components) support is in development.
 
 ## Getting started
 
