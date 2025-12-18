@@ -18,7 +18,9 @@
     "test:ui": "vitest --ui  --config vite.config.ts",
     "test:unit": "vitest --config vite.config.ts src/**/*.test.ts src/**/*.test.tsx",
     "test:integration": "vitest --config vite.config.ts ./test/integration/nextjs-cache-handler.integration.test.ts",
-    "prepare": "./scripts/prepare.sh"
+    "prepare": "./scripts/prepare.sh",
+    "test:browser": "vitest --config=vitest.browser.config.ts",
+    "test:e2e": "playwright test"
   },
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -68,14 +70,15 @@
   "devDependencies": {
     "@commitlint/cli": "^19.6.0",
     "@commitlint/config-conventional": "^19.6.0",
+    "@playwright/test": "^1.56.1",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/git": "^10.0.1",
     "@semantic-release/github": "^11.0.1",
     "@semantic-release/npm": "^12.0.1",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
-    "@vitest/coverage-v8": "^2.1.5",
-    "@vitest/ui": "^2.1.5",
+    "@vitest/coverage-v8": "^4.0.13",
+    "@vitest/ui": "^4.0.13",
     "eslint": "^9.15.0",
     "lint-staged": "^15.2.10",
     "node-fetch": "3",
@@ -84,10 +87,10 @@
     "semantic-release": "^24.2.0",
     "tsup": "^8.4.0",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.5"
+    "vitest": "^4.0.13"
   },
   "peerDependencies": {
-    "next": ">=15.0.3 <= 15.4.7",
+    "next": ">=15.0.3 <= 16.0.3",
     "redis": "4.7.0"
   },
   "packageManager": "pnpm@9.15.9+sha512.68046141893c66fad01c079231128e9afb89ef87e2691d69e4d40eee228988295fd4682181bae55b58418c3a253bde65a505ec7c5f9403ece5cc3cd37dcf2531"

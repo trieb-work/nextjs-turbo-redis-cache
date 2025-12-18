@@ -5,3 +5,4 @@ coverage
 .DS_Store
 .idea
 debug
+.last-run.json
