@@ -1,3 +1,10 @@
+# [1.10.0-beta.4](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.3...v1.10.0-beta.4) (2025-12-26)
+
+
+### Bug Fixes
+
+* trigger beta release ([724ecbb](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/724ecbb6d76697818a2c6a863c98e144eed049d2))
+
 # [1.10.0-beta.3](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.2...v1.10.0-beta.3) (2025-12-26)
 
 
