@@ -32,7 +32,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '22'
-          registry-url: 'https://registry.npmjs.org/'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -57,4 +56,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub token for Semantic Release
           NPM_CONFIG_PROVENANCE: 'true'
+          NODE_AUTH_TOKEN: ''
+          NPM_TOKEN: ''
         run: pnpx semantic-release
