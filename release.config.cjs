@@ -18,6 +18,7 @@ module.exports = {
       '@semantic-release/github',
       {
         assets: ['dist/*.tgz'], // Attach tarballs to GitHub releases
+        labels: [],
       },
     ],
     [
