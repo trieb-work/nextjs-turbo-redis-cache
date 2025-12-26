@@ -43,6 +43,12 @@ jobs:
       - name: Build project
         run: pnpm build
 
+      - name: Show npm provenance config
+        run: |
+          node -v
+          npm -v
+          npm config get provenance
+
       - name: Run Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub token for Semantic Release
