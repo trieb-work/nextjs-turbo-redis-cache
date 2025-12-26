@@ -33,14 +33,15 @@ jobs:
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org/'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm clean-install
+        run: pnpm install --frozen-lockfile
       - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
         run: npm audit signatures
 
       - name: Build project
-        run: npm run build
+        run: pnpm build
 
       - name: Run Semantic Release
         env:
