@@ -58,4 +58,4 @@ jobs:
           NPM_CONFIG_PROVENANCE: 'true'
           NODE_AUTH_TOKEN: ''
           NPM_TOKEN: ''
-        run: pnpx semantic-release
+        run: pnpm exec semantic-release
