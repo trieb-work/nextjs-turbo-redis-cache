@@ -1,3 +1,28 @@
+# [1.10.0-beta.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.9.1...v1.10.0-beta.1) (2025-12-26)
+
+
+### Bug Fixes
+
+* avoid overlapping redis reconnects ([4da291f](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/4da291f1a62ef8ffd9a8528640ee57b1367d0e25))
+* cleanup ([c948fdf](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/c948fdfe0e6b5f70edc985b3cdda9cf2f002633a))
+* folder structure ([93356fd](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/93356fd567c0f05fad92d3443da77216fd2cc28d))
+* just testing around ([09bd26d](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/09bd26dc7b328945f11818a11446b3e5dd86c943))
+* remove not needed attributes ([6c11e0d](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/6c11e0d574e6ae8d98c60f71ea70070415de9de7))
+* testing with npm ([fa7ecb0](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/fa7ecb0283c2611918a3f780bc0c87cf2b28d5db))
+* trigger beta release ([62ea418](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/62ea4182b65fac53f23a93418b9f4650ab717b60))
+
+
+### Features
+
+* add Next.js 16.0.3 support with new caching API tests ([8a55040](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/8a55040dbecf564fc4d08c04ee35af7e727d2e30))
+* add Playwright E2E tests to CI workflow for Next.js 16 ([4cde821](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/4cde821ed86bd5d1387751bb85922ada9d890199))
+* add support for Next.js 16.0.3 (WIP) ([e873fe0](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/e873fe08e9659515fd7416c3805be5a3c074538d))
+* adding 16-0.3 ([38923b2](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/38923b299a9600659d2ee6245cf01b702eeba33a))
+* extend Next.js peer dependency support to version 16.0.3 ([4e63a5b](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/4e63a5b3270c1696112b532173a7f6d79711576a))
+* extend Next.js peer dependency support to version 16.0.3 ([ffaa08a](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/ffaa08ac79df7345ea289dad3c0f921ec859cb8f))
+* install Playwright browsers before running E2E tests in CI ([d74231a](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/d74231a4bdcf8d3ba90e5c7ee31008540c4a137e))
+* migrate from Vitest browser mode to Playwright for E2E testing ([6c39c98](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/6c39c989a89625f1835b7b257328b7a5ec45de3c))
+
 ## [1.9.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.9.0...v1.9.1) (2025-11-24)
 
 
