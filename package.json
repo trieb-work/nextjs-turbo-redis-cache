@@ -56,7 +56,8 @@
   "license": "ISC",
   "description": "Next.js redis cache handler",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "lint-staged": {
     "*.{ts,tsx}": [
