@@ -1,3 +1,10 @@
+# [1.10.0-beta.5](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.4...v1.10.0-beta.5) (2025-12-26)
+
+
+### Bug Fixes
+
+* remove registry-url and clear auth tokens in release workflow ([b0d9edb](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/b0d9edb4e8efa37500a4dfe4054a24f55582e60e))
+
 # [1.10.0-beta.4](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.3...v1.10.0-beta.4) (2025-12-26)
 
 
