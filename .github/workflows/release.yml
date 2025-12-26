@@ -46,4 +46,5 @@ jobs:
       - name: Run Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub token for Semantic Release
+          NPM_CONFIG_PROVENANCE: true
         run: pnpx semantic-release
