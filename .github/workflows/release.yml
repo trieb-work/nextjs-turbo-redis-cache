@@ -44,10 +44,14 @@ jobs:
         run: pnpm build
 
       - name: Show npm provenance config
+        env:
+          NPM_CONFIG_PROVENANCE: 'true'
         run: |
           node -v
           npm -v
+          echo "NPM_CONFIG_PROVENANCE=$NPM_CONFIG_PROVENANCE"
           npm config get provenance
+          node -e "console.log('package.json publishConfig.provenance=', require('./package.json')?.publishConfig?.provenance)"
 
       - name: Run Semantic Release
         env:
