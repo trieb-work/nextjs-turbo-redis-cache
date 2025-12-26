@@ -1,3 +1,11 @@
+# [1.10.0-beta.6](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.5...v1.10.0-beta.6) (2025-12-26)
+
+
+### Bug Fixes
+
+* upgrade semantic-release and related dependencies to v25 ([63fd812](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/63fd812bc0815aa5155619faf9b36b9287daac21))
+* use pnpm exec instead of pnpx for semantic-release command ([ca310c0](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/ca310c0e1b4150052787eba1709152d606d2d76d))
+
 # [1.10.0-beta.5](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.4...v1.10.0-beta.5) (2025-12-26)
 
 
