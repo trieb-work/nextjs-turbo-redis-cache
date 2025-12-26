@@ -1,3 +1,10 @@
+# [1.10.0-beta.3](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.2...v1.10.0-beta.3) (2025-12-26)
+
+
+### Bug Fixes
+
+* configure npm provenance in package.json publishConfig ([83a3017](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/83a301797396e98b739db199bfb3e97ee1c8565e))
+
 # [1.10.0-beta.2](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.1...v1.10.0-beta.2) (2025-12-26)
 
 
