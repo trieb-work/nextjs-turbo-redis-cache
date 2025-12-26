@@ -1,3 +1,10 @@
+# [1.10.0-beta.7](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.6...v1.10.0-beta.7) (2025-12-26)
+
+
+### Bug Fixes
+
+* remove empty auth token environment variables from release workflow ([8d4e87b](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/8d4e87b301842842cd3d0c0a8cb8401dbf100fa9))
+
 # [1.10.0-beta.6](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.5...v1.10.0-beta.6) (2025-12-26)
 
 
