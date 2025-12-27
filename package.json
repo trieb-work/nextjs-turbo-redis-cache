@@ -1,6 +1,6 @@
 {
   "name": "@trieb.work/nextjs-turbo-redis-cache",
-  "version": "1.10.0-beta.9",
+  "version": "1.10.0-beta.10",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/trieb-work/nextjs-turbo-redis-cache.git"

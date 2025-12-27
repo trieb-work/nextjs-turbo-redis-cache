@@ -1,3 +1,10 @@
+# [1.10.0-beta.10](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.9...v1.10.0-beta.10) (2025-12-27)
+
+
+### Bug Fixes
+
+* add provenance, public access, and verbose logging to npm publish command ([2fccf3d](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/2fccf3d12c899e5aee38ea5d7c0cdce22dd83ce4))
+
 # [1.10.0-beta.9](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.8...v1.10.0-beta.9) (2025-12-27)
 
 
