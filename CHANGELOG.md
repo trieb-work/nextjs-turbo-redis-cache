@@ -1,3 +1,10 @@
+# [1.10.0-beta.11](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.10...v1.10.0-beta.11) (2025-12-27)
+
+
+### Bug Fixes
+
+* add diagnostics step to debug OIDC and npm configuration in release workflow ([6a7f3cf](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/6a7f3cf7cda23d57acb34d3bb4c4dd6ab7103ca7))
+
 # [1.10.0-beta.10](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.9...v1.10.0-beta.10) (2025-12-27)
 
 
