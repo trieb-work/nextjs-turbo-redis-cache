@@ -1,3 +1,10 @@
+# [1.10.0-beta.12](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.11...v1.10.0-beta.12) (2025-12-27)
+
+
+### Bug Fixes
+
+* implement OIDC token exchange for npm trusted publishing in release workflow ([3b3cea1](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/3b3cea152dfb183e918dac1b34c6a8277c300474))
+
 # [1.10.0-beta.11](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.10...v1.10.0-beta.11) (2025-12-27)
 
 
