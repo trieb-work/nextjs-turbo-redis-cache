@@ -1,3 +1,10 @@
+# [1.10.0-beta.8](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.7...v1.10.0-beta.8) (2025-12-27)
+
+
+### Bug Fixes
+
+* disable semantic-release npm publishing and add manual npm publish step with trusted publishing ([4cbf99d](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/4cbf99de560a6a466b5d10f945bd9640356ef444))
+
 # [1.10.0-beta.7](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.6...v1.10.0-beta.7) (2025-12-26)
 
 
