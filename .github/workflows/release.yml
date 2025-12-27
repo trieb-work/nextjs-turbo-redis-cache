@@ -120,6 +120,15 @@ jobs:
             }
 
             fs.appendFileSync(process.env.GITHUB_OUTPUT, `node_auth_token=${npmToken}\n`);
+            const npmrcPath = `${process.env.RUNNER_TEMP}/npmrc`;
+            const npmrc = [
+              'registry=https://registry.npmjs.org/',
+              'always-auth=true',
+              '//registry.npmjs.org/:_authToken=' + npmToken,
+              '',
+            ].join('\n');
+            fs.writeFileSync(npmrcPath, npmrc, { encoding: 'utf8' });
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `npmrc_path=${npmrcPath}\n`);
             console.log('OIDC token exchange with npm registry succeeded');
           })().catch((e) => {
             console.error(e);
@@ -131,5 +140,48 @@ jobs:
         env:
           NPM_CONFIG_PROVENANCE: 'true'
           NPM_DIST_TAG: ${{ github.ref_name == 'beta' && 'beta' || 'latest' }}
-          NODE_AUTH_TOKEN: ${{ steps.npm-oidc.outputs.node_auth_token }}
-        run: npm publish --provenance --access public --tag $NPM_DIST_TAG --registry https://registry.npmjs.org/ --loglevel verbose
+          NPM_CONFIG_USERCONFIG: ${{ steps.npm-oidc.outputs.npmrc_path }}
+        run: |
+          set -euo pipefail
+
+          echo "--- npm debug context (pre-publish) ---"
+          node -v
+          npm -v
+          echo "pwd=$(pwd)"
+          echo "NPM_CONFIG_USERCONFIG=${NPM_CONFIG_USERCONFIG}"
+          echo "NPM_CONFIG_PROVENANCE=${NPM_CONFIG_PROVENANCE}"
+          echo "NPM_DIST_TAG=${NPM_DIST_TAG}"
+
+          echo "--- npmrc (redacted) ---"
+          if [ -f "${NPM_CONFIG_USERCONFIG}" ]; then
+            sed -E 's#(//registry\.npmjs\.org/:_authToken=).*#\1***REDACTED***#' "${NPM_CONFIG_USERCONFIG}" || true
+          else
+            echo "npmrc missing at ${NPM_CONFIG_USERCONFIG}"
+          fi
+
+          echo "--- npm config list (redacted) ---"
+          npm config list -l | sed -E 's#(_authToken=).*#\1***REDACTED***#' || true
+
+          echo "--- npm ping / whoami (best effort) ---"
+          npm ping --registry https://registry.npmjs.org/ || true
+          npm whoami --registry https://registry.npmjs.org/ || true
+
+          echo "--- npm publish (verbose) ---"
+          publish_status=0
+          npm publish --provenance --access public --tag "$NPM_DIST_TAG" --registry https://registry.npmjs.org/ --loglevel verbose || publish_status=$?
+
+          echo "--- npm debug logs (redacted) ---"
+          if [ -d "$HOME/.npm/_logs" ]; then
+            ls -la "$HOME/.npm/_logs" || true
+            latest_log=$(ls -t "$HOME/.npm/_logs"/*-debug-*.log 2>/dev/null | head -n 1 || true)
+            if [ -n "${latest_log}" ] && [ -f "${latest_log}" ]; then
+              echo "latest_log=${latest_log}"
+              sed -E 's#(//registry\.npmjs\.org/:_authToken=).*#\1***REDACTED***#; s#(_authToken=).*#\1***REDACTED***#' "${latest_log}" || true
+            else
+              echo "No npm debug log found"
+            fi
+          else
+            echo "No npm logs directory found"
+          fi
+
+          exit $publish_status
