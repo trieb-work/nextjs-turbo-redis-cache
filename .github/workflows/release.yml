@@ -58,8 +58,21 @@ jobs:
           NPM_CONFIG_PROVENANCE: 'true'
         run: pnpm exec semantic-release
 
+      - name: Diagnostics (OIDC + npm config)
+        env:
+          NPM_CONFIG_PROVENANCE: 'true'
+        run: |
+          echo "github.ref_name=${{ github.ref_name }}"
+          echo "ACTIONS_ID_TOKEN_REQUEST_URL=${ACTIONS_ID_TOKEN_REQUEST_URL:+set}"
+          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN=${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+set}"
+          echo "CI=${CI:-unset}"
+          npm config get registry
+          npm config get provenance
+
       - name: Publish to npm (Trusted Publishing)
         env:
           NPM_CONFIG_PROVENANCE: 'true'
           NPM_DIST_TAG: ${{ github.ref_name == 'beta' && 'beta' || 'latest' }}
+          NODE_AUTH_TOKEN: ''
+          NPM_TOKEN: ''
         run: npm publish --provenance --access public --tag $NPM_DIST_TAG --registry https://registry.npmjs.org/ --loglevel verbose
