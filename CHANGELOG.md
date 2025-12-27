@@ -1,3 +1,10 @@
+# [1.10.0-beta.13](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.12...v1.10.0-beta.13) (2025-12-27)
+
+
+### Bug Fixes
+
+* add comprehensive debugging and .npmrc configuration for npm trusted publishing ([8d4fabb](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/8d4fabb02062a7a771693277909555671e810835))
+
 # [1.10.0-beta.12](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.11...v1.10.0-beta.12) (2025-12-27)
 
 
