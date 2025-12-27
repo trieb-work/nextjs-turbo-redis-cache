@@ -1,3 +1,23 @@
+# [1.10.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.9.1...v1.10.0) (2025-12-27)
+
+
+### Bug Fixes
+
+* cleanup ([c948fdf](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/c948fdfe0e6b5f70edc985b3cdda9cf2f002633a))
+* folder structure ([93356fd](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/93356fd567c0f05fad92d3443da77216fd2cc28d))
+
+
+### Features
+
+* add Next.js 16.0.3 support with new caching API tests ([8a55040](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/8a55040dbecf564fc4d08c04ee35af7e727d2e30))
+* add Playwright E2E tests to CI workflow for Next.js 16 ([4cde821](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/4cde821ed86bd5d1387751bb85922ada9d890199))
+* add support for Next.js 16.0.3 (WIP) ([e873fe0](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/e873fe08e9659515fd7416c3805be5a3c074538d))
+* adding 16-0.3 ([38923b2](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/38923b299a9600659d2ee6245cf01b702eeba33a))
+* extend Next.js peer dependency support to version 16.0.3 ([4e63a5b](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/4e63a5b3270c1696112b532173a7f6d79711576a))
+* extend Next.js peer dependency support to version 16.0.3 ([ffaa08a](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/ffaa08ac79df7345ea289dad3c0f921ec859cb8f))
+* install Playwright browsers before running E2E tests in CI ([d74231a](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/d74231a4bdcf8d3ba90e5c7ee31008540c4a137e))
+* migrate from Vitest browser mode to Playwright for E2E testing ([6c39c98](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/6c39c989a89625f1835b7b257328b7a5ec45de3c))
+
 ## [1.9.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.9.0...v1.9.1) (2025-11-24)
 
 
