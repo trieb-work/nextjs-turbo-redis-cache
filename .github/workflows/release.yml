@@ -62,4 +62,4 @@ jobs:
         env:
           NPM_CONFIG_PROVENANCE: 'true'
           NPM_DIST_TAG: ${{ github.ref_name == 'beta' && 'beta' || 'latest' }}
-        run: npm publish --tag $NPM_DIST_TAG --registry https://registry.npmjs.org/
+        run: npm publish --provenance --access public --tag $NPM_DIST_TAG --registry https://registry.npmjs.org/ --loglevel verbose
