@@ -42,32 +42,11 @@ jobs:
       - name: Build project
         run: pnpm build
 
-      - name: Show npm provenance config
-        env:
-          NPM_CONFIG_PROVENANCE: 'true'
-        run: |
-          node -v
-          npm -v
-          echo "NPM_CONFIG_PROVENANCE=$NPM_CONFIG_PROVENANCE"
-          npm config get provenance
-          node -e "console.log('package.json publishConfig.provenance=', require('./package.json')?.publishConfig?.provenance)"
-
       - name: Run Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub token for Semantic Release
           NPM_CONFIG_PROVENANCE: 'true'
         run: pnpm exec semantic-release
-
-      - name: Diagnostics (OIDC + npm config)
-        env:
-          NPM_CONFIG_PROVENANCE: 'true'
-        run: |
-          echo "github.ref_name=${{ github.ref_name }}"
-          echo "ACTIONS_ID_TOKEN_REQUEST_URL=${ACTIONS_ID_TOKEN_REQUEST_URL:+set}"
-          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN=${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+set}"
-          echo "CI=${CI:-unset}"
-          npm config get registry
-          npm config get provenance
 
       - name: Exchange GitHub OIDC token for npm token
         id: npm-oidc
@@ -141,47 +120,5 @@ jobs:
           NPM_CONFIG_PROVENANCE: 'true'
           NPM_DIST_TAG: ${{ github.ref_name == 'beta' && 'beta' || 'latest' }}
           NPM_CONFIG_USERCONFIG: ${{ steps.npm-oidc.outputs.npmrc_path }}
-        run: |
-          set -euo pipefail
+        run: npm publish --provenance --access public --tag $NPM_DIST_TAG --registry https://registry.npmjs.org/
 
-          echo "--- npm debug context (pre-publish) ---"
-          node -v
-          npm -v
-          echo "pwd=$(pwd)"
-          echo "NPM_CONFIG_USERCONFIG=${NPM_CONFIG_USERCONFIG}"
-          echo "NPM_CONFIG_PROVENANCE=${NPM_CONFIG_PROVENANCE}"
-          echo "NPM_DIST_TAG=${NPM_DIST_TAG}"
-
-          echo "--- npmrc (redacted) ---"
-          if [ -f "${NPM_CONFIG_USERCONFIG}" ]; then
-            sed -E 's#(//registry\.npmjs\.org/:_authToken=).*#\1***REDACTED***#' "${NPM_CONFIG_USERCONFIG}" || true
-          else
-            echo "npmrc missing at ${NPM_CONFIG_USERCONFIG}"
-          fi
-
-          echo "--- npm config list (redacted) ---"
-          npm config list -l | sed -E 's#(_authToken=).*#\1***REDACTED***#' || true
-
-          echo "--- npm ping / whoami (best effort) ---"
-          npm ping --registry https://registry.npmjs.org/ || true
-          npm whoami --registry https://registry.npmjs.org/ || true
-
-          echo "--- npm publish (verbose) ---"
-          publish_status=0
-          npm publish --provenance --access public --tag "$NPM_DIST_TAG" --registry https://registry.npmjs.org/ --loglevel verbose || publish_status=$?
-
-          echo "--- npm debug logs (redacted) ---"
-          if [ -d "$HOME/.npm/_logs" ]; then
-            ls -la "$HOME/.npm/_logs" || true
-            latest_log=$(ls -t "$HOME/.npm/_logs"/*-debug-*.log 2>/dev/null | head -n 1 || true)
-            if [ -n "${latest_log}" ] && [ -f "${latest_log}" ]; then
-              echo "latest_log=${latest_log}"
-              sed -E 's#(//registry\.npmjs\.org/:_authToken=).*#\1***REDACTED***#; s#(_authToken=).*#\1***REDACTED***#' "${latest_log}" || true
-            else
-              echo "No npm debug log found"
-            fi
-          else
-            echo "No npm logs directory found"
-          fi
-
-          exit $publish_status
