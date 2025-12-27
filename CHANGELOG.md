@@ -1,3 +1,10 @@
+# [1.10.0-beta.9](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.8...v1.10.0-beta.9) (2025-12-27)
+
+
+### Bug Fixes
+
+* add git+ prefix to repository URL in package.json ([70f94df](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/70f94dff5059808eb4a2376950f3bb9fecb4511e))
+
 # [1.10.0-beta.8](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.7...v1.10.0-beta.8) (2025-12-27)
 
 
