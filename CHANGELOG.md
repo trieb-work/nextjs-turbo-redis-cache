@@ -1,3 +1,10 @@
+# [1.10.0-beta.14](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.13...v1.10.0-beta.14) (2025-12-27)
+
+
+### Bug Fixes
+
+* remove extensive debugging and simplify npm publish step in release workflow ([d3b7aa9](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/d3b7aa9fa13d9ff65e2b34e1e49433507cfb9cb2))
+
 # [1.10.0-beta.13](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0-beta.12...v1.10.0-beta.13) (2025-12-27)
 
 
