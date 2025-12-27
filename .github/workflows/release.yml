@@ -57,3 +57,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub token for Semantic Release
           NPM_CONFIG_PROVENANCE: 'true'
         run: pnpm exec semantic-release
+
+      - name: Publish to npm (Trusted Publishing)
+        env:
+          NPM_CONFIG_PROVENANCE: 'true'
+          NPM_DIST_TAG: ${{ github.ref_name == 'beta' && 'beta' || 'latest' }}
+        run: npm publish --tag $NPM_DIST_TAG --registry https://registry.npmjs.org/

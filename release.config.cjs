@@ -10,7 +10,7 @@ module.exports = {
     [
       '@semantic-release/npm',
       {
-        npmPublish: true, // Publish to NPM
+        npmPublish: false, // Publish to NPM
         tag: 'beta', // Publish beta releases under the "beta" tag
       },
     ],
