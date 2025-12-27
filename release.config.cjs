@@ -10,20 +10,20 @@ module.exports = {
     [
       '@semantic-release/npm',
       {
-        npmPublish: true, // Publish to NPM
+        npmPublish: false, // Publish to NPM
         tag: 'beta', // Publish beta releases under the "beta" tag
       },
     ],
     [
       '@semantic-release/github',
       {
-        assets: ['dist/*.tgz'], // Attach tarballs to GitHub releases
+        labels: [],
       },
     ],
     [
       '@semantic-release/git',
       {
-        assets: ['package.json', 'package-lock.json', 'CHANGELOG.md'],
+        assets: ['package.json', 'pnpm-lock.yaml', 'CHANGELOG.md'],
         message: 'chore(release): ${nextRelease.version} [skip ci]',
       },
     ],

@@ -31,17 +31,94 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
+      - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
+        run: npm audit signatures
 
       - name: Build project
-        run: pnpm run build
+        run: pnpm build
 
       - name: Run Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub token for Semantic Release
-        run: npx semantic-release
+          NPM_CONFIG_PROVENANCE: 'true'
+        run: pnpm exec semantic-release
+
+      - name: Exchange GitHub OIDC token for npm token
+        id: npm-oidc
+        env:
+          NPM_PACKAGE_NAME: '@trieb.work/nextjs-turbo-redis-cache'
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const pkg = process.env.NPM_PACKAGE_NAME;
+          const reqUrl = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
+          const reqToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+
+          if (!pkg || !reqUrl || !reqToken) {
+            console.error('Missing required env for OIDC token retrieval');
+            process.exit(1);
+          }
+
+          const audience = 'npm:registry.npmjs.org';
+          const url = reqUrl + (reqUrl.includes('?') ? '&' : '?') + 'audience=' + encodeURIComponent(audience);
+
+          (async () => {
+            const idRes = await fetch(url, { headers: { Authorization: 'Bearer ' + reqToken } });
+            if (!idRes.ok) {
+              console.error('Failed to fetch GitHub OIDC token:', idRes.status, await idRes.text());
+              process.exit(1);
+            }
+
+            const idBody = await idRes.json();
+            const idToken = idBody.value;
+
+            const exUrl =
+              'https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/' + encodeURIComponent(pkg);
+            const exRes = await fetch(exUrl, {
+              method: 'POST',
+              headers: { Authorization: 'Bearer ' + idToken },
+            });
+
+            const exText = await exRes.text();
+            if (!exRes.ok) {
+              console.error('OIDC token exchange with npm failed:', exRes.status, exText);
+              process.exit(1);
+            }
+
+            const exBody = JSON.parse(exText);
+            const npmToken = exBody.token;
+            if (!npmToken) {
+              console.error('npm exchange response missing token');
+              process.exit(1);
+            }
+
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `node_auth_token=${npmToken}\n`);
+            const npmrcPath = `${process.env.RUNNER_TEMP}/npmrc`;
+            const npmrc = [
+              'registry=https://registry.npmjs.org/',
+              'always-auth=true',
+              '//registry.npmjs.org/:_authToken=' + npmToken,
+              '',
+            ].join('\n');
+            fs.writeFileSync(npmrcPath, npmrc, { encoding: 'utf8' });
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `npmrc_path=${npmrcPath}\n`);
+            console.log('OIDC token exchange with npm registry succeeded');
+          })().catch((e) => {
+            console.error(e);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Publish to npm (Trusted Publishing)
+        env:
+          NPM_CONFIG_PROVENANCE: 'true'
+          NPM_DIST_TAG: ${{ github.ref_name == 'beta' && 'beta' || 'latest' }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.npm-oidc.outputs.npmrc_path }}
+        run: npm publish --provenance --access public --tag $NPM_DIST_TAG --registry https://registry.npmjs.org/
+
