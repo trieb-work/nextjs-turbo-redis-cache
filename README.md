@@ -216,6 +216,12 @@ To run all tests you can use the following command:
 pnpm build && pnpm test
 ```
 
+Folder layout / runners:
+
+- **Vitest** (unit + integration) lives in `src/**/*.test.ts(x)` and `test/**`.
+- **Playwright** (E2E) lives in `tests/**` (see `playwright.config.ts`).
+- `test/browser/**` contains Vitest tests that hit a running Next.js app over HTTP. Despite the folder name, this is not Playwright and does not use Vitest browser mode.
+
 ### Unit tests
 
 To run unit tests you can use the following command:
@@ -230,6 +236,14 @@ To run integration tests you can use the following command:
 
 ```bash
 pnpm build && pnpm test:integration
+```
+
+### E2E tests (Playwright)
+
+To run Playwright tests (`tests/**`) you can use:
+
+```bash
+pnpm test:e2e
 ```
 
 The integration tests will start a Next.js server and test the caching handler. You can modify testing behavior by setting the following environment variables:
