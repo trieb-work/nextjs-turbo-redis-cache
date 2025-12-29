@@ -7,7 +7,7 @@ on:
   pull_request:
     branches:
       - main
-      
+
 permissions:
   contents: write
   pull-requests: write
@@ -30,7 +30,7 @@ jobs:
           - next-app-15-3-2
           - next-app-15-4-7
           - next-app-16-0-3
-
+          - next-app-16-1-1
 
     steps:
       - name: Checkout code
@@ -79,11 +79,11 @@ jobs:
           NEXT_TEST_APP: ${{ matrix.next-test-app }}
 
       - name: Install Playwright browsers (Next 16 only)
-        if: matrix.next-test-app == 'next-app-16-0-3'
+        if: startsWith(matrix.next-test-app, 'next-app-16')
         run: pnpm exec playwright install --with-deps
 
       - name: Run Playwright E2E tests (Next 16 only)
-        if: matrix.next-test-app == 'next-app-16-0-3'
+        if: startsWith(matrix.next-test-app, 'next-app-16')
         run: pnpm test:e2e
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3055
@@ -95,7 +95,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           coverage-file: './coverage/lcov.info'
-      
+
       - name: Dry run the release
         if: github.event_name == 'pull_request'
         env:
@@ -103,4 +103,3 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # NPM token for publishing
         run: |
           npx semantic-release --dry-run
-
