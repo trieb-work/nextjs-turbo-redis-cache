@@ -18,6 +18,7 @@
     "test:ui": "vitest --ui  --config vite.config.ts",
     "test:unit": "vitest --config vite.config.ts src/**/*.test.ts src/**/*.test.tsx",
     "test:integration": "vitest --config vite.config.ts ./test/integration/nextjs-cache-handler.integration.test.ts",
+    "test:cache-components": "vitest --run --config vitest.cache-components.config.ts",
     "prepare": "./scripts/prepare.sh",
     "test:browser": "vitest --config=vitest.browser.config.ts",
     "test:e2e": "playwright test"
