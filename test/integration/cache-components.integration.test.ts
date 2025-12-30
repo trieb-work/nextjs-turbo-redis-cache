@@ -26,6 +26,19 @@ describe('Next.js 16 Cache Components Integration', () => {
     // Build and start Next.js app
     const appDir = path.join(__dirname, 'next-app-16-1-1-cache-components');
 
+    console.log('Installing Next.js app dependencies...');
+    await new Promise<void>((resolve, reject) => {
+      const installProcess = spawn('pnpm', ['install'], {
+        cwd: appDir,
+        stdio: 'inherit',
+      });
+
+      installProcess.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`Install failed with code ${code}`));
+      });
+    });
+
     console.log('Building Next.js app...');
     await new Promise<void>((resolve, reject) => {
       const buildProcess = spawn('pnpm', ['build'], {
