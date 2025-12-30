@@ -300,8 +300,8 @@ This repo includes a dedicated Next.js Cache Components integration app with rea
 1. Install + start the Cache Components test app:
 
 ```bash
-pnpm -C test/integration/next-app-16-0-3-cache-components install
-pnpm -C test/integration/next-app-16-0-3-cache-components dev
+pnpm -C test/integration/next-app-16-1-1-cache-components install
+pnpm -C test/integration/next-app-16-1-1-cache-components dev
 ```
 
 Then open the Cache Lab pages:
@@ -316,7 +316,7 @@ Then open the Cache Lab pages:
 To run the Playwright E2E tests against a running dev server:
 
 ```bash
-PLAYWRIGHT_BASE_URL=http://localhost:3001 pnpm test:e2e
+PLAYWRIGHT_BASE_URL=http://localhost:3101 pnpm test:e2e
 ```
 
 ## Some words on nextjs caching internals
