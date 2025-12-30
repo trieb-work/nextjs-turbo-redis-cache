@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   cacheHandlers: {
     default: require.resolve('./cache-handler.js'),
   },
+  turbopack: {
+    root: __dirname,
+  },
 };
 
 export default nextConfig;

@@ -24,7 +24,7 @@ describe('Next.js 16 Cache Components Integration', () => {
     process.env.VERCEL_URL = keyPrefix;
 
     // Build and start Next.js app
-    const appDir = path.join(__dirname, 'next-app-16-0-3-cache-components');
+    const appDir = path.join(__dirname, 'next-app-16-1-1-cache-components');
 
     console.log('Building Next.js app...');
     await new Promise<void>((resolve, reject) => {
