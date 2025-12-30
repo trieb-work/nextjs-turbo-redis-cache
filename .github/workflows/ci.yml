@@ -86,10 +86,10 @@ jobs:
         if: matrix.next-test-app == 'next-app-16-0-3'
         run: pnpm test:e2e
         env:
-          PLAYWRIGHT_BASE_URL: http://localhost:3055
+          PLAYWRIGHT_BASE_URL: http://localhost:3101
 
       - name: Code Coverage Comments
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: kcjpop/coverage-comments@v2.2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
