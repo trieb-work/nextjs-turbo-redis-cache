@@ -1,0 +1,35 @@
+{
+  "node": {
+    "0095926eb70915e77b0d8c3a706af3ffb78a553f13": {
+      "workers": {
+        "app/cache-lab/use-cache-nondeterministic/page": {
+          "moduleId": 45450,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/use-cache-nondeterministic/page": "rsc"
+      },
+      "exportedName": "$$RSC_SERVER_ACTION_1",
+      "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx"
+    },
+    "80f2aa6aa18ec7fc314fb0b0f836afb4d043fc4448": {
+      "workers": {
+        "app/cache-lab/use-cache-nondeterministic/page": {
+          "moduleId": 45450,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_CACHE_0",
+          "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/use-cache-nondeterministic/page": "rsc"
+      },
+      "exportedName": "$$RSC_SERVER_CACHE_0",
+      "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx"
+    }
+  },
+  "edge": {}
+}

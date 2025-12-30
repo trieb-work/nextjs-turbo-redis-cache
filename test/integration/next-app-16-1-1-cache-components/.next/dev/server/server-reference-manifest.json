@@ -1,0 +1,186 @@
+{
+  "node": {
+    "00d21c94c2510bc52eb73f9ea0147fa80108451138": {
+      "workers": {
+        "app/update-tag-test/page": {
+          "moduleId": "[project]/.next-internal/server/app/update-tag-test/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/update-tag-test/page.tsx [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_0",
+          "filename": "src/app/update-tag-test/page.tsx"
+        }
+      },
+      "layer": {
+        "app/update-tag-test/page": "rsc"
+      },
+      "filename": "src/app/update-tag-test/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_0"
+    },
+    "0077e27b37bde3c1c1d900892b48bd04ced047183a": {
+      "workers": {
+        "app/cache-lab/use-cache-nondeterministic/page": {
+          "moduleId": "[project]/.next-internal/server/app/cache-lab/use-cache-nondeterministic/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/cache-lab/use-cache-nondeterministic/page.tsx [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/use-cache-nondeterministic/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_1"
+    },
+    "80f6d5727a3e66e295dd6946c832ab40c7b6ae9de6": {
+      "workers": {
+        "app/cache-lab/use-cache-nondeterministic/page": {
+          "moduleId": "[project]/.next-internal/server/app/cache-lab/use-cache-nondeterministic/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/cache-lab/use-cache-nondeterministic/page.tsx [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_CACHE_0",
+          "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/use-cache-nondeterministic/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx",
+      "exportedName": "$$RSC_SERVER_CACHE_0"
+    },
+    "0067af2469662d1c778eb30c309e5c4d8807f51367": {
+      "workers": {
+        "app/cache-lab/tag-invalidation/page": {
+          "moduleId": "[project]/.next-internal/server/app/cache-lab/tag-invalidation/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/cache-lab/tag-invalidation/page.tsx [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_2",
+          "filename": "src/app/cache-lab/tag-invalidation/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/tag-invalidation/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/tag-invalidation/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_2"
+    },
+    "00c9ddd2fcdae52932c2c6d03b7f6f63bcac356c46": {
+      "workers": {
+        "app/cache-lab/tag-invalidation/page": {
+          "moduleId": "[project]/.next-internal/server/app/cache-lab/tag-invalidation/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/cache-lab/tag-invalidation/page.tsx [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "src/app/cache-lab/tag-invalidation/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/tag-invalidation/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/tag-invalidation/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_1"
+    },
+    "8064d216c6b4c913f3e693ec57998ffea95c56d340": {
+      "workers": {
+        "app/cache-lab/tag-invalidation/page": {
+          "moduleId": "[project]/.next-internal/server/app/cache-lab/tag-invalidation/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/cache-lab/tag-invalidation/page.tsx [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_CACHE_0",
+          "filename": "src/app/cache-lab/tag-invalidation/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/tag-invalidation/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/tag-invalidation/page.tsx",
+      "exportedName": "$$RSC_SERVER_CACHE_0"
+    },
+    "0061977f6e93e5187064e2edfafb648ed774dd9ce4": {
+      "workers": {
+        "app/cache-lab/runtime-data-suspense/page": {
+          "moduleId": "[project]/.next-internal/server/app/cache-lab/runtime-data-suspense/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/cache-lab/runtime-data-suspense/page.tsx [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/runtime-data-suspense/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_1"
+    },
+    "00f8f03eaf9277b3640b23e3656191ed4120f35bbc": {
+      "workers": {
+        "app/cache-lab/runtime-data-suspense/page": {
+          "moduleId": "[project]/.next-internal/server/app/cache-lab/runtime-data-suspense/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/cache-lab/runtime-data-suspense/page.tsx [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_2",
+          "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/runtime-data-suspense/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_2"
+    },
+    "40fb903a669c054bc8b3495baf989f19b75378182f": {
+      "workers": {
+        "app/cache-lab/runtime-data-suspense/page": {
+          "moduleId": "[project]/.next-internal/server/app/cache-lab/runtime-data-suspense/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/cache-lab/runtime-data-suspense/page.tsx [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_0",
+          "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/runtime-data-suspense/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_0"
+    },
+    "c0ceb1e69096ea23f22222010d719df787340deed6": {
+      "workers": {
+        "app/cache-lab/runtime-data-suspense/page": {
+          "moduleId": "[project]/.next-internal/server/app/cache-lab/runtime-data-suspense/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/cache-lab/runtime-data-suspense/page.tsx [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_CACHE_3",
+          "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/runtime-data-suspense/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx",
+      "exportedName": "$$RSC_SERVER_CACHE_3"
+    },
+    "00dc4b8782e8c18ad0faea03b6acdc4eb0a9ea320e": {
+      "workers": {
+        "app/cache-lab/stale-while-revalidate/page": {
+          "moduleId": "[project]/.next-internal/server/app/cache-lab/stale-while-revalidate/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/cache-lab/stale-while-revalidate/page.tsx [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "src/app/cache-lab/stale-while-revalidate/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/stale-while-revalidate/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/stale-while-revalidate/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_1"
+    },
+    "806ca397b266b773c48ba04e69aeb14ac88d80fe48": {
+      "workers": {
+        "app/cache-lab/stale-while-revalidate/page": {
+          "moduleId": "[project]/.next-internal/server/app/cache-lab/stale-while-revalidate/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/cache-lab/stale-while-revalidate/page.tsx [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_CACHE_0",
+          "filename": "src/app/cache-lab/stale-while-revalidate/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/stale-while-revalidate/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/stale-while-revalidate/page.tsx",
+      "exportedName": "$$RSC_SERVER_CACHE_0"
+    }
+  },
+  "edge": {},
+  "encryptionKey": "iIBaqoXCgiMHmWav8w83r4debyD3SoUXk7bN3GL67io="
+}

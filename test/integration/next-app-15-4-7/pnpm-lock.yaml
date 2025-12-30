@@ -471,7 +471,7 @@ packages:
   '@trieb.work/nextjs-turbo-redis-cache@file:../../..':
     resolution: {directory: ../../.., type: directory}
     peerDependencies:
-      next: '>=15.0.3 <= 16.0.3'
+      next: '>=15.0.3 <16.2.0'
       redis: 4.7.0
 
   '@tybys/wasm-util@0.9.0':

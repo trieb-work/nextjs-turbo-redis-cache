@@ -1,0 +1,20 @@
+{
+  "node": {
+    "004869f27e547417bfc9d9b763cc4c2ef3497f1cdb": {
+      "workers": {
+        "app/update-tag-test/page": {
+          "moduleId": 99746,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_0",
+          "filename": "src/app/update-tag-test/page.tsx"
+        }
+      },
+      "layer": {
+        "app/update-tag-test/page": "rsc"
+      },
+      "exportedName": "$$RSC_SERVER_ACTION_0",
+      "filename": "src/app/update-tag-test/page.tsx"
+    }
+  },
+  "edge": {}
+}
