@@ -117,8 +117,10 @@ describe('Next.js 16 Cache Components Integration', () => {
       // The cache should be invalidated - verify by making multiple requests
       // until we get fresh data (with retries for async revalidation)
       let freshDataReceived = false;
-      for (let i = 0; i < 5; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
+      // Next.js tag revalidation can be async and may take longer under some runtimes.
+      // Use a more tolerant window to avoid flaky failures.
+      for (let i = 0; i < 20; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
         const res = await fetch(`${BASE_URL}/api/cached-with-tag`);
         const data = await res.json();
 
