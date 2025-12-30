@@ -1,0 +1,216 @@
+{
+  "node": {
+    "00ead061038e76964ddac3e903ec04ee4c488ecb0c": {
+      "workers": {
+        "app/cache-lab/cachelife-short/page": {
+          "moduleId": 63136,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "src/app/cache-lab/cachelife-short/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/cachelife-short/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/cachelife-short/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_1"
+    },
+    "8080296a5685f8a1e13bb8242e349f1e7f18b74cbe": {
+      "workers": {
+        "app/cache-lab/cachelife-short/page": {
+          "moduleId": 63136,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_CACHE_0",
+          "filename": "src/app/cache-lab/cachelife-short/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/cachelife-short/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/cachelife-short/page.tsx",
+      "exportedName": "$$RSC_SERVER_CACHE_0"
+    },
+    "00042eb364d8e8734a7420c1c6d7662e0e87e97d76": {
+      "workers": {
+        "app/cache-lab/runtime-data-suspense/page": {
+          "moduleId": 88271,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_2",
+          "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/runtime-data-suspense/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_2"
+    },
+    "00d5f4c1993e00dcf7ec6b7422db8e43678678f788": {
+      "workers": {
+        "app/cache-lab/runtime-data-suspense/page": {
+          "moduleId": 88271,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/runtime-data-suspense/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_1"
+    },
+    "4027c0314d03e756922a2ba5d7a2e64db3b52253bc": {
+      "workers": {
+        "app/cache-lab/runtime-data-suspense/page": {
+          "moduleId": 88271,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_0",
+          "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/runtime-data-suspense/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_0"
+    },
+    "c0d6801487e237ea461d9df09739dea853e191b6d6": {
+      "workers": {
+        "app/cache-lab/runtime-data-suspense/page": {
+          "moduleId": 88271,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_CACHE_3",
+          "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/runtime-data-suspense/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx",
+      "exportedName": "$$RSC_SERVER_CACHE_3"
+    },
+    "00ffbc1eac92f9aa36c3bc0a7c6ab396c7debf62f7": {
+      "workers": {
+        "app/cache-lab/stale-while-revalidate/page": {
+          "moduleId": 338,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "src/app/cache-lab/stale-while-revalidate/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/stale-while-revalidate/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/stale-while-revalidate/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_1"
+    },
+    "80e210155e776806a84b22fa0521e9db1719b1e312": {
+      "workers": {
+        "app/cache-lab/stale-while-revalidate/page": {
+          "moduleId": 338,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_CACHE_0",
+          "filename": "src/app/cache-lab/stale-while-revalidate/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/stale-while-revalidate/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/stale-while-revalidate/page.tsx",
+      "exportedName": "$$RSC_SERVER_CACHE_0"
+    },
+    "0032af64daedb2cb8e6e83c13777aae9e80a0c5d98": {
+      "workers": {
+        "app/cache-lab/tag-invalidation/page": {
+          "moduleId": 96245,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_2",
+          "filename": "src/app/cache-lab/tag-invalidation/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/tag-invalidation/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/tag-invalidation/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_2"
+    },
+    "005287a4d7e46263feb8bbc5acdfa986fbc28c7096": {
+      "workers": {
+        "app/cache-lab/tag-invalidation/page": {
+          "moduleId": 96245,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "src/app/cache-lab/tag-invalidation/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/tag-invalidation/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/tag-invalidation/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_1"
+    },
+    "806a3c4672f19fc778639f0cdb2a6e2b75d36687a3": {
+      "workers": {
+        "app/cache-lab/tag-invalidation/page": {
+          "moduleId": 96245,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_CACHE_0",
+          "filename": "src/app/cache-lab/tag-invalidation/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/tag-invalidation/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/tag-invalidation/page.tsx",
+      "exportedName": "$$RSC_SERVER_CACHE_0"
+    },
+    "0095926eb70915e77b0d8c3a706af3ffb78a553f13": {
+      "workers": {
+        "app/cache-lab/use-cache-nondeterministic/page": {
+          "moduleId": 45450,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/use-cache-nondeterministic/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_1"
+    },
+    "80f2aa6aa18ec7fc314fb0b0f836afb4d043fc4448": {
+      "workers": {
+        "app/cache-lab/use-cache-nondeterministic/page": {
+          "moduleId": 45450,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_CACHE_0",
+          "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/use-cache-nondeterministic/page": "rsc"
+      },
+      "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx",
+      "exportedName": "$$RSC_SERVER_CACHE_0"
+    },
+    "004869f27e547417bfc9d9b763cc4c2ef3497f1cdb": {
+      "workers": {
+        "app/update-tag-test/page": {
+          "moduleId": 99746,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_0",
+          "filename": "src/app/update-tag-test/page.tsx"
+        }
+      },
+      "layer": {
+        "app/update-tag-test/page": "rsc"
+      },
+      "filename": "src/app/update-tag-test/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_0"
+    }
+  },
+  "edge": {},
+  "encryptionKey": "Ks/vf1i8CWPjmzuQnBeJjuxzsklqqJTvHK19JxjIYrM="
+}

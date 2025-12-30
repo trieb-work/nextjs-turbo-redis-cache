@@ -1,0 +1,35 @@
+{
+  "node": {
+    "0077e27b37bde3c1c1d900892b48bd04ced047183a": {
+      "workers": {
+        "app/cache-lab/use-cache-nondeterministic/page": {
+          "moduleId": "[project]/.next-internal/server/app/cache-lab/use-cache-nondeterministic/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/cache-lab/use-cache-nondeterministic/page.tsx [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/use-cache-nondeterministic/page": "rsc"
+      },
+      "exportedName": "$$RSC_SERVER_ACTION_1",
+      "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx"
+    },
+    "80f6d5727a3e66e295dd6946c832ab40c7b6ae9de6": {
+      "workers": {
+        "app/cache-lab/use-cache-nondeterministic/page": {
+          "moduleId": "[project]/.next-internal/server/app/cache-lab/use-cache-nondeterministic/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/cache-lab/use-cache-nondeterministic/page.tsx [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_CACHE_0",
+          "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/use-cache-nondeterministic/page": "rsc"
+      },
+      "exportedName": "$$RSC_SERVER_CACHE_0",
+      "filename": "src/app/cache-lab/use-cache-nondeterministic/page.tsx"
+    }
+  },
+  "edge": {}
+}

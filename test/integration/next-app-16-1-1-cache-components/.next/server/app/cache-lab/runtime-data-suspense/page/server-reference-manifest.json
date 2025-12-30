@@ -1,0 +1,65 @@
+{
+  "node": {
+    "00042eb364d8e8734a7420c1c6d7662e0e87e97d76": {
+      "workers": {
+        "app/cache-lab/runtime-data-suspense/page": {
+          "moduleId": 88271,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_2",
+          "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/runtime-data-suspense/page": "rsc"
+      },
+      "exportedName": "$$RSC_SERVER_ACTION_2",
+      "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+    },
+    "00d5f4c1993e00dcf7ec6b7422db8e43678678f788": {
+      "workers": {
+        "app/cache-lab/runtime-data-suspense/page": {
+          "moduleId": 88271,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/runtime-data-suspense/page": "rsc"
+      },
+      "exportedName": "$$RSC_SERVER_ACTION_1",
+      "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+    },
+    "4027c0314d03e756922a2ba5d7a2e64db3b52253bc": {
+      "workers": {
+        "app/cache-lab/runtime-data-suspense/page": {
+          "moduleId": 88271,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_0",
+          "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/runtime-data-suspense/page": "rsc"
+      },
+      "exportedName": "$$RSC_SERVER_ACTION_0",
+      "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+    },
+    "c0d6801487e237ea461d9df09739dea853e191b6d6": {
+      "workers": {
+        "app/cache-lab/runtime-data-suspense/page": {
+          "moduleId": 88271,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_CACHE_3",
+          "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/runtime-data-suspense/page": "rsc"
+      },
+      "exportedName": "$$RSC_SERVER_CACHE_3",
+      "filename": "src/app/cache-lab/runtime-data-suspense/page.tsx"
+    }
+  },
+  "edge": {}
+}

@@ -1,0 +1,8 @@
+{
+  "/cache-lab/runtime-data-suspense/page": "app/cache-lab/runtime-data-suspense/page.js",
+  "/cache-lab/stale-while-revalidate/page": "app/cache-lab/stale-while-revalidate/page.js",
+  "/cache-lab/tag-invalidation/page": "app/cache-lab/tag-invalidation/page.js",
+  "/cache-lab/use-cache-nondeterministic/page": "app/cache-lab/use-cache-nondeterministic/page.js",
+  "/page": "app/page.js",
+  "/update-tag-test/page": "app/update-tag-test/page.js"
+}

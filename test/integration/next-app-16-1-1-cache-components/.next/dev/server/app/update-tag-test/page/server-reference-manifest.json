@@ -1,0 +1,20 @@
+{
+  "node": {
+    "00d21c94c2510bc52eb73f9ea0147fa80108451138": {
+      "workers": {
+        "app/update-tag-test/page": {
+          "moduleId": "[project]/.next-internal/server/app/update-tag-test/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/update-tag-test/page.tsx [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_0",
+          "filename": "src/app/update-tag-test/page.tsx"
+        }
+      },
+      "layer": {
+        "app/update-tag-test/page": "rsc"
+      },
+      "exportedName": "$$RSC_SERVER_ACTION_0",
+      "filename": "src/app/update-tag-test/page.tsx"
+    }
+  },
+  "edge": {}
+}

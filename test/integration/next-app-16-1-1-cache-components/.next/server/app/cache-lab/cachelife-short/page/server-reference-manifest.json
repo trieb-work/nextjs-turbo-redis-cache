@@ -1,0 +1,35 @@
+{
+  "node": {
+    "00ead061038e76964ddac3e903ec04ee4c488ecb0c": {
+      "workers": {
+        "app/cache-lab/cachelife-short/page": {
+          "moduleId": 63136,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "src/app/cache-lab/cachelife-short/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/cachelife-short/page": "rsc"
+      },
+      "exportedName": "$$RSC_SERVER_ACTION_1",
+      "filename": "src/app/cache-lab/cachelife-short/page.tsx"
+    },
+    "8080296a5685f8a1e13bb8242e349f1e7f18b74cbe": {
+      "workers": {
+        "app/cache-lab/cachelife-short/page": {
+          "moduleId": 63136,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_CACHE_0",
+          "filename": "src/app/cache-lab/cachelife-short/page.tsx"
+        }
+      },
+      "layer": {
+        "app/cache-lab/cachelife-short/page": "rsc"
+      },
+      "exportedName": "$$RSC_SERVER_CACHE_0",
+      "filename": "src/app/cache-lab/cachelife-short/page.tsx"
+    }
+  },
+  "edge": {}
+}
