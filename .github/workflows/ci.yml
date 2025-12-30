@@ -86,10 +86,9 @@ jobs:
         if: startsWith(matrix.next-test-app, 'next-app-16')
         run: pnpm test:e2e
         env:
-          PLAYWRIGHT_BASE_URL: http://localhost:3055
+          PLAYWRIGHT_BASE_URL: http://localhost:3101
 
       - name: Code Coverage Comments
-      # only run for pull requests from this repository - so no problems for external PRs
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: kcjpop/coverage-comments@v2.2
         with:
