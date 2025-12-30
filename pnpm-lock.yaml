@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       next:
-        specifier: '>=15.0.3 <= 16.0.3'
+        specifier: '>=15.0.3 <16.2.0'
         version: 15.0.3(@playwright/test@1.56.1)(react-dom@19.0.0-rc-66855b96-20241106(react@18.3.1))(react@18.3.1)
     devDependencies:
       '@commitlint/cli':
@@ -2202,6 +2202,7 @@ packages:
   next@15.0.3:
     resolution: {integrity: sha512-ontCbCRKJUIoivAdGB34yCaOcPgYXr9AAkV/IwqFfWWTXEPUgLYkSkqBhIk9KK7gGmgjc64B+RdoeIDM13Irnw==}
     engines: {node: ^18.18.0 || ^19.8.0 || >= 20.0.0}
+    deprecated: This version has a security vulnerability. Please upgrade to a patched version. See https://nextjs.org/blog/CVE-2025-66478 for more details.
     hasBin: true
     peerDependencies:
       '@opentelemetry/api': ^1.1.0
@@ -5748,7 +5749,7 @@ snapshots:
     dependencies:
       color: 4.2.3
       detect-libc: 2.0.3
-      semver: 7.7.1
+      semver: 7.7.3
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.33.5
       '@img/sharp-darwin-x64': 0.33.5

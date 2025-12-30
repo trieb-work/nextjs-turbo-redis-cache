@@ -252,6 +252,71 @@ The integration tests will start a Next.js server and test the caching handler. 
 
 Integration tests may have dependencies between test cases, so individual test failures should be evaluated in the context of the full test suite rather than in isolation.
 
+## Cache Components handler (Next.js 16+)
+
+This package can be used as a Cache Components handler (Node.js runtime) for Next.js apps that enable Cache Components.
+
+### Enable Cache Components + cache handler
+
+In your Next.js app, enable Cache Components and point `cacheHandlers.default` to a module that exports the handler instance:
+
+```ts
+// next.config.ts
+import type { NextConfig } from 'next';
+
+const nextConfig: NextConfig = {
+  cacheComponents: true,
+  cacheHandlers: {
+    default: require.resolve('./cache-handler.js'),
+  },
+};
+
+export default nextConfig;
+```
+
+```js
+// cache-handler.js
+const { redisCacheHandler } = require('@trieb.work/nextjs-turbo-redis-cache');
+
+module.exports = redisCacheHandler;
+```
+
+### Required environment variables
+
+- `REDIS_URL` (recommended): e.g. `redis://localhost:6379`
+
+Optional:
+
+- `VERCEL_URL`: used as a key prefix for multi-tenant isolation (also useful in tests). If unset, a default prefix is used.
+- `REDIS_COMMAND_TIMEOUT_MS`: timeout (ms) for Redis commands used by the handler.
+
+### Local manual testing (Cache Lab)
+
+This repo includes a dedicated Next.js Cache Components integration app with real pages for manual testing.
+
+1. Start Redis locally.
+1. Install + start the Cache Components test app:
+
+```bash
+pnpm -C test/integration/next-app-16-0-3-cache-components install
+pnpm -C test/integration/next-app-16-0-3-cache-components dev
+```
+
+Then open the Cache Lab pages:
+
+- `/cache-lab`
+- `/cache-lab/use-cache-nondeterministic`
+- `/cache-lab/cachelife-short`
+- `/cache-lab/tag-invalidation`
+- `/cache-lab/stale-while-revalidate`
+- `/cache-lab/runtime-data-suspense`
+
+To run the Playwright E2E tests against a running dev server:
+
+```bash
+PLAYWRIGHT_BASE_URL=http://localhost:3001 pnpm test:e2e
+```
+
 ## Some words on nextjs caching internals
 
 Nextjs will use different caching objects for different pages and api routes. Currently supported are kind: APP_ROUTE and APP_PAGE.
