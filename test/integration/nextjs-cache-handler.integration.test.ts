@@ -596,159 +596,150 @@ describe('Next.js Turbo Redis Cache Integration', () => {
   });
 
   describe('should have the correct caching behavior for pages', () => {
-    // The cacheComponents test app uses a static no-fetch page for
-    // compatibility with Next 16 cacheComponents rules. The no-fetch
-    // page-caching tests are therefore only run for the legacy
-    // incremental cache apps, not for the cacheComponents app.
-    if (!NEXT_TEST_APP.includes('cache-components')) {
-      describe('Without any fetch requests inside the page', () => {
-        describe('With default page configuration for revalidate and dynamic values', () => {
-          let timestamp1: string | undefined;
+    describe('Without any fetch requests inside the page', () => {
+      describe('With default page configuration for revalidate and dynamic values', () => {
+        let timestamp1: string | undefined;
 
-          it('Two parallel requests should return the same timestamp (because requests are deduplicated)', async () => {
-            // First request (should increment counter)
-            const [pageRes1, pageRes2] = await Promise.all([
-              fetch(NEXT_START_URL + '/pages/no-fetch/default-page'),
-              fetch(NEXT_START_URL + '/pages/no-fetch/default-page'),
-            ]);
+        it('Two parallel requests should return the same timestamp (because requests are deduplicated)', async () => {
+          // First request (should increment counter)
+          const [pageRes1, pageRes2] = await Promise.all([
+            fetch(NEXT_START_URL + '/pages/no-fetch/default-page'),
+            fetch(NEXT_START_URL + '/pages/no-fetch/default-page'),
+          ]);
 
-            const pageText1 = await pageRes1.text();
-            timestamp1 = pageText1.match(/Timestamp: <!-- -->(\d+)/)?.[1];
-            expect(timestamp1).toBeDefined();
+          const pageText1 = await pageRes1.text();
+          timestamp1 = pageText1.match(/Timestamp: <!-- -->(\d+)/)?.[1];
+          expect(timestamp1).toBeDefined();
 
-            const pageText2 = await pageRes2.text();
-            const timestamp2 = pageText2.match(/Timestamp: <!-- -->(\d+)/)?.[1];
-            expect(timestamp2).toBeDefined();
-            expect(timestamp1).toBe(timestamp2);
-          });
+          const pageText2 = await pageRes2.text();
+          const timestamp2 = pageText2.match(/Timestamp: <!-- -->(\d+)/)?.[1];
+          expect(timestamp2).toBeDefined();
+          expect(timestamp1).toBe(timestamp2);
+        });
 
-          it('Redis should have a key for the page which should have a TTL set to 28 days (2 * 14 days default revalidate time)', async () => {
-            // check Redis keys
-            const ttl = await redisClient.ttl(
-              process.env.VERCEL_URL + '/pages/no-fetch/default-page',
-            );
-            // 14 days is default revalidate for pages -> expiration time is 2 * revalidate time -> -10 seconds for testing offset stability
-            expect(ttl).toBeGreaterThan(2 * 14 * 24 * 60 * 60 - 30);
-          });
+        it('Redis should have a key for the page which should have a TTL set to 28 days (2 * 14 days default revalidate time)', async () => {
+          // check Redis keys
+          const ttl = await redisClient.ttl(
+            process.env.VERCEL_URL + '/pages/no-fetch/default-page',
+          );
+          // 14 days is default revalidate for pages -> expiration time is 2 * revalidate time -> -10 seconds for testing offset stability
+          expect(ttl).toBeGreaterThan(2 * 14 * 24 * 60 * 60 - 30);
+        });
 
-          it('The data in the redis key should match the expected format', async () => {
-            const data = (await redisClient.get(
-              process.env.VERCEL_URL + '/pages/no-fetch/default-page',
-            )) as string;
-            expect(data).toBeDefined();
-            const cacheEntry: CacheEntry = JSON.parse(data);
+        it('The data in the redis key should match the expected format', async () => {
+          const data = (await redisClient.get(
+            process.env.VERCEL_URL + '/pages/no-fetch/default-page',
+          )) as string;
+          expect(data).toBeDefined();
+          const cacheEntry: CacheEntry = JSON.parse(data);
 
-            // The format should be as expected. We intentionally do not assert on an optional status field here
-            // so that different Next.js versions (which may include or omit it) are both supported.
-            expect(cacheEntry).toMatchObject({
-              value: {
-                kind: 'APP_PAGE',
-                html: expect.any(String),
-                rscData: {
-                  $binary: expect.any(String),
-                },
-                headers: {
-                  'x-nextjs-stale-time': expect.any(String),
-                  'x-next-cache-tags':
-                    '_N_T_/layout,_N_T_/pages/layout,_N_T_/pages/no-fetch/layout,_N_T_/pages/no-fetch/default-page/layout,_N_T_/pages/no-fetch/default-page/page,_N_T_/pages/no-fetch/default-page',
-                },
+          // The format should be as expected. We intentionally do not assert on an optional status field here
+          // so that different Next.js versions (which may include or omit it) are both supported.
+          expect(cacheEntry).toMatchObject({
+            value: {
+              kind: 'APP_PAGE',
+              html: expect.any(String),
+              rscData: {
+                $binary: expect.any(String),
               },
-              lastModified: expect.any(Number),
-              tags: [
-                '_N_T_/layout',
-                '_N_T_/pages/layout',
-                '_N_T_/pages/no-fetch/layout',
-                '_N_T_/pages/no-fetch/default-page/layout',
-                '_N_T_/pages/no-fetch/default-page/page',
-                '_N_T_/pages/no-fetch/default-page',
-              ],
-            });
-          });
-
-          if (process.env.SKIP_OPTIONAL_LONG_RUNNER_TESTS !== 'true') {
-            it('A new request after 3 seconds should return the same timestamp (because the page was cached in in-memory cache)', async () => {
-              await delay(3_000);
-              const pageRes3 = await fetch(
-                NEXT_START_URL + '/pages/no-fetch/default-page',
-              );
-              const pageText3 = await pageRes3.text();
-              const timestamp3 = pageText3.match(
-                /Timestamp: <!-- -->(\d+)/,
-              )?.[1];
-              expect(timestamp3).toBeDefined();
-              expect(timestamp1).toBe(timestamp3);
-            });
-
-            it('A new request after 11 seconds should return the same timestamp (because the page was cached in redis cache)', async () => {
-              await delay(11_000);
-              const pageRes4 = await fetch(
-                NEXT_START_URL + '/pages/no-fetch/default-page',
-              );
-              const pageText4 = await pageRes4.text();
-              const timestamp4 = pageText4.match(
-                /Timestamp: <!-- -->(\d+)/,
-              )?.[1];
-              expect(timestamp4).toBeDefined();
-              expect(timestamp1).toBe(timestamp4);
-            }, 15_000);
-          }
-
-          it('A request to revalidatePage API should remove the page from redis (string and hashmap)', async () => {
-            const revalidateRes = await fetch(
-              NEXT_START_URL +
-                '/api/revalidatePath?path=/pages/no-fetch/default-page',
-            );
-            const revalidateResJson: any = await revalidateRes.json();
-            expect(revalidateResJson.success).toBe(true);
-            await delay(REDIS_BACKGROUND_SYNC_DELAY);
-
-            // check Redis keys
-            const keys = await redisClient.keys(
-              process.env.VERCEL_URL + '/pages/no-fetch/default-page',
-            );
-            expect(keys.length).toBe(0);
-
-            const hashmap = await redisClient.hGet(
-              process.env.VERCEL_URL + '__sharedTags__',
-              '/pages/no-fetch/default-page',
-            );
-            expect(hashmap).toBeNull();
-          });
-
-          it('A new request after the revalidation should return a new timestamp (because the page was recreated)', async () => {
-            const pageRes4 = await fetch(
-              NEXT_START_URL + '/pages/no-fetch/default-page',
-            );
-            const pageText4 = await pageRes4.text();
-            const timestamp4 = pageText4.match(/Timestamp: <!-- -->(\d+)/)?.[1];
-            expect(timestamp4).toBeDefined();
-            expect(Number(timestamp4)).toBeGreaterThan(Number(timestamp1));
-          });
-
-          it('After the new request was made the redis key and hashmap should be set again', async () => {
-            // check Redis keys
-            await delay(REDIS_BACKGROUND_SYNC_DELAY);
-            const keys = await redisClient.keys(
-              process.env.VERCEL_URL + '/pages/no-fetch/default-page',
-            );
-            expect(keys.length).toBe(1);
-
-            const hashmap = (await redisClient.hGet(
-              process.env.VERCEL_URL + '__sharedTags__',
-              '/pages/no-fetch/default-page',
-            )) as string;
-            expect(JSON.parse(hashmap)).toEqual([
+              headers: {
+                'x-nextjs-stale-time': expect.any(String),
+                'x-next-cache-tags':
+                  '_N_T_/layout,_N_T_/pages/layout,_N_T_/pages/no-fetch/layout,_N_T_/pages/no-fetch/default-page/layout,_N_T_/pages/no-fetch/default-page/page,_N_T_/pages/no-fetch/default-page',
+              },
+            },
+            lastModified: expect.any(Number),
+            tags: [
               '_N_T_/layout',
               '_N_T_/pages/layout',
               '_N_T_/pages/no-fetch/layout',
               '_N_T_/pages/no-fetch/default-page/layout',
               '_N_T_/pages/no-fetch/default-page/page',
               '_N_T_/pages/no-fetch/default-page',
-            ]);
+            ],
           });
         });
+
+        if (process.env.SKIP_OPTIONAL_LONG_RUNNER_TESTS !== 'true') {
+          it('A new request after 3 seconds should return the same timestamp (because the page was cached in in-memory cache)', async () => {
+            await delay(3_000);
+            const pageRes3 = await fetch(
+              NEXT_START_URL + '/pages/no-fetch/default-page',
+            );
+            const pageText3 = await pageRes3.text();
+            const timestamp3 = pageText3.match(/Timestamp: <!-- -->(\d+)/)?.[1];
+            expect(timestamp3).toBeDefined();
+            expect(timestamp1).toBe(timestamp3);
+          });
+
+          it('A new request after 11 seconds should return the same timestamp (because the page was cached in redis cache)', async () => {
+            await delay(11_000);
+            const pageRes4 = await fetch(
+              NEXT_START_URL + '/pages/no-fetch/default-page',
+            );
+            const pageText4 = await pageRes4.text();
+            const timestamp4 = pageText4.match(/Timestamp: <!-- -->(\d+)/)?.[1];
+            expect(timestamp4).toBeDefined();
+            expect(timestamp1).toBe(timestamp4);
+          }, 15_000);
+        }
+
+        it('A request to revalidatePage API should remove the page from redis (string and hashmap)', async () => {
+          const revalidateRes = await fetch(
+            NEXT_START_URL +
+              '/api/revalidatePath?path=/pages/no-fetch/default-page',
+          );
+          const revalidateResJson: any = await revalidateRes.json();
+          expect(revalidateResJson.success).toBe(true);
+          await delay(REDIS_BACKGROUND_SYNC_DELAY);
+
+          // check Redis keys
+          const keys = await redisClient.keys(
+            process.env.VERCEL_URL + '/pages/no-fetch/default-page',
+          );
+          expect(keys.length).toBe(0);
+
+          const hashmap = await redisClient.hGet(
+            process.env.VERCEL_URL + '__sharedTags__',
+            '/pages/no-fetch/default-page',
+          );
+          expect(hashmap).toBeNull();
+        });
+
+        it('A new request after the revalidation should return a new timestamp (because the page was recreated)', async () => {
+          const pageRes4 = await fetch(
+            NEXT_START_URL + '/pages/no-fetch/default-page',
+          );
+          const pageText4 = await pageRes4.text();
+          const timestamp4 = pageText4.match(/Timestamp: <!-- -->(\d+)/)?.[1];
+          expect(timestamp4).toBeDefined();
+          expect(Number(timestamp4)).toBeGreaterThan(Number(timestamp1));
+        });
+
+        it('After the new request was made the redis key and hashmap should be set again', async () => {
+          // check Redis keys
+          await delay(REDIS_BACKGROUND_SYNC_DELAY);
+          const keys = await redisClient.keys(
+            process.env.VERCEL_URL + '/pages/no-fetch/default-page',
+          );
+          expect(keys.length).toBe(1);
+
+          const hashmap = (await redisClient.hGet(
+            process.env.VERCEL_URL + '__sharedTags__',
+            '/pages/no-fetch/default-page',
+          )) as string;
+          expect(JSON.parse(hashmap)).toEqual([
+            '_N_T_/layout',
+            '_N_T_/pages/layout',
+            '_N_T_/pages/no-fetch/layout',
+            '_N_T_/pages/no-fetch/default-page/layout',
+            '_N_T_/pages/no-fetch/default-page/page',
+            '_N_T_/pages/no-fetch/default-page',
+          ]);
+        });
       });
-    }
+    });
+
     // describe('With a cached static fetch request inside a page', () => {
     //   // TODO: implement test for `test/integration/next-app/src/app/pages/cached-static-fetch`
     // });
