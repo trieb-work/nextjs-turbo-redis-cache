@@ -1,3 +1,12 @@
+# [1.11.0-beta.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0...v1.11.0-beta.1) (2025-12-30)
+
+
+### Features
+
+* add Next.js 16.0.3 integration test environment and build artifacts for cache components ([f2b3088](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/f2b3088c5845865cb69e5ee691cd09ede5735119))
+* add Next.js 16.0.3 integration test environment and build artifacts for cache components ([01fb22a](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/01fb22a9ae0fbbb6fba44bb225ab46fdcc009a85))
+* cache components lab + Next.js 16.1.x support ([be2e9b3](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/be2e9b3b7af441df112fc83483994877a4415443))
+
 # [1.10.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.9.1...v1.10.0) (2025-12-27)
 
 
