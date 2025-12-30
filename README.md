@@ -258,6 +258,12 @@ This package can be used as a Cache Components handler (Node.js runtime) for Nex
 
 ### Enable Cache Components + cache handler
 
+Install the package in your Next.js app:
+
+```bash
+pnpm add @trieb.work/nextjs-turbo-redis-cache redis
+```
+
 In your Next.js app, enable Cache Components and point `cacheHandlers.default` to a module that exports the handler instance:
 
 ```ts
@@ -279,6 +285,15 @@ export default nextConfig;
 const { redisCacheHandler } = require('@trieb.work/nextjs-turbo-redis-cache');
 
 module.exports = redisCacheHandler;
+```
+
+If you prefer ESM:
+
+```js
+// cache-handler.js
+import { redisCacheHandler } from '@trieb.work/nextjs-turbo-redis-cache';
+
+export default redisCacheHandler;
 ```
 
 ### Required environment variables
