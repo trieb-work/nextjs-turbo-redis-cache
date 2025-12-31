@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///Users/jannikzinkl/Documents/git/nextjs-turbo-redis-cache/test/integration/next-app-16-1-1-cache-components/src/app/update-tag-test/page.tsx"],"sourcesContent":["import { updateTag } from 'next/cache';\n\nlet clicks = 0;\n\nasync function increment() {\n  'use server';\n\n  clicks++;\n  updateTag('update-tag-test');\n}\n\nexport default function UpdateTagTestPage() {\n  return (\n    <main style={{ padding: 40, fontFamily: 'system-ui, sans-serif' }}>\n      <h1>UpdateTag Test</h1>\n      <form action={increment}>\n        <p data-testid=\"clicks\">Clicks: {clicks}</p>\n        <button type=\"submit\">Increment</button>\n      </form>\n    </main>\n  );\n}\n"],"names":[],"mappings":";;;;;;;;+HAAA;;;;AAEA,IAAI,SAAS;MAEb,wBAAA,eAAe;IAGb;IACA,IAAA,2SAAS,EAAC;AACZ;gZALA;IAAe,YAAf;AAOe,SAAS;IACtB,qBACE,+YAAC;QAAK,OAAO;YAAE,SAAS;YAAI,YAAY;QAAwB;;0BAC9D,+YAAC;0BAAG;;;;;;0BACJ,+YAAC;gBAAK,QAAQ;;kCACZ,+YAAC;wBAAE,eAAY;;4BAAS;4BAAS;;;;;;;kCACjC,+YAAC;wBAAO,MAAK;kCAAS;;;;;;;;;;;;;;;;;;AAI9B"}},
-    {"offset": {"line": 76, "column": 0}, "map": {"version":3,"sources":["file:///Users/jannikzinkl/Documents/git/nextjs-turbo-redis-cache/test/integration/next-app-16-1-1-cache-components/.next-internal/server/app/update-tag-test/page/actions.js%20%28server%20actions%20loader%29"],"sourcesContent":["export {$$RSC_SERVER_ACTION_0 as '00d21c94c2510bc52eb73f9ea0147fa80108451138'} from 'ACTIONS_MODULE0'\n"],"names":[],"mappings":";AAAA"}}]
-}
