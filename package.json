@@ -18,6 +18,7 @@
     "test:ui": "vitest --ui  --config vite.config.ts",
     "test:unit": "vitest --config vite.config.ts src/**/*.test.ts src/**/*.test.tsx",
     "test:integration": "vitest --config vite.config.ts ./test/integration/nextjs-cache-handler.integration.test.ts",
+    "test:cache-components": "vitest --run --config vitest.cache-components.config.ts",
     "prepare": "./scripts/prepare.sh",
     "test:browser": "vitest --config=vitest.browser.config.ts",
     "test:e2e": "playwright test"
@@ -91,7 +92,7 @@
     "vitest": "^4.0.13"
   },
   "peerDependencies": {
-    "next": ">=15.0.3 <= 16.1.1",
+    "next": ">=15.0.3 <16.2.0",
     "redis": "4.7.0"
   },
   "packageManager": "pnpm@9.15.9+sha512.68046141893c66fad01c079231128e9afb89ef87e2691d69e4d40eee228988295fd4682181bae55b58418c3a253bde65a505ec7c5f9403ece5cc3cd37dcf2531"
