@@ -48,6 +48,19 @@ jobs:
           NPM_CONFIG_PROVENANCE: 'true'
         run: pnpm exec semantic-release
 
+      - name: Check if current version is already published
+        id: version-check
+        env:
+          NPM_PACKAGE_NAME: '@trieb.work/nextjs-turbo-redis-cache'
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if npm view "$NPM_PACKAGE_NAME@$VERSION" version --registry https://registry.npmjs.org/ >/dev/null 2>&1; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Exchange GitHub OIDC token for npm token
         id: npm-oidc
         env:
@@ -116,6 +129,7 @@ jobs:
           NODE
 
       - name: Publish to npm (Trusted Publishing)
+        if: steps.version-check.outputs.should_publish == 'true'
         env:
           NPM_CONFIG_PROVENANCE: 'true'
           NPM_DIST_TAG: ${{ github.ref_name == 'beta' && 'beta' || 'latest' }}
