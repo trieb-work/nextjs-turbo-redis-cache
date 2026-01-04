@@ -30,6 +30,12 @@ export function redisErrorHandler<T extends Promise<unknown>>(
   }) as T;
 }
 
+function isAbortError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const err = error as { name?: unknown; code?: unknown };
+  return err.name === 'AbortError' || err.code === 'ABORT_ERR';
+}
+
 if (process.env.DEBUG_CACHE_HANDLER) {
   // This is a test to check if the event loop is lagging. If it lags, increase CPU of container
   setInterval(() => {
@@ -378,6 +384,16 @@ export default class RedisStringsHandler {
       const clientGet = this.redisGetDeduplication
         ? this.deduplicatedRedisGet(key)
         : this.redisGet;
+
+      const redisGetOperation = clientGet(
+        commandOptions({ signal: AbortSignal.timeout(this.getTimeoutMs) }),
+        this.keyPrefix + key,
+      ).catch((error) => {
+        if (isAbortError(error)) {
+          return null;
+        }
+        throw error;
+      });
       const serializedCacheEntry = await redisErrorHandler(
         'RedisStringsHandler.get(), operation: get' +
           (this.redisGetDeduplication ? 'deduplicated' : '') +
@@ -387,10 +403,7 @@ export default class RedisStringsHandler {
           this.keyPrefix +
           ' ' +
           key,
-        clientGet(
-          commandOptions({ signal: AbortSignal.timeout(this.getTimeoutMs) }),
-          this.keyPrefix + key,
-        ),
+        redisGetOperation,
       );
 
       debug(
