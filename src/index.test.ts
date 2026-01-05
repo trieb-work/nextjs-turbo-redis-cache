@@ -1,7 +1,13 @@
-import { describe, it } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
-describe('Example Test', () => {
-  it('should work correctly', () => {
-    console.log('TODO tests');
+import type { CreateRedisStringsHandlerOptions } from './index';
+
+describe('Public exports', () => {
+  it('exports CreateRedisStringsHandlerOptions type', () => {
+    const _typeCheck: CreateRedisStringsHandlerOptions = {
+      keyPrefix: 'test',
+    };
+
+    expect(_typeCheck.keyPrefix).toBe('test');
   });
 });
