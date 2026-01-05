@@ -25,12 +25,15 @@ jobs:
       pull-requests: write # Grant write access to pull request comments
     strategy:
       matrix:
-        next-test-app:
-          - next-app-15-0-3
-          - next-app-15-3-2
-          - next-app-15-4-7
-          - next-app-16-0-3
-          - next-app-16-1-1
+        include:
+          - next-test-app: next-app-15-0-3
+            run-cache-components: false
+          - next-test-app: next-app-15-3-2
+            run-cache-components: false
+          - next-test-app: next-app-15-4-7
+            run-cache-components: false
+          - next-test-app: next-app-16-0-3
+            run-cache-components: true
 
     steps:
       - name: Checkout code
@@ -78,18 +81,29 @@ jobs:
           SKIP_BUILD: true
           NEXT_TEST_APP: ${{ matrix.next-test-app }}
 
-      - name: Install Playwright browsers (Next 16 only)
-        if: startsWith(matrix.next-test-app, 'next-app-16')
+      - name: Install Cache Components Integration Test Project
+        if: matrix.run-cache-components
+        run: cd test/integration/next-app-16-1-1-cache-components && pnpm install
+
+      - name: Build Cache Components Integration Test Project
+        if: matrix.run-cache-components
+        run: cd test/integration/next-app-16-1-1-cache-components && pnpm build
+
+      - name: Run Cache Components integration tests
+        if: matrix.run-cache-components
+        run: pnpm test:cache-components
+
+      - name: Install Playwright browsers
+        if: matrix.run-cache-components
         run: pnpm exec playwright install --with-deps
 
-      - name: Run Playwright E2E tests (Next 16 only)
-        if: startsWith(matrix.next-test-app, 'next-app-16')
+      - name: Run Playwright E2E tests
+        if: matrix.run-cache-components
         run: pnpm test:e2e
         env:
-          PLAYWRIGHT_BASE_URL: http://localhost:3055
+          PLAYWRIGHT_BASE_URL: http://localhost:3101
 
       - name: Code Coverage Comments
-      # only run for pull requests from this repository - so no problems for external PRs
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: kcjpop/coverage-comments@v2.2
         with:

@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       next:
-        specifier: '>=15.0.3 <= 16.1.1'
+        specifier: '>=15.0.3 <16.2.0'
         version: 15.0.3(@playwright/test@1.56.1)(react-dom@19.0.0-rc-66855b96-20241106(react@18.3.1))(react@18.3.1)
     devDependencies:
       '@commitlint/cli':
