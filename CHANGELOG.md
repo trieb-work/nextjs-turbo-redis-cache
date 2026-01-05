@@ -1,3 +1,10 @@
+## [1.10.2](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.1...v1.10.2) (2026-01-05)
+
+
+### Bug Fixes
+
+* export CreateRedisStringsHandlerOptions type ([#66](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/66)) ([48df99f](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/48df99f5f348a464b8af58a0fa46187522aa4688))
+
 ## [1.10.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0...v1.10.1) (2025-12-31)
 
 
