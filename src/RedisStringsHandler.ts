@@ -190,16 +190,19 @@ export default class RedisStringsHandler {
             error,
             killContainerOnErrorCount++,
           );
-          setTimeout(
-            () =>
+          setTimeout(() => {
+            // Avoid overlapping connect() calls which can lead to
+            // "Socket already opened" errors when a reconnect is already
+            // in progress or the socket is still open.
+            if (!this.client.isOpen && !this.client.isReady) {
               this.client.connect().catch((error) => {
                 console.error(
                   'Failed to reconnect Redis client after connection loss:',
                   error,
                 );
-              }),
-            1000,
-          );
+              });
+            }
+          }, 1000);
           if (
             this.killContainerOnErrorThreshold > 0 &&
             killContainerOnErrorCount >= this.killContainerOnErrorThreshold
@@ -222,12 +225,9 @@ export default class RedisStringsHandler {
           .then(() => {
             debug('green', 'Redis client connected.');
           })
-          .catch(() => {
-            this.client.connect().catch((error) => {
-              console.error('Failed to connect Redis client:', error);
-              this.client.disconnect();
-              throw error;
-            });
+          .catch((error) => {
+            console.error('Failed to connect Redis client:', error);
+            throw error;
           });
       } catch (error: unknown) {
         console.error('Failed to initialize Redis client');
