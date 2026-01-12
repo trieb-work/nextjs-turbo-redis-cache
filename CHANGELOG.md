@@ -1,3 +1,10 @@
+## [1.10.3](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.2...v1.10.3) (2026-01-12)
+
+
+### Bug Fixes
+
+* avoid overlapping redis reconnects ([#58](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/58)) ([56e3465](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/56e3465669bcf07fa5267226a98977cbddd5ca3d))
+
 ## [1.10.2](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.1...v1.10.2) (2026-01-05)
 
 
