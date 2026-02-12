@@ -3,7 +3,6 @@
 [![npm version](https://img.shields.io/npm/v/@trieb.work/nextjs-turbo-redis-cache.svg)](https://www.npmjs.com/package/@trieb.work/nextjs-turbo-redis-cache)
 ![Turbo redis cache image](https://github.com/user-attachments/assets/4103191e-4f4d-4139-a519-0b5bfab3e8b4)
 
-
 The ultimate Redis caching solution for Next.js 15 and the app router. Built for production-ready, large-scale projects, it delivers unparalleled performance and efficiency with features tailored for high-traffic applications. This package has been created after extensibly testing the @neshca package and finding several major issues with it.
 
 Key Features:
@@ -29,8 +28,11 @@ Tested versions are:
 - Nextjs 15.4.7 + redis client 4.7.0
 - Nextjs 16.0.3 + redis client 4.7.0 (cacheComponents: false)
 - Nextjs 16.1.1 + redis client 4.7.0 (cacheComponents: false)
+- Nextjs 16.1.1 + redis client 4.7.0 (cacheComponents: true)
 
-Currently PPR, 'use cache', cacheLife and cacheTag are not tested. Use these operations with caution and your own risk. [Cache Components](https://nextjs.org/docs/app/getting-started/cache-components) support is in development.
+Currently PPR, 'use cache', cacheLife and cacheTag are not tested. Use these operations with caution and your own risk. [Cache Components](https://nextjs.org/docs/app/getting-started/cache-components) are supported experimentally (Next.js 16+).
+
+For Cache Components, see the "Cache Components handler (Next.js 16+)" section below.
 
 ## Getting started
 
@@ -216,6 +218,12 @@ To run all tests you can use the following command:
 pnpm build && pnpm test
 ```
 
+Folder layout / runners:
+
+- **Vitest** (unit + integration) lives in `src/**/*.test.ts(x)` and `test/**`.
+- **Playwright** (E2E) lives in `tests/**` (see `playwright.config.ts`).
+- `test/browser/**` contains Vitest tests that hit a running Next.js app over HTTP. Despite the folder name, this is not Playwright and does not use Vitest browser mode.
+
 ### Unit tests
 
 To run unit tests you can use the following command:
@@ -232,6 +240,14 @@ To run integration tests you can use the following command:
 pnpm build && pnpm test:integration
 ```
 
+### E2E tests (Playwright)
+
+To run Playwright tests (`tests/**`) you can use:
+
+```bash
+pnpm test:e2e
+```
+
 The integration tests will start a Next.js server and test the caching handler. You can modify testing behavior by setting the following environment variables:
 
 - SKIP_BUILD: If set to true, the integration tests will not build the Next.js app. Therefore the nextjs app needs to be built before running the tests. Or you execute the test once without skip build and the re-execute `pnpm test:integration` with skip build set to true.
@@ -239,6 +255,88 @@ The integration tests will start a Next.js server and test the caching handler. 
 - DEBUG_INTEGRATION: If set to true, the integration tests will print debug information of the test itself to the console.
 
 Integration tests may have dependencies between test cases, so individual test failures should be evaluated in the context of the full test suite rather than in isolation.
+
+## Cache Components handler (Next.js 16+)
+
+This package can be used as a Cache Components handler (Node.js runtime) for Next.js apps that enable Cache Components.
+
+This is experimental support and the Next.js Cache Components APIs may still change. We don't have a larger production project right now available to test this in real world conditions.
+
+### Enable Cache Components + cache handler
+
+Install the package in your Next.js app:
+
+```bash
+pnpm add @trieb.work/nextjs-turbo-redis-cache redis
+```
+
+In your Next.js app, enable Cache Components and point `cacheHandlers.default` to a module that exports the handler instance:
+
+```ts
+// next.config.ts
+import type { NextConfig } from 'next';
+
+const nextConfig: NextConfig = {
+  cacheComponents: true,
+  cacheHandlers: {
+    default: require.resolve('./cache-handler.js'),
+  },
+};
+
+export default nextConfig;
+```
+
+```js
+// cache-handler.js
+const { redisCacheHandler } = require('@trieb.work/nextjs-turbo-redis-cache');
+
+module.exports = redisCacheHandler;
+```
+
+If you prefer ESM:
+
+```js
+// cache-handler.js
+import { redisCacheHandler } from '@trieb.work/nextjs-turbo-redis-cache';
+
+export default redisCacheHandler;
+```
+
+### Required environment variables
+
+- `REDIS_URL` (recommended): e.g. `redis://localhost:6379`
+
+Optional:
+
+- `VERCEL_URL`: used as a key prefix for multi-tenant isolation (also useful in tests). If unset, a default prefix is used.
+- `REDIS_COMMAND_TIMEOUT_MS`: timeout (ms) for Redis commands used by the handler.
+
+### Local manual testing (Cache Lab)
+
+This repo includes a dedicated Next.js Cache Components integration app with real pages for manual testing.
+
+1. Start Redis locally.
+1. Install + start the Cache Components test app:
+
+```bash
+pnpm -C test/integration/next-app-16-1-1-cache-components install
+pnpm -C test/integration/next-app-16-1-1-cache-components dev
+```
+
+Then open the Cache Lab pages:
+
+- `/cache-lab`
+- `/cache-lab/use-cache-nondeterministic`
+- `/cache-lab/cachelife-short`
+- `/cache-lab/tag-invalidation`
+- `/cache-lab/stale-while-revalidate`
+- `/cache-lab/runtime-data-suspense`
+
+To run the Playwright E2E tests against a running dev server:
+
+```bash
+PLAYWRIGHT_BASE_URL=http://localhost:3101 pnpm test:e2e
+```
 
 ## Some words on nextjs caching internals
 

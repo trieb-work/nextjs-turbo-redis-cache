@@ -1,7 +1,10 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  cacheHandler: require.resolve('@trieb.work/nextjs-turbo-redis-cache'),
+  cacheComponents: true,
+  cacheHandlers: {
+    default: require.resolve('./cache-handler.js'),
+  },
   turbopack: {
     root: __dirname,
   },
