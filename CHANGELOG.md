@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.3...v1.11.0) (2026-02-16)
+
+
+### Features
+
+* release cache components ([#67](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/67)) ([815e66b](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/815e66bab21f58d77693cad2a9d73f95ff8e7d79))
+
 ## [1.10.3](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.2...v1.10.3) (2026-01-12)
 
 
