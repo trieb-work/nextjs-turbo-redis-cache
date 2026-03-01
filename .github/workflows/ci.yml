@@ -93,6 +93,10 @@ jobs:
         if: matrix.run-cache-components
         run: pnpm test:cache-components
 
+      - name: Run Redis kill/restart E2E test (cache-components)
+        if: matrix.run-cache-components
+        run: pnpm vitest --run --config vitest.cache-components.config.ts test/cache-components/redis-kill-reconnect.spec.ts
+
       - name: Install Playwright browsers
         if: matrix.run-cache-components
         run: pnpm exec playwright install --with-deps
