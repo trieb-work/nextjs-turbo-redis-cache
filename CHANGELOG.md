@@ -1,3 +1,16 @@
+# [1.12.0-beta.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.11.0...v1.12.0-beta.1) (2026-03-02)
+
+
+### Bug Fixes
+
+* **cache-components:** avoid reconnect connect() when socket already open ([a58e1c3](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/a58e1c35c03b7c161040f863577edb4f2af9f453))
+* **syncedmap:** prevent overlapping subscriber connect; add redis kill/reconnect test ([8b9975f](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/8b9975fdd7baef010a10fdf5b1564280eed403a0))
+
+
+### Features
+
+* robust redis kill/reconnect handling (beta) ([9bfe214](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/9bfe214be8d464bdbd536ed4789cb01ee242ff6d))
+
 # [1.11.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.3...v1.11.0) (2026-02-16)
 
 
