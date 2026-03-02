@@ -25,7 +25,7 @@ function runNode(script: string, timeoutMs = 120_000) {
   );
 }
 
-describe('cache components: redis kill/reconnect end-to-end', () => {
+describe('redis kill/reconnect end-to-end (both handlers)', () => {
   it('survives redis restart without Socket already opened', async () => {
     const script = path.join(__dirname, 'scripts', 'redis-kill-reconnect.ts');
 

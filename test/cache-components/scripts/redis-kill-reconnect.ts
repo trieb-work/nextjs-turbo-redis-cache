@@ -74,9 +74,15 @@ async function main() {
   process.env.REDIS_URL = `redis://127.0.0.1:${port}`;
   process.env.VERCEL_URL = `e2e-${name}-`;
 
-  const { getRedisCacheComponentsHandler } = await import('../../../src');
+  const { getRedisCacheComponentsHandler } = await import(
+    '../../../src/CacheComponentsHandler'
+  );
+  const { default: RedisStringsHandler } = await import(
+    '../../../src/RedisStringsHandler'
+  );
 
-  const handler = getRedisCacheComponentsHandler({
+  // Cache Components handler
+  const cacheComponentsHandler = getRedisCacheComponentsHandler({
     redisUrl: `redis://127.0.0.1:${port}`,
     socketOptions: {
       connectTimeout: 2_000,
@@ -88,13 +94,63 @@ async function main() {
     } as any,
   });
 
-  const client = (handler as any).client as {
+  const cacheComponentsClient = (cacheComponentsHandler as any).client as {
     ping: () => Promise<string>;
     isReady: boolean;
   };
 
-  await waitUntil(async () => client.isReady, 20_000);
-  if ((await client.ping()) !== 'PONG') throw new Error('expected PONG');
+  await waitUntil(async () => cacheComponentsClient.isReady, 20_000);
+  if ((await cacheComponentsClient.ping()) !== 'PONG') {
+    throw new Error('expected PONG (cache components)');
+  }
+
+  // Regular handler
+  const regularHandler = new RedisStringsHandler({
+    redisUrl: `redis://127.0.0.1:${port}`,
+    socketOptions: {
+      connectTimeout: 2_000,
+      reconnectStrategy: (retries: number) => Math.min(50 + retries * 50, 500),
+    },
+    // Keep default offline queue behavior here; SyncedMap does initial sync during construction.
+    keyPrefix: `e2e-${name}-regular-`,
+  } as any);
+
+  const regularClient = (regularHandler as any).client as {
+    ping: () => Promise<string>;
+    isReady: boolean;
+  };
+
+  await waitUntil(async () => regularClient.isReady, 20_000);
+  if ((await regularClient.ping()) !== 'PONG') {
+    throw new Error('expected PONG (regular handler)');
+  }
+
+  // Seed a small entry so we know regular handler does real ops
+  await regularHandler.set(
+    'e2e-key',
+    {
+      kind: 'FETCH',
+      data: {
+        headers: {},
+        body: Buffer.from('hello').toString('base64'),
+        status: 200,
+        url: 'https://example.com/e2e',
+      },
+      revalidate: 10,
+    },
+    { isRoutePPREnabled: false, isFallback: false, tags: ['e2e'] },
+  );
+
+  const got = await regularHandler.get('e2e-key', {
+    kind: 'FETCH',
+    revalidate: 10,
+    fetchUrl: 'https://example.com/e2e',
+    fetchIdx: 0,
+    tags: ['e2e'],
+    softTags: [],
+    isFallback: false,
+  });
+  if (!got) throw new Error('expected cache hit (regular handler)');
 
   // Kill redis
   sh('podman', ['stop', '-t', '0', name], { timeoutMs: 30_000 });
@@ -123,10 +179,18 @@ async function main() {
     if (r.code !== 0) throw new Error(`podman run2 failed: ${r.stderr}`);
   }
 
-  // Should recover
+  // Should recover (both)
   await waitUntil(async () => {
     try {
-      return (await client.ping()) === 'PONG';
+      return (await cacheComponentsClient.ping()) === 'PONG';
+    } catch {
+      return false;
+    }
+  }, 30_000);
+
+  await waitUntil(async () => {
+    try {
+      return (await regularClient.ping()) === 'PONG';
     } catch {
       return false;
     }
@@ -134,7 +198,10 @@ async function main() {
 
   // Shut down clients before cleaning up Redis, otherwise reconnect loops keep the process alive.
   try {
-    await (handler as any).client?.quit?.();
+    await (cacheComponentsHandler as any).client?.quit?.();
+  } catch {}
+  try {
+    await (regularHandler as any).client?.quit?.();
   } catch {}
 
   // cleanup best effort
