@@ -209,12 +209,25 @@ export class SyncedMap<V> {
     };
 
     try {
-      await this.subscriberClient.connect().catch(async () => {
+      const connectIfNeeded = async () => {
+        // Avoid overlapping connect() calls which can lead to
+        // "Socket already opened" errors when a connect is already in progress
+        // or the socket is still open.
+        if (!this.subscriberClient.isOpen && !this.subscriberClient.isReady) {
+          await this.subscriberClient.connect();
+        }
+      };
+
+      await connectIfNeeded().catch(async (error) => {
         console.error('Failed to connect subscriber client. Retrying...');
-        await this.subscriberClient.connect().catch((error) => {
-          console.error('Failed to connect subscriber client.', error);
-          throw error;
-        });
+        try {
+          await connectIfNeeded();
+        } catch (err) {
+          console.error('Failed to connect subscriber client.', err);
+          throw err;
+        }
+        // keep original error in logs for context
+        void error;
       });
 
       // Check if keyspace event configuration is set correctly
