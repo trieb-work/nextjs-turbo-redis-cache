@@ -34,6 +34,8 @@ jobs:
             run-cache-components: false
           - next-test-app: next-app-16-0-3
             run-cache-components: true
+          - next-test-app: next-app-16-1-1
+            run-cache-components: true
 
     steps:
       - name: Checkout code
