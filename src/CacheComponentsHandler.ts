@@ -129,16 +129,18 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
           error,
           killContainerOnErrorCount++,
         );
-        setTimeout(
-          () =>
-            this.client.connect().catch((err) => {
-              console.error(
-                'Failed to reconnect RedisCacheComponentsHandler client after connection loss:',
-                err,
-              );
-            }),
-          1000,
-        );
+        setTimeout(() => {
+          // node-redis throws "Socket already opened" if connect() is called while a socket is already open.
+          // When we get an error while isOpen=true (but isReady=false), we should *not* force an extra connect.
+          if (this.client.isOpen) return;
+
+          this.client.connect().catch((err) => {
+            console.error(
+              'Failed to reconnect RedisCacheComponentsHandler client after connection loss:',
+              err,
+            );
+          });
+        }, 1000);
         if (
           killContainerOnErrorThreshold > 0 &&
           killContainerOnErrorCount >= killContainerOnErrorThreshold

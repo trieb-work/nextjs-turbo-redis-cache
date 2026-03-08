@@ -34,6 +34,8 @@ jobs:
             run-cache-components: false
           - next-test-app: next-app-16-0-3
             run-cache-components: true
+          - next-test-app: next-app-16-1-1
+            run-cache-components: true
 
     steps:
       - name: Checkout code
@@ -92,6 +94,10 @@ jobs:
       - name: Run Cache Components integration tests
         if: matrix.run-cache-components
         run: pnpm test:cache-components
+
+      - name: Run Redis kill/restart E2E test (cache-components)
+        if: matrix.run-cache-components
+        run: pnpm vitest --run --config vitest.cache-components.config.ts test/cache-components/redis-kill-reconnect.spec.ts
 
       - name: Install Playwright browsers
         if: matrix.run-cache-components
