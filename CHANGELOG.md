@@ -1,3 +1,10 @@
+## [1.11.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.11.0...v1.11.1) (2026-03-08)
+
+
+### Bug Fixes
+
+* **syncedmap:** robust subscriber reconnect + redis restart test ([#69](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/69)) ([01b3a28](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/01b3a282083c23453d3e21911a1fb0f6ef5eacc1))
+
 # [1.11.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.3...v1.11.0) (2026-02-16)
 
 
