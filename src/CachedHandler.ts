@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import RedisStringsHandler, {
   CreateRedisStringsHandlerOptions,
 } from './RedisStringsHandler';
@@ -5,11 +7,37 @@ import { debugVerbose } from './utils/debug';
 
 let cachedHandler: RedisStringsHandler;
 
+type NextCacheHandlerOptions = CreateRedisStringsHandlerOptions & {
+  serverDistDir?: string;
+};
+
+function getBuildIdKeyPrefix(serverDistDir?: string): string | undefined {
+  if (!serverDistDir) return undefined;
+
+  try {
+    const buildIdPath = path.join(serverDistDir, '..', 'BUILD_ID');
+    const buildId = fs.readFileSync(buildIdPath, 'utf8').trim();
+
+    return buildId ? `${buildId}:` : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export default class CachedHandler {
-  constructor(options: CreateRedisStringsHandlerOptions) {
+  constructor(options: NextCacheHandlerOptions) {
     if (!cachedHandler) {
       console.log('created cached handler');
-      cachedHandler = new RedisStringsHandler(options);
+      const keyPrefix =
+        options.keyPrefix ||
+        process.env.KEY_PREFIX ||
+        getBuildIdKeyPrefix(options.serverDistDir) ||
+        '';
+
+      cachedHandler = new RedisStringsHandler({
+        ...options,
+        keyPrefix,
+      });
     }
   }
   get(
