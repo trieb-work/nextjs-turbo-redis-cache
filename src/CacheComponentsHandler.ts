@@ -7,6 +7,7 @@ import {
 } from './RedisStringsHandler';
 import { SyncedMap } from './SyncedMap';
 import { debug } from './utils/debug';
+import { resolveKeyPrefix } from './utils/prefix';
 
 export interface CacheComponentsEntry {
   value: ReadableStream<Uint8Array>;
@@ -41,7 +42,7 @@ const SHARED_TAGS_KEY = '__cacheComponents_sharedTags__';
 let killContainerOnErrorCount = 0;
 
 export type CreateCacheComponentsHandlerOptions =
-  CreateRedisStringsHandlerOptions;
+  CreateRedisStringsHandlerOptions & { serverDistDir?: string };
 
 async function streamToBuffer(
   stream: ReadableStream<Uint8Array>,
@@ -96,7 +97,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         ? `redis://${process.env.REDISHOST}:${process.env.REDISPORT}`
         : 'redis://localhost:6379',
     database = process.env.VERCEL_ENV === 'production' ? 0 : 1,
-    keyPrefix = process.env.VERCEL_URL || 'UNDEFINED_URL_',
+    keyPrefix,
     getTimeoutMs = process.env.REDIS_COMMAND_TIMEOUT_MS
       ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 500)
       : 500,
@@ -108,9 +109,14 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
       .KILL_CONTAINER_ON_ERROR_THRESHOLD
       ? (Number.parseInt(process.env.KILL_CONTAINER_ON_ERROR_THRESHOLD) ?? 0)
       : 0,
+    serverDistDir,
   }: CreateCacheComponentsHandlerOptions) {
     try {
-      this.keyPrefix = keyPrefix;
+      this.keyPrefix = resolveKeyPrefix({
+        optionKeyPrefix: keyPrefix,
+        serverDistDir,
+        env: process.env,
+      });
       this.getTimeoutMs = getTimeoutMs;
 
       this.client = createClient({
@@ -179,7 +185,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
 
       this.revalidatedTagsMap = new SyncedMap<number>({
         client: this.client,
-        keyPrefix,
+        keyPrefix: this.keyPrefix,
         redisKey: REVALIDATED_TAGS_KEY,
         database,
         querySize: revalidateTagQuerySize,
@@ -192,7 +198,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
 
       this.sharedTagsMap = new SyncedMap<string[]>({
         client: this.client,
-        keyPrefix,
+        keyPrefix: this.keyPrefix,
         redisKey: SHARED_TAGS_KEY,
         database,
         querySize: revalidateTagQuerySize,
