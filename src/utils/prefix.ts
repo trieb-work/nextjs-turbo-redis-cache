@@ -2,10 +2,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export function readBuildId(serverDistDir?: string): string | undefined {
-  if (!serverDistDir) return undefined;
   try {
-    const buildIdPath = path.join(serverDistDir, '..', 'BUILD_ID');
-    const buildId = fs.readFileSync(buildIdPath, 'utf8').trim();
+    if (serverDistDir) {
+      const buildIdPath = path.join(serverDistDir, '..', 'BUILD_ID');
+      const buildId = fs.readFileSync(buildIdPath, 'utf8').trim();
+      return buildId || undefined;
+    }
+  } catch {
+    // fall through to cwd-based read
+  }
+  try {
+    const fromCwd = path.join(process.cwd(), '.next', 'BUILD_ID');
+    const buildId = fs.readFileSync(fromCwd, 'utf8').trim();
     return buildId || undefined;
   } catch {
     return undefined;
