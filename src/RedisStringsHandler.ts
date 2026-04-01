@@ -58,7 +58,7 @@ export type CreateRedisStringsHandlerOptions = {
    */
   database?: number;
   /** Prefix added to all Redis keys
-   * @default process.env.KEY_PREFIX || process.env.VERCEL_URL || BUILD_ID || 'UNDEFINED_URL_'
+   * @default process.env.KEY_PREFIX || process.env.VERCEL_URL || 'UNDEFINED_URL_'
    */
   keyPrefix?: string;
   /** Timeout in milliseconds for time critical Redis operations (during cache get, which blocks site rendering).
@@ -146,8 +146,7 @@ export default class RedisStringsHandler {
         ? `redis://${process.env.REDISHOST}:${process.env.REDISPORT}`
         : 'redis://localhost:6379',
     database = process.env.VERCEL_ENV === 'production' ? 0 : 1,
-    keyPrefix =
-      process.env.KEY_PREFIX ||
+    keyPrefix = process.env.KEY_PREFIX ||
       process.env.VERCEL_URL ||
       'UNDEFINED_URL_',
     sharedTagsKey = '__sharedTags__',
