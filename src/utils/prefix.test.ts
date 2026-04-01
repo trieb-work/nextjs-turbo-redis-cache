@@ -52,7 +52,7 @@ describe('resolveKeyPrefix', () => {
     expect(res).toBe('envkp_');
   });
 
-  it('uses BUILD_ID when KEY_PREFIX absent and BUILD_ID readable', () => {
+  it('uses BUILD_ID when KEY_PREFIX and VERCEL_URL are absent and BUILD_ID readable', () => {
     const { serverDistDir, cleanup } = makeBuildIdTree('BID123');
     try {
       const res = resolveKeyPrefix({
@@ -61,6 +61,22 @@ describe('resolveKeyPrefix', () => {
         serverDistDir,
       });
       expect(res).toBe('BID123');
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('uses VERCEL_URL before BUILD_ID when both are available', () => {
+    const { serverDistDir, cleanup } = makeBuildIdTree('BIDXYZ');
+    try {
+      const res = withEnv({ VERCEL_URL: 'vercel.example' }, () =>
+        resolveKeyPrefix({
+          optionKeyPrefix: undefined,
+          env: process.env,
+          serverDistDir,
+        }),
+      );
+      expect(res).toBe('vercel.example');
     } finally {
       cleanup();
     }

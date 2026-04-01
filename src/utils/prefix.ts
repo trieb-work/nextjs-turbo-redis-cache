@@ -36,9 +36,9 @@ export function resolveKeyPrefix({
 
   const keyPrefixEnv =
     env.KEY_PREFIX && env.KEY_PREFIX.length > 0 ? env.KEY_PREFIX : undefined;
-  const buildId = readBuildId(serverDistDir);
   const vercelUrl =
     env.VERCEL_URL && env.VERCEL_URL.length > 0 ? env.VERCEL_URL : undefined;
+  const buildId = readBuildId(serverDistDir);
 
-  return keyPrefixEnv ?? buildId ?? vercelUrl ?? 'UNDEFINED_URL_';
+  return keyPrefixEnv ?? vercelUrl ?? buildId ?? 'UNDEFINED_URL_';
 }
