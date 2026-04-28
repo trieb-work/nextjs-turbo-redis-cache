@@ -354,4 +354,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Sponsor
 
-This project is created and maintained by the Next.js & Payload CMS agency [trieb.work](https://trieb.work)
+This project is created and maintained by the Next.js & Payload CMS agency [TRWK>](https://trwk.de), formerly [trieb.work](https://trieb.work).
