@@ -13,7 +13,7 @@ Key Features:
 - _Efficient Tag Management_: in-memory tags map for lightning-fast revalidate operations with minimal Redis overhead.
 - _Intelligent Key-Space Notifications_: Automatic update of in-memory tags map for expired or evicted keys.
 
-This library offers you an easy and high performant caching solution for docker, Kubernetes or Google Cloud Run deployments of Next.js.
+This library offers you an easy and high performant caching solution for docker, Kubernetes or Google Cloud Run deployments of Next.js. Read more on how it originated at [TRWK> Case Study](https://trwk.de/case-studies/nextjs-turbo-redis-cache).
 
 ## Compatibility
 
