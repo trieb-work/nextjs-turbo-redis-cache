@@ -1,6 +1,5 @@
 node_modules
 dist
-.env
 coverage
 .DS_Store
 .idea
@@ -9,3 +8,4 @@ debug
 
 /.next/
 **/.next/
+config.bat
