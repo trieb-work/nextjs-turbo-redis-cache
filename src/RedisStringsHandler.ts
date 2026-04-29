@@ -2,7 +2,7 @@ import { commandOptions, createClient, RedisClientOptions } from 'redis';
 import { SyncedMap } from './SyncedMap';
 import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
 import { debug } from './utils/debug';
-import { bufferAndMapReviver, bufferAndMapReplacer } from './utils/json';
+import { CacheValueSerializer, jsonCacheValueSerializer } from './serializer';
 
 export type CommandOptions = ReturnType<typeof commandOptions>;
 export type Client = ReturnType<typeof createClient>;
@@ -107,6 +107,27 @@ export type CreateRedisStringsHandlerOptions = {
    * @example { username: 'user', password: 'pass' }
    */
   clientOptions?: Omit<RedisClientOptions, 'url' | 'database' | 'socket'>;
+  /** Pluggable wire-format codec for Redis string values. Lets you plug in
+   * compression (gzip/brotli), encryption, or any other custom encoding without
+   * forking this package or losing the existing dedup / batch / keyspace features.
+   *
+   * Both `serialize` and `deserialize` may return a `Promise`, enabling
+   * non-blocking async codecs (e.g. `zlib.brotliCompress`) that don't block the
+   * Node.js event loop. Synchronous implementations continue to work unchanged.
+   *
+   * Only the main cache-entry storage path is routed through the serializer.
+   * The shared-tags map and the revalidated-tags map are not. The in-memory
+   * deduplication cache stores the wire-format string verbatim - its contents
+   * change with the serializer, but the cache itself is not re-encoded.
+   *
+   * Operational note: changing the serializer (or any of its parameters such as
+   * a compression level or encryption key) makes existing Redis keys unreadable.
+   * Either flush the affected keys or bump `keyPrefix` before deploying.
+   *
+   * @default jsonCacheValueSerializer (JSON.stringify with bufferAndMapReplacer
+   * so native Buffer and Map values inside a CacheEntry round-trip transparently)
+   */
+  valueSerializer?: CacheValueSerializer;
 };
 
 // Identifier prefix used by Next.js to mark automatically generated cache tags
@@ -138,6 +159,7 @@ export default class RedisStringsHandler {
   private defaultStaleAge: number;
   private estimateExpireAge: (staleAge: number) => number;
   private killContainerOnErrorThreshold: number;
+  private valueSerializer: CacheValueSerializer;
 
   constructor({
     redisUrl = process.env.REDIS_URL
@@ -164,6 +186,7 @@ export default class RedisStringsHandler {
       : 0,
     socketOptions,
     clientOptions,
+    valueSerializer = jsonCacheValueSerializer,
   }: CreateRedisStringsHandlerOptions) {
     try {
       this.keyPrefix = keyPrefix;
@@ -173,6 +196,7 @@ export default class RedisStringsHandler {
       this.estimateExpireAge = estimateExpireAge;
       this.killContainerOnErrorThreshold = killContainerOnErrorThreshold;
       this.getTimeoutMs = getTimeoutMs;
+      this.valueSerializer = valueSerializer;
 
       try {
         // Create Redis client with properly typed configuration
@@ -403,10 +427,8 @@ export default class RedisStringsHandler {
         return null;
       }
 
-      const cacheEntry: CacheEntry | null = JSON.parse(
-        serializedCacheEntry,
-        bufferAndMapReviver,
-      );
+      const cacheEntry: CacheEntry | null =
+        await this.valueSerializer.deserialize(serializedCacheEntry);
 
       debug(
         'green',
@@ -606,10 +628,8 @@ export default class RedisStringsHandler {
         tags: ctx?.tags || [],
         value: data,
       };
-      const serializedCacheEntry = JSON.stringify(
-        cacheEntry,
-        bufferAndMapReplacer,
-      );
+      const serializedCacheEntry =
+        await this.valueSerializer.serialize(cacheEntry);
 
       // pre seed data into deduplicated get client. This will reduce redis load by not requesting
       // the same value from redis which was just set.

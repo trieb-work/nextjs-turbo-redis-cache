@@ -129,22 +129,168 @@ A working example of above can be found in the `test/integration/next-app-custom
 
 ## Available Options
 
-| Option                        | Description                                                                                                                                                | Default Value                                                                                                                                                 |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| redisUrl                      | Redis connection url                                                                                                                                       | `process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST ? redis://${process.env.REDISHOST}:${process.env.REDISPORT} : 'redis://localhost:6379'` |
-| database                      | Redis database number to use. Uses DB 0 for production, DB 1 otherwise                                                                                     | `process.env.VERCEL_ENV === 'production' ? 0 : 1`                                                                                                             |
-| keyPrefix                     | Prefix added to all Redis keys                                                                                                                             | `process.env.VERCEL_URL    \|\| 'UNDEFINED_URL_'`                                                                                                             |
-| sharedTagsKey                 | Key used to store shared tags hash map in Redis                                                                                                            | `'__sharedTags__'`                                                                                                                                            |
-| getTimeoutMs                  | Timeout in milliseconds for time critical Redis operations. If Redis get is not fulfilled within this time, returns null to avoid blocking site rendering. | `process.env.REDIS_COMMAND_TIMEOUT_MS ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 500) : 500`                                                 |
-| revalidateTagQuerySize        | Number of entries to query in one batch during full sync of shared tags hash map                                                                           | `250`                                                                                                                                                         |
-| avgResyncIntervalMs           | Average interval in milliseconds between tag map full re-syncs                                                                                             | `3600000` (1 hour)                                                                                                                                            |
-| redisGetDeduplication         | Enable deduplication of Redis get requests via internal in-memory cache.                                                                                   | `true`                                                                                                                                                        |
-| inMemoryCachingTime           | Time in milliseconds to cache Redis get results in memory. Set this to 0 to disable in-memory caching completely.                                          | `10000`                                                                                                                                                       |
-| defaultStaleAge               | Default stale age in seconds for cached items                                                                                                              | `1209600` (14 days)                                                                                                                                           |
-| estimateExpireAge             | Function to calculate expire age (redis TTL value) from stale age                                                                                          | Production: `staleAge * 2`<br> Other: `staleAge * 1.2`                                                                                                        |
-| socketOptions                 | Redis client socket options for TLS/SSL configuration (e.g., `{ tls: true, rejectUnauthorized: false }`)                                                   | `{ connectTimeout: timeoutMs }`                                                                                                                               |
-| clientOptions                 | Additional Redis client options (e.g., username, password)                                                                                                 | `undefined`                                                                                                                                                   |
-| killContainerOnErrorThreshold | Number of consecutive errors before the container is killed. Set to 0 to disable.                                                                          | `Number.parseInt(process.env.KILL_CONTAINER_ON_ERROR_THRESHOLD) ?? 0 : 0`                                                                                     |
+| Option                        | Description                                                                                                                                                                     | Default Value                                                                                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| redisUrl                      | Redis connection url                                                                                                                                                            | `process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST ? redis://${process.env.REDISHOST}:${process.env.REDISPORT} : 'redis://localhost:6379'` |
+| database                      | Redis database number to use. Uses DB 0 for production, DB 1 otherwise                                                                                                          | `process.env.VERCEL_ENV === 'production' ? 0 : 1`                                                                                                             |
+| keyPrefix                     | Prefix added to all Redis keys                                                                                                                                                  | `process.env.VERCEL_URL    \|\| 'UNDEFINED_URL_'`                                                                                                             |
+| sharedTagsKey                 | Key used to store shared tags hash map in Redis                                                                                                                                 | `'__sharedTags__'`                                                                                                                                            |
+| getTimeoutMs                  | Timeout in milliseconds for time critical Redis operations. If Redis get is not fulfilled within this time, returns null to avoid blocking site rendering.                      | `process.env.REDIS_COMMAND_TIMEOUT_MS ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 500) : 500`                                                 |
+| revalidateTagQuerySize        | Number of entries to query in one batch during full sync of shared tags hash map                                                                                                | `250`                                                                                                                                                         |
+| avgResyncIntervalMs           | Average interval in milliseconds between tag map full re-syncs                                                                                                                  | `3600000` (1 hour)                                                                                                                                            |
+| redisGetDeduplication         | Enable deduplication of Redis get requests via internal in-memory cache.                                                                                                        | `true`                                                                                                                                                        |
+| inMemoryCachingTime           | Time in milliseconds to cache Redis get results in memory. Set this to 0 to disable in-memory caching completely.                                                               | `10000`                                                                                                                                                       |
+| defaultStaleAge               | Default stale age in seconds for cached items                                                                                                                                   | `1209600` (14 days)                                                                                                                                           |
+| estimateExpireAge             | Function to calculate expire age (redis TTL value) from stale age                                                                                                               | Production: `staleAge * 2`<br> Other: `staleAge * 1.2`                                                                                                        |
+| socketOptions                 | Redis client socket options for TLS/SSL configuration (e.g., `{ tls: true, rejectUnauthorized: false }`)                                                                        | `{ connectTimeout: timeoutMs }`                                                                                                                               |
+| clientOptions                 | Additional Redis client options (e.g., username, password)                                                                                                                      | `undefined`                                                                                                                                                   |
+| killContainerOnErrorThreshold | Number of consecutive errors before the container is killed. Set to 0 to disable.                                                                                               | `Number.parseInt(process.env.KILL_CONTAINER_ON_ERROR_THRESHOLD) ?? 0 : 0`                                                                                     |
+| valueSerializer               | Pluggable wire-format codec for Redis string values (compression, encryption, custom encoding). See [Custom value serializer](#custom-value-serializer-compression-encryption). | `jsonCacheValueSerializer` (`JSON.stringify` with built-in `Buffer` and `Map` encoding)                                                                       |
+
+## Custom value serializer (compression, encryption)
+
+By default cache entries are stored as `JSON.stringify(...)` with built-in
+`Buffer` and `Map` encoding. For workloads where the encoded payload is large
+(big RSC trees, large fetch responses) or sensitive (PII), you can plug in a
+custom codec - gzip, brotli, AES, anything - via the `valueSerializer` option,
+without forking this package or losing the existing dedup / batch / keyspace
+features.
+
+### Contract
+
+- `serialize(entry)` is called on every `set()` with the in-memory `CacheEntry`. It must return the string written to Redis, or a `Promise<string>` for async codecs.
+- `deserialize(stored)` is called on every cache hit with the exact string read from Redis. It must return a `CacheEntry`, `null`, or a `Promise` of either. Returning `null` is treated as a cache miss - the handler returns `null` from `get()` without surfacing an error.
+- Both methods may be async, enabling non-blocking codecs such as `zlib.brotliCompress` or `crypto.subtle` that don't block the Node.js event loop. Synchronous implementations continue to work unchanged.
+- Only the main cache-entry storage path is routed through the serializer. Internal structures (`__sharedTags__`, `__revalidated_tags__`, `inMemoryDeduplicationCache`) are not affected.
+
+### Default export for reuse
+
+The default serializer is exported so you can wrap it (e.g. compress + JSON
+fallback) or compare against it by reference to detect that no custom
+serializer was configured. The underlying `Buffer` / `Map` JSON helpers used by
+the default are also exported for use inside custom codecs:
+
+```ts
+import {
+  jsonCacheValueSerializer,
+  bufferAndMapReplacer,
+  bufferAndMapReviver,
+} from '@trieb.work/nextjs-turbo-redis-cache';
+```
+
+> **Important:** a plain `JSON.stringify(value)` does not preserve native
+> `Buffer` or `Map` values inside a cache entry. RSC payloads contain
+> `Buffer`s. If you write a custom codec that doesn't use the exported
+> `bufferAndMapReplacer` / `bufferAndMapReviver` (or doesn't wrap
+> `jsonCacheValueSerializer`), expect those to come back as plain objects.
+
+### Example: gzip (sync)
+
+Wraps `bufferAndMapReplacer` / `bufferAndMapReviver` so native `Buffer` and
+`Map` values inside the cache entry round-trip unchanged. `gzipSync` /
+`gunzipSync` block the event loop - prefer the async brotli example below for
+hot workloads.
+
+```ts
+import { gzipSync, gunzipSync } from 'node:zlib';
+import {
+  RedisStringsHandler,
+  bufferAndMapReplacer,
+  bufferAndMapReviver,
+} from '@trieb.work/nextjs-turbo-redis-cache';
+
+const gzipSerializer = {
+  serialize(value) {
+    const json = JSON.stringify(value, bufferAndMapReplacer);
+    return gzipSync(json).toString('base64');
+  },
+  deserialize(stored) {
+    const buf = Buffer.from(stored, 'base64');
+    return JSON.parse(gunzipSync(buf).toString('utf8'), bufferAndMapReviver);
+  },
+};
+
+export default class CustomizedCacheHandler {
+  constructor() {
+    this.handler = new RedisStringsHandler({
+      valueSerializer: gzipSerializer,
+    });
+  }
+  // ... delegate get/set/revalidateTag/resetRequestCache to this.handler
+}
+```
+
+### Example: brotli (async, non-blocking)
+
+Uses `promisify(brotliCompress)` and `promisify(brotliDecompress)` so
+compression runs on a worker thread and doesn't block the event loop.
+
+```ts
+import { promisify } from 'node:util';
+import { brotliCompress, brotliDecompress } from 'node:zlib';
+import {
+  RedisStringsHandler,
+  bufferAndMapReplacer,
+  bufferAndMapReviver,
+} from '@trieb.work/nextjs-turbo-redis-cache';
+
+const brotliCompressAsync = promisify(brotliCompress);
+const brotliDecompressAsync = promisify(brotliDecompress);
+
+const brotliSerializer = {
+  async serialize(value) {
+    const json = JSON.stringify(value, bufferAndMapReplacer);
+    const compressed = await brotliCompressAsync(Buffer.from(json, 'utf8'));
+    return compressed.toString('base64');
+  },
+  async deserialize(stored) {
+    const buf = Buffer.from(stored, 'base64');
+    const decompressed = await brotliDecompressAsync(buf);
+    return JSON.parse(decompressed.toString('utf8'), bufferAndMapReviver);
+  },
+};
+
+export default class CustomizedCacheHandler {
+  constructor() {
+    this.handler = new RedisStringsHandler({
+      valueSerializer: brotliSerializer,
+    });
+  }
+  // ... delegate get/set/revalidateTag/resetRequestCache to this.handler
+}
+```
+
+### Operational notes
+
+- **Changing the serializer makes existing Redis keys unreadable.** Any change
+  to the codec - swapping JSON for gzip, bumping a compression level, rotating
+  an encryption key - means previously written entries can no longer be
+  decoded. Either flush the affected keys (`FLUSHDB`, or scoped `UNLINK` of
+  `keyPrefix*`) or bump `keyPrefix` before deploying so old and new entries
+  live in disjoint keyspaces.
+- **`Buffer` and `Map` encoding is built into the default.** The default
+  `jsonCacheValueSerializer` uses this package's `bufferAndMapReplacer` /
+  `bufferAndMapReviver` so native `Buffer` and `Map` values inside a
+  `CacheEntry` round-trip transparently. If you write a custom serializer that
+  doesn't reuse those (e.g. plain `JSON.stringify` over a binary payload),
+  expect RSC payload `Buffer`s to come back as plain `{ type: 'Buffer', data:
+[...] }` objects. Reuse the exported default inside your codec, or use the
+  exported `bufferAndMapReplacer` / `bufferAndMapReviver`, to keep that
+  behavior.
+- **The in-memory deduplication cache stores the wire-format string verbatim.**
+  When `redisGetDeduplication` is enabled (default), the value seeded after
+  `set()` and returned to subsequent `get()` calls is the exact string
+  produced by `serialize()`. With a compressing or encrypting codec that
+  means every dedup hit re-runs `deserialize()` (i.e. re-decompresses or
+  re-decrypts). For very hot keys, evaluate whether the per-hit codec cost
+  outweighs the Redis round-trip the dedup is saving.
+- **Other internal trieb structures are not affected by `valueSerializer`.**
+  Only the main cache entries written by `set()` and read by `get()` go
+  through the codec. The shared-tags map and the revalidated-tags map are
+  untouched.
+- **Cache Components handler is out of scope for now.** This option only
+  affects `RedisStringsHandler`. The Next.js 16+ `CacheComponentsHandler` does
+  not currently route through `valueSerializer`; that's a candidate follow-up.
 
 ## TLS Configuration
 
