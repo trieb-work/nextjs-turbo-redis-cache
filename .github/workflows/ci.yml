@@ -51,7 +51,9 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install
+        # --ignore-scripts blocks lifecycle scripts of all dependencies to mitigate
+        # supply-chain attacks via compromised postinstall hooks.
+        run: pnpm install --ignore-scripts
 
       - name: Run lint
         run: pnpm lint
