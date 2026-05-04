@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.12.0...v1.13.0) (2026-05-04)
+
+
+### Features
+
+* **cache:** unify key prefix resolution across Next handlers; add tests (incl. BUILD_ID integration); docs cleanup ([#72](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/72)) ([4f991f7](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/4f991f78cd6885c8ea75011a5c283c9c73f16b33))
+
 # [1.12.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.11.1...v1.12.0) (2026-05-04)
 
 
