@@ -5,6 +5,13 @@
 
 * update docs ([a2ab3d1](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/a2ab3d1fdebc3fdb8c06eaff73e0e51f333ecdfd))
 
+# [1.12.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.11.1...v1.12.0) (2026-05-04)
+
+
+### Features
+
+* update docs ([a2ab3d1](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/a2ab3d1fdebc3fdb8c06eaff73e0e51f333ecdfd))
+
 # [1.12.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.11.1...v1.12.0) (2026-04-29)
 
 
