@@ -8,21 +8,17 @@ on:
     branches:
       - main
 
+# Default-deny: every job inherits read-only access. Jobs that need more
+# elevate explicitly via their own `permissions:` block (see `build` below).
 permissions:
-  contents: write
-  pull-requests: write
-  deployments: write
-  packages: write
-  statuses: write
-  issues: write
-  actions: write
-  discussions: write
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: write # Grant write access to pull request comments
+      contents: read # Required for actions/checkout
+      pull-requests: write # Required for the coverage-comments action on PRs
     strategy:
       matrix:
         include:
@@ -51,7 +47,9 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install
+        # --ignore-scripts blocks lifecycle scripts of all dependencies to mitigate
+        # supply-chain attacks via compromised postinstall hooks.
+        run: pnpm install --ignore-scripts
 
       - name: Run lint
         run: pnpm lint
