@@ -6,15 +6,15 @@ on:
       - main
       - beta
       
+# Minimal permissions:
+#   contents:      semantic-release pushes the release commit + tag to the branch
+#   issues:        @semantic-release/github comments on referenced issues
+#   pull-requests: @semantic-release/github comments on referenced PRs
+#   id-token:      npm Trusted Publishing OIDC token exchange
 permissions:
   contents: write
-  pull-requests: write
-  deployments: write
-  packages: write
-  statuses: write
   issues: write
-  actions: write
-  discussions: write
+  pull-requests: write
   id-token: write
 
 jobs:
