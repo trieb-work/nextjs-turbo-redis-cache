@@ -429,8 +429,24 @@ export default class RedisStringsHandler {
         return null;
       }
 
-      const cacheEntry: CacheEntry | null =
-        await this.valueSerializer.deserialize(serializedCacheEntry);
+      let cacheEntry: CacheEntry | null;
+      try {
+        cacheEntry =
+          await this.valueSerializer.deserialize(serializedCacheEntry);
+      } catch (err) {
+        // A decode failure (e.g. legacy/corrupted entry after swapping codecs,
+        // bumping a compression level or rotating an encryption key) is treated
+        // as a cache miss rather than a hard error - this matches the
+        // null-from-deserialize semantics in the CacheValueSerializer contract
+        // and prevents a single unreadable entry from incrementing
+        // killContainerOnErrorCount on every read.
+        console.warn(
+          'RedisStringsHandler.get() valueSerializer.deserialize failed, treating as cache miss',
+          this.keyPrefix + key,
+          err,
+        );
+        return null;
+      }
 
       debug(
         'green',
@@ -529,8 +545,9 @@ export default class RedisStringsHandler {
     } catch (error) {
       // This catch block is necessary to handle any errors that may occur during:
       // 1. Redis operations (get, unlink)
-      // 2. JSON parsing of cache entries
-      // 3. Tag validation and cleanup
+      // 2. Tag validation and cleanup
+      // (Deserialization errors are handled locally above and treated as cache misses,
+      // so they do not reach this branch and do not count toward the kill threshold.)
       // If any error occurs, we return null to indicate no valid cache entry was found,
       // allowing the application to regenerate the content rather than crash
       console.error(
