@@ -28,7 +28,7 @@ describe('Next.js 16 Cache Components Integration', () => {
       __dirname,
       '..',
       'integration',
-      'next-app-16-1-1-cache-components',
+      'next-app-16-2-3-cache-components',
     );
 
     console.log('Installing Next.js app dependencies...');
