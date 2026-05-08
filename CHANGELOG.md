@@ -1,3 +1,10 @@
+# [1.14.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.13.0...v1.14.0) (2026-05-08)
+
+
+### Features
+
+* upgrade Next.js test apps to 16.2.3 ([#77](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/77)) ([4f6c9a5](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/4f6c9a5660c11f945209691a7628c650145ebacd))
+
 # [1.13.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.12.0...v1.13.0) (2026-05-04)
 
 
