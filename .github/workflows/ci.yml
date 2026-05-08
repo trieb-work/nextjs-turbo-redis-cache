@@ -30,7 +30,7 @@ jobs:
             run-cache-components: false
           - next-test-app: next-app-16-0-3
             run-cache-components: true
-          - next-test-app: next-app-16-1-1
+          - next-test-app: next-app-16-2-3
             run-cache-components: true
 
     steps:
@@ -83,11 +83,11 @@ jobs:
 
       - name: Install Cache Components Integration Test Project
         if: matrix.run-cache-components
-        run: cd test/integration/next-app-16-1-1-cache-components && pnpm install
+        run: cd test/integration/next-app-16-2-3-cache-components && pnpm install
 
       - name: Build Cache Components Integration Test Project
         if: matrix.run-cache-components
-        run: cd test/integration/next-app-16-1-1-cache-components && pnpm build
+        run: cd test/integration/next-app-16-2-3-cache-components && pnpm build
 
       - name: Run Cache Components integration tests
         if: matrix.run-cache-components

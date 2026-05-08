@@ -8,7 +8,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      'pnpm -C test/integration/next-app-16-1-1-cache-components dev -p 3101',
+      'pnpm -C test/integration/next-app-16-2-3-cache-components dev -p 3101',
     url: 'http://localhost:3101',
     reuseExistingServer: true,
     timeout: 120_000,
