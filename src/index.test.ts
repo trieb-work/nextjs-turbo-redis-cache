@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+import type { CreateRedisStringsHandlerOptions } from './index';
+import RedisStringsHandler from './RedisStringsHandler';
+
 vi.mock('redis', () => {
   const createClient = () => {
     return {
@@ -51,8 +54,6 @@ vi.mock('./SyncedMap', () => {
   return { SyncedMap };
 });
 
-import RedisStringsHandler from './RedisStringsHandler';
-
 describe('RedisStringsHandler', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -83,5 +84,15 @@ describe('RedisStringsHandler', () => {
 
     expect(res).toBeNull();
     expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('Public exports', () => {
+  it('exports CreateRedisStringsHandlerOptions type', () => {
+    const _typeCheck: CreateRedisStringsHandlerOptions = {
+      keyPrefix: 'test',
+    };
+
+    expect(_typeCheck.keyPrefix).toBe('test');
   });
 });

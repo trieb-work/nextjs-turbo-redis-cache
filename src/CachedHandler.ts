@@ -2,14 +2,28 @@ import RedisStringsHandler, {
   CreateRedisStringsHandlerOptions,
 } from './RedisStringsHandler';
 import { debugVerbose } from './utils/debug';
+import { resolveKeyPrefix } from './utils/prefix';
 
 let cachedHandler: RedisStringsHandler;
 
+type NextCacheHandlerOptions = CreateRedisStringsHandlerOptions & {
+  serverDistDir?: string;
+};
+
 export default class CachedHandler {
-  constructor(options: CreateRedisStringsHandlerOptions) {
+  constructor(options: NextCacheHandlerOptions) {
     if (!cachedHandler) {
       console.log('created cached handler');
-      cachedHandler = new RedisStringsHandler(options);
+      const keyPrefix = resolveKeyPrefix({
+        optionKeyPrefix: options.keyPrefix,
+        serverDistDir: options.serverDistDir,
+        env: process.env,
+      });
+
+      cachedHandler = new RedisStringsHandler({
+        ...options,
+        keyPrefix,
+      });
     }
   }
   get(

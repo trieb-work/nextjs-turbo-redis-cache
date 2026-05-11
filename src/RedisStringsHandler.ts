@@ -64,7 +64,7 @@ export type CreateRedisStringsHandlerOptions = {
    */
   database?: number;
   /** Prefix added to all Redis keys
-   * @default process.env.VERCEL_URL || 'UNDEFINED_URL_'
+   * @default process.env.KEY_PREFIX || process.env.VERCEL_URL || 'UNDEFINED_URL_'
    */
   keyPrefix?: string;
   /** Timeout in milliseconds for time critical Redis operations (during cache get, which blocks site rendering).
@@ -152,7 +152,9 @@ export default class RedisStringsHandler {
         ? `redis://${process.env.REDISHOST}:${process.env.REDISPORT}`
         : 'redis://localhost:6379',
     database = process.env.VERCEL_ENV === 'production' ? 0 : 1,
-    keyPrefix = process.env.VERCEL_URL || 'UNDEFINED_URL_',
+    keyPrefix = process.env.KEY_PREFIX ||
+      process.env.VERCEL_URL ||
+      'UNDEFINED_URL_',
     sharedTagsKey = '__sharedTags__',
     getTimeoutMs = process.env.REDIS_COMMAND_TIMEOUT_MS
       ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 500)
@@ -196,16 +198,19 @@ export default class RedisStringsHandler {
             error,
             killContainerOnErrorCount++,
           );
-          setTimeout(
-            () =>
+          setTimeout(() => {
+            // Avoid overlapping connect() calls which can lead to
+            // "Socket already opened" errors when a reconnect is already
+            // in progress or the socket is still open.
+            if (!this.client.isOpen && !this.client.isReady) {
               this.client.connect().catch((error) => {
                 console.error(
                   'Failed to reconnect Redis client after connection loss:',
                   error,
                 );
-              }),
-            1000,
-          );
+              });
+            }
+          }, 1000);
           if (
             this.killContainerOnErrorThreshold > 0 &&
             killContainerOnErrorCount >= this.killContainerOnErrorThreshold
@@ -228,12 +233,9 @@ export default class RedisStringsHandler {
           .then(() => {
             debug('green', 'Redis client connected.');
           })
-          .catch(() => {
-            this.client.connect().catch((error) => {
-              console.error('Failed to connect Redis client:', error);
-              this.client.disconnect();
-              throw error;
-            });
+          .catch((error) => {
+            console.error('Failed to connect Redis client:', error);
+            throw error;
           });
       } catch (error: unknown) {
         console.error('Failed to initialize Redis client');

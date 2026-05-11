@@ -1,9 +1,9 @@
 # nextjs-turbo-redis-cache
 
 [![npm version](https://img.shields.io/npm/v/@trieb.work/nextjs-turbo-redis-cache.svg)](https://www.npmjs.com/package/@trieb.work/nextjs-turbo-redis-cache)
-![Turbo redis cache image](https://github.com/user-attachments/assets/98e0dfd9-f38a-42ad-a355-9843740cc2d6)
+![Turbo redis cache image](https://github.com/user-attachments/assets/4103191e-4f4d-4139-a519-0b5bfab3e8b4)
 
-The ultimate Redis caching solution for Next.js 15 and the app router. Built for production-ready, large-scale projects, it delivers unparalleled performance and efficiency with features tailored for high-traffic applications. This package has been created after extensibly testing the @neshca package and finding several major issues with it.
+The ultimate Redis caching solution for Next.js 15 / 16 and the app router. Built for production-ready, large-scale projects, it delivers unparalleled performance and efficiency with features tailored for high-traffic applications. This package has been created after extensibly testing the @neshca package and finding several major issues with it.
 
 Key Features:
 
@@ -13,7 +13,7 @@ Key Features:
 - _Efficient Tag Management_: in-memory tags map for lightning-fast revalidate operations with minimal Redis overhead.
 - _Intelligent Key-Space Notifications_: Automatic update of in-memory tags map for expired or evicted keys.
 
-This library offers you an easy and high performant caching solution for docker, Kubernetes or Google Cloud Run deployments of Next.js.
+This library offers you an easy and high performant caching solution for docker, Kubernetes or Google Cloud Run deployments of Next.js. Read more on how it originated at [TRWK> Case Study](https://trwk.de/case-studies/nextjs-turbo-redis-cache).
 
 ## Compatibility
 
@@ -27,9 +27,12 @@ Tested versions are:
 - Nextjs 15.3.2 + redis client 4.7.0
 - Nextjs 15.4.7 + redis client 4.7.0
 - Nextjs 16.0.3 + redis client 4.7.0 (cacheComponents: false)
-- Nextjs 16.1.1 + redis client 4.7.0 (cacheComponents: false)
+- Nextjs 16.2.3 + redis client 4.7.0 (cacheComponents: false)
+- Nextjs 16.2.3 + redis client 4.7.0 (cacheComponents: true)
 
-Currently PPR, 'use cache', cacheLife and cacheTag are not tested. Use these operations with caution and your own risk. [Cache Components](https://nextjs.org/docs/app/getting-started/cache-components) support is in development.
+Currently PPR, 'use cache', cacheLife and cacheTag are not tested. Use these operations with caution and your own risk. [Cache Components](https://nextjs.org/docs/app/getting-started/cache-components) are supported experimentally (Next.js 16+).
+
+For Cache Components, see the "Cache Components handler (Next.js 16+)" section below.
 
 ## Getting started
 
@@ -48,7 +51,15 @@ pnpm install @trieb.work/nextjs-turbo-redis-cache
 ### Setup environment variables in your project/deployment
 
 REDISHOST and REDISPORT environment variables are required.
-VERCEL_URL, VERCEL_ENV are optional. VERCEL_URL is used to create a key prefix for the redis keys. VERCEL_ENV is used to determine the database to use. Only VERCEL_ENV=production will show up in DB 0 (redis default db). All other values of VERCEL_ENV will use DB 1, use `redis-cli -n 1` to connect to different DB 1. This is another protection feature to avoid that different environments (e.g. staging and production) will overwrite each other.
+KEY_PREFIX, VERCEL_URL, VERCEL_ENV are optional. For the bundled Next.js handlers (default cache handler and Cache Components handler), the key prefix precedence is:
+
+- options.keyPrefix → KEY*PREFIX → VERCEL_URL → BUILD_ID (from `.next/BUILD_ID`) → `UNDEFINED_URL*`
+
+For direct usage of `RedisStringsHandler`, the default remains framework-agnostic:
+
+- options.keyPrefix → KEY*PREFIX → VERCEL_URL → `UNDEFINED_URL*`
+
+VERCEL_ENV is used to determine the database to use. Only VERCEL_ENV=production will show up in DB 0 (redis default db). All other values of VERCEL_ENV will use DB 1, use `redis-cli -n 1` to connect to different DB 1. This is another protection feature to avoid that different environments (e.g. staging and production) will overwrite each other.
 Furthermore there exists the DEBUG_CACHE_HANDLER environment variable to enable debug logging of the caching handler once it is set to true.
 
 There exists also the SKIP_KEYSPACE_CONFIG_CHECK environment variable to skip the check for the keyspace configuration. This is useful if you are using redis in a cloud environment that forbids access to config commands. If you set SKIP_KEYSPACE_CONFIG_CHECK=true the check will be skipped and the keyspace configuration will be assumed to be correct (e.g. notify-keyspace-events Exe).
@@ -126,22 +137,22 @@ A working example of above can be found in the `test/integration/next-app-custom
 
 ## Available Options
 
-| Option                        | Description                                                                                                                                                | Default Value                                                                                                                                                 |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| redisUrl                      | Redis connection url                                                                                                                                       | `process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST ? redis://${process.env.REDISHOST}:${process.env.REDISPORT} : 'redis://localhost:6379'` |
-| database                      | Redis database number to use. Uses DB 0 for production, DB 1 otherwise                                                                                     | `process.env.VERCEL_ENV === 'production' ? 0 : 1`                                                                                                             |
-| keyPrefix                     | Prefix added to all Redis keys                                                                                                                             | `process.env.VERCEL_URL    \|\| 'UNDEFINED_URL_'`                                                                                                             |
-| sharedTagsKey                 | Key used to store shared tags hash map in Redis                                                                                                            | `'__sharedTags__'`                                                                                                                                            |
-| getTimeoutMs                  | Timeout in milliseconds for time critical Redis operations. If Redis get is not fulfilled within this time, returns null to avoid blocking site rendering. | `process.env.REDIS_COMMAND_TIMEOUT_MS ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 500) : 500`                                                 |
-| revalidateTagQuerySize        | Number of entries to query in one batch during full sync of shared tags hash map                                                                           | `250`                                                                                                                                                         |
-| avgResyncIntervalMs           | Average interval in milliseconds between tag map full re-syncs                                                                                             | `3600000` (1 hour)                                                                                                                                            |
-| redisGetDeduplication         | Enable deduplication of Redis get requests via internal in-memory cache.                                                                                   | `true`                                                                                                                                                        |
-| inMemoryCachingTime           | Time in milliseconds to cache Redis get results in memory. Set this to 0 to disable in-memory caching completely.                                          | `10000`                                                                                                                                                       |
-| defaultStaleAge               | Default stale age in seconds for cached items                                                                                                              | `1209600` (14 days)                                                                                                                                           |
-| estimateExpireAge             | Function to calculate expire age (redis TTL value) from stale age                                                                                          | Production: `staleAge * 2`<br> Other: `staleAge * 1.2`                                                                                                        |
-| socketOptions                 | Redis client socket options for TLS/SSL configuration (e.g., `{ tls: true, rejectUnauthorized: false }`)                                                   | `{ connectTimeout: timeoutMs }`                                                                                                                               |
-| clientOptions                 | Additional Redis client options (e.g., username, password)                                                                                                 | `undefined`                                                                                                                                                   |
-| killContainerOnErrorThreshold | Number of consecutive errors before the container is killed. Set to 0 to disable.                                                                          | `Number.parseInt(process.env.KILL_CONTAINER_ON_ERROR_THRESHOLD) ?? 0 : 0`                                                                                     |
+| Option                        | Description                                                                                                                                                | Default Value                                                                                                                                                                                                                |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| redisUrl                      | Redis connection url                                                                                                                                       | `process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST ? redis://${process.env.REDISHOST}:${process.env.REDISPORT} : 'redis://localhost:6379'`                                                                |
+| database                      | Redis database number to use. Uses DB 0 for production, DB 1 otherwise                                                                                     | `process.env.VERCEL_ENV === 'production' ? 0 : 1`                                                                                                                                                                            |
+| keyPrefix                     | Prefix added to all Redis keys                                                                                                                             | `RedisStringsHandler` default: `process.env.KEY_PREFIX \|\| process.env.VERCEL_URL \|\| 'UNDEFINED_URL_'`<br> Next handlers resolve: `options.keyPrefix \|\| KEY_PREFIX \|\| VERCEL_URL \|\| BUILD_ID \|\| 'UNDEFINED_URL_'` |
+| sharedTagsKey                 | Key used to store shared tags hash map in Redis                                                                                                            | `'__sharedTags__'`                                                                                                                                                                                                           |
+| getTimeoutMs                  | Timeout in milliseconds for time critical Redis operations. If Redis get is not fulfilled within this time, returns null to avoid blocking site rendering. | `process.env.REDIS_COMMAND_TIMEOUT_MS ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 500) : 500`                                                                                                                |
+| revalidateTagQuerySize        | Number of entries to query in one batch during full sync of shared tags hash map                                                                           | `250`                                                                                                                                                                                                                        |
+| avgResyncIntervalMs           | Average interval in milliseconds between tag map full re-syncs                                                                                             | `3600000` (1 hour)                                                                                                                                                                                                           |
+| redisGetDeduplication         | Enable deduplication of Redis get requests via internal in-memory cache.                                                                                   | `true`                                                                                                                                                                                                                       |
+| inMemoryCachingTime           | Time in milliseconds to cache Redis get results in memory. Set this to 0 to disable in-memory caching completely.                                          | `10000`                                                                                                                                                                                                                      |
+| defaultStaleAge               | Default stale age in seconds for cached items                                                                                                              | `1209600` (14 days)                                                                                                                                                                                                          |
+| estimateExpireAge             | Function to calculate expire age (redis TTL value) from stale age                                                                                          | Production: `staleAge * 2`<br> Other: `staleAge * 1.2`                                                                                                                                                                       |
+| socketOptions                 | Redis client socket options for TLS/SSL configuration (e.g., `{ tls: true, rejectUnauthorized: false }`)                                                   | `{ connectTimeout: timeoutMs }`                                                                                                                                                                                              |
+| clientOptions                 | Additional Redis client options (e.g., username, password)                                                                                                 | `undefined`                                                                                                                                                                                                                  |
+| killContainerOnErrorThreshold | Number of consecutive errors before the container is killed. Set to 0 to disable.                                                                          | `Number.parseInt(process.env.KILL_CONTAINER_ON_ERROR_THRESHOLD) ?? 0 : 0`                                                                                                                                                    |
 
 ## TLS Configuration
 
@@ -215,6 +226,12 @@ To run all tests you can use the following command:
 pnpm build && pnpm test
 ```
 
+Folder layout / runners:
+
+- **Vitest** (unit + integration) lives in `src/**/*.test.ts(x)` and `test/**`.
+- **Playwright** (E2E) lives in `tests/**` (see `playwright.config.ts`).
+- `test/browser/**` contains Vitest tests that hit a running Next.js app over HTTP. Despite the folder name, this is not Playwright and does not use Vitest browser mode.
+
 ### Unit tests
 
 To run unit tests you can use the following command:
@@ -231,6 +248,14 @@ To run integration tests you can use the following command:
 pnpm build && pnpm test:integration
 ```
 
+### E2E tests (Playwright)
+
+To run Playwright tests (`tests/**`) you can use:
+
+```bash
+pnpm test:e2e
+```
+
 The integration tests will start a Next.js server and test the caching handler. You can modify testing behavior by setting the following environment variables:
 
 - SKIP_BUILD: If set to true, the integration tests will not build the Next.js app. Therefore the nextjs app needs to be built before running the tests. Or you execute the test once without skip build and the re-execute `pnpm test:integration` with skip build set to true.
@@ -238,6 +263,88 @@ The integration tests will start a Next.js server and test the caching handler. 
 - DEBUG_INTEGRATION: If set to true, the integration tests will print debug information of the test itself to the console.
 
 Integration tests may have dependencies between test cases, so individual test failures should be evaluated in the context of the full test suite rather than in isolation.
+
+## Cache Components handler (Next.js 16+)
+
+This package can be used as a Cache Components handler (Node.js runtime) for Next.js apps that enable Cache Components.
+
+This is experimental support and the Next.js Cache Components APIs may still change. We don't have a larger production project right now available to test this in real world conditions.
+
+### Enable Cache Components + cache handler
+
+Install the package in your Next.js app:
+
+```bash
+pnpm add @trieb.work/nextjs-turbo-redis-cache redis
+```
+
+In your Next.js app, enable Cache Components and point `cacheHandlers.default` to a module that exports the handler instance:
+
+```ts
+// next.config.ts
+import type { NextConfig } from 'next';
+
+const nextConfig: NextConfig = {
+  cacheComponents: true,
+  cacheHandlers: {
+    default: require.resolve('./cache-handler.js'),
+  },
+};
+
+export default nextConfig;
+```
+
+```js
+// cache-handler.js
+const { redisCacheHandler } = require('@trieb.work/nextjs-turbo-redis-cache');
+
+module.exports = redisCacheHandler;
+```
+
+If you prefer ESM:
+
+```js
+// cache-handler.js
+import { redisCacheHandler } from '@trieb.work/nextjs-turbo-redis-cache';
+
+export default redisCacheHandler;
+```
+
+### Required environment variables
+
+- `REDIS_URL` (recommended): e.g. `redis://localhost:6379`
+
+Optional:
+
+- `VERCEL_URL`: used as a key prefix for multi-tenant isolation (also useful in tests). If unset, a default prefix is used.
+- `REDIS_COMMAND_TIMEOUT_MS`: timeout (ms) for Redis commands used by the handler.
+
+### Local manual testing (Cache Lab)
+
+This repo includes a dedicated Next.js Cache Components integration app with real pages for manual testing.
+
+1. Start Redis locally.
+1. Install + start the Cache Components test app:
+
+```bash
+pnpm -C test/integration/next-app-16-2-3-cache-components install
+pnpm -C test/integration/next-app-16-2-3-cache-components dev
+```
+
+Then open the Cache Lab pages:
+
+- `/cache-lab`
+- `/cache-lab/use-cache-nondeterministic`
+- `/cache-lab/cachelife-short`
+- `/cache-lab/tag-invalidation`
+- `/cache-lab/stale-while-revalidate`
+- `/cache-lab/runtime-data-suspense`
+
+To run the Playwright E2E tests against a running dev server:
+
+```bash
+PLAYWRIGHT_BASE_URL=http://localhost:3101 pnpm test:e2e
+```
 
 ## Some words on nextjs caching internals
 
@@ -255,4 +362,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Sponsor
 
-This project is created and maintained by the Next.js & Payload CMS agency [trieb.work](https://trieb.work)
+This project is created and maintained by the Next.js & Payload CMS agency [TRWK>](https://trwk.de), formerly [trieb.work](https://trieb.work).

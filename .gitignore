@@ -6,3 +6,6 @@ coverage
 .idea
 debug
 .last-run.json
+
+/.next/
+**/.next/

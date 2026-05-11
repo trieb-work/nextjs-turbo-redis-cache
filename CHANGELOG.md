@@ -1,3 +1,66 @@
+# [1.14.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.13.0...v1.14.0) (2026-05-08)
+
+
+### Features
+
+* upgrade Next.js test apps to 16.2.3 ([#77](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/77)) ([4f6c9a5](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/4f6c9a5660c11f945209691a7628c650145ebacd))
+
+# [1.13.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.12.0...v1.13.0) (2026-05-04)
+
+
+### Features
+
+* **cache:** unify key prefix resolution across Next handlers; add tests (incl. BUILD_ID integration); docs cleanup ([#72](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/72)) ([4f991f7](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/4f991f78cd6885c8ea75011a5c283c9c73f16b33))
+
+# [1.12.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.11.1...v1.12.0) (2026-05-04)
+
+
+### Features
+
+* update docs ([a2ab3d1](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/a2ab3d1fdebc3fdb8c06eaff73e0e51f333ecdfd))
+
+# [1.12.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.11.1...v1.12.0) (2026-05-04)
+
+
+### Features
+
+* update docs ([a2ab3d1](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/a2ab3d1fdebc3fdb8c06eaff73e0e51f333ecdfd))
+
+# [1.12.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.11.1...v1.12.0) (2026-04-29)
+
+
+### Features
+
+* update docs ([a2ab3d1](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/a2ab3d1fdebc3fdb8c06eaff73e0e51f333ecdfd))
+
+## [1.11.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.11.0...v1.11.1) (2026-03-08)
+
+
+### Bug Fixes
+
+* **syncedmap:** robust subscriber reconnect + redis restart test ([#69](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/69)) ([01b3a28](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/01b3a282083c23453d3e21911a1fb0f6ef5eacc1))
+
+# [1.11.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.3...v1.11.0) (2026-02-16)
+
+
+### Features
+
+* release cache components ([#67](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/67)) ([815e66b](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/815e66bab21f58d77693cad2a9d73f95ff8e7d79))
+
+## [1.10.3](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.2...v1.10.3) (2026-01-12)
+
+
+### Bug Fixes
+
+* avoid overlapping redis reconnects ([#58](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/58)) ([56e3465](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/56e3465669bcf07fa5267226a98977cbddd5ca3d))
+
+## [1.10.2](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.1...v1.10.2) (2026-01-05)
+
+
+### Bug Fixes
+
+* export CreateRedisStringsHandlerOptions type ([#66](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/66)) ([48df99f](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/48df99f5f348a464b8af58a0fa46187522aa4688))
+
 ## [1.10.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.10.0...v1.10.1) (2025-12-31)
 
 

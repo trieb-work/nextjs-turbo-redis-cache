@@ -6,15 +6,15 @@ on:
       - main
       - beta
       
+# Minimal permissions:
+#   contents:      semantic-release pushes the release commit + tag to the branch
+#   issues:        @semantic-release/github comments on referenced issues
+#   pull-requests: @semantic-release/github comments on referenced PRs
+#   id-token:      npm Trusted Publishing OIDC token exchange
 permissions:
   contents: write
-  pull-requests: write
-  deployments: write
-  packages: write
-  statuses: write
   issues: write
-  actions: write
-  discussions: write
+  pull-requests: write
   id-token: write
 
 jobs:
@@ -24,6 +24,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          # Need full history so the post-release audit can diff against pre-release SHA.
+          fetch-depth: 0
+
+      - name: Capture pre-release SHA
+        id: pre
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Install pnpm
         run: corepack enable
@@ -35,18 +42,72 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        # --ignore-scripts blocks lifecycle scripts (preinstall/install/postinstall/prepare)
+        # of all dependencies. This is the primary defence against supply-chain attacks
+        # injected via a compromised transitive dep's postinstall hook.
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
         run: npm audit signatures
 
       - name: Build project
         run: pnpm build
 
+      - name: Verify working tree is clean before release
+        # If install/build silently modified tracked files, abort before semantic-release
+        # can include them in the release commit.
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Working tree is dirty before semantic-release. Aborting."
+            git status --short
+            git diff --stat
+            exit 1
+          fi
+
       - name: Run Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub token for Semantic Release
           NPM_CONFIG_PROVENANCE: 'true'
         run: pnpm exec semantic-release
+
+      - name: Audit semantic-release commit — fail if files outside allowlist were touched
+        env:
+          PRE_SHA: ${{ steps.pre.outputs.sha }}
+        run: |
+          # Allowlist must mirror the `assets` array in release.config.cjs.
+          # Any file outside this list being modified by the release run is suspicious
+          # and blocks the npm publish step below.
+          ALLOWED="package.json pnpm-lock.yaml CHANGELOG.md"
+
+          if [ "$(git rev-parse HEAD)" = "$PRE_SHA" ]; then
+            echo "semantic-release made no commit; nothing to audit."
+            exit 0
+          fi
+
+          echo "Auditing commits ${PRE_SHA}..HEAD"
+          CHANGED=$(git diff --name-only "${PRE_SHA}..HEAD")
+          echo "Files changed:"
+          printf '%s\n' "$CHANGED"
+
+          UNEXPECTED=""
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            match=false
+            for allowed in $ALLOWED; do
+              if [ "$file" = "$allowed" ]; then
+                match=true
+                break
+              fi
+            done
+            [ "$match" = false ] && UNEXPECTED="${UNEXPECTED}\n  ${file}"
+          done <<< "$CHANGED"
+
+          if [ -n "$UNEXPECTED" ]; then
+            printf '::error::semantic-release touched files outside the allowlist:%b\n' "$UNEXPECTED"
+            echo "::error::This may indicate a compromised dependency. Aborting publish."
+            exit 1
+          fi
+
+          echo "All changed files are within the allowlist."
 
       - name: Check if current version is already published
         id: version-check
