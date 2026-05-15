@@ -226,6 +226,13 @@ To run all tests you can use the following command:
 pnpm build && pnpm test
 ```
 
+For CI, we use dedicated scripts:
+
+```bash
+pnpm test:ci
+pnpm test:integration:build-id-prefix
+```
+
 Folder layout / runners:
 
 - **Vitest** (unit + integration) lives in `src/**/*.test.ts(x)` and `test/**`.
@@ -246,6 +253,12 @@ To run integration tests you can use the following command:
 
 ```bash
 pnpm build && pnpm test:integration
+```
+
+To run the BUILD_ID integration test independently:
+
+```bash
+pnpm build && pnpm test:integration:build-id-prefix
 ```
 
 ### E2E tests (Playwright)
