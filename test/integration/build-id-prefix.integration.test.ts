@@ -58,7 +58,10 @@ describe('BUILD_ID-based key prefix (Next handlers)', () => {
 
     // Install + build
     await new Promise<void>((resolve, reject) => {
-      const p = spawn('pnpm', ['install'], { cwd: appDir, stdio: 'inherit' });
+      const p = spawn('pnpm', ['install', '--no-frozen-lockfile'], {
+        cwd: appDir,
+        stdio: 'inherit',
+      });
       p.on('close', (code) =>
         code === 0 ? resolve() : reject(new Error('pnpm i failed')),
       );
