@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://trieb-work.github.io/nextjs-turbo-redis-cache/sitemap.xml

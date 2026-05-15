@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>nextjs-turbo-redis-cache | High-Performance Redis Cache Handler for Next.js</title>
+    <meta
+      name="description"
+      content="High-performance Redis cache handler for Next.js 15/16 App Router. Get request deduplication, batch tag invalidation, in-memory caching, and production-ready scalability."
+    />
+    <meta
+      name="keywords"
+      content="Next.js cache handler, Redis cache, App Router cache, Next.js performance, cache components, batch tag invalidation"
+    />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="TRWK" />
+    <link rel="canonical" href="https://trieb-work.github.io/nextjs-turbo-redis-cache/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="nextjs-turbo-redis-cache | High-Performance Redis Cache Handler for Next.js" />
+    <meta
+      property="og:description"
+      content="The production-ready Redis cache handler for Next.js 15/16 with request deduplication, in-memory caching, and efficient tag invalidation."
+    />
+    <meta property="og:url" content="https://trieb-work.github.io/nextjs-turbo-redis-cache/" />
+    <meta
+      property="og:image"
+      content="https://github.com/user-attachments/assets/4103191e-4f4d-4139-a519-0b5bfab3e8b4"
+    />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="nextjs-turbo-redis-cache" />
+    <meta
+      name="twitter:description"
+      content="Production-ready Redis cache handler for Next.js 15/16 App Router workloads."
+    />
+    <meta
+      name="twitter:image"
+      content="https://github.com/user-attachments/assets/4103191e-4f4d-4139-a519-0b5bfab3e8b4"
+    />
+
+    <link rel="stylesheet" href="./styles.css" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareSourceCode",
+        "name": "nextjs-turbo-redis-cache",
+        "description": "High-performance Redis cache handler for Next.js 15/16 App Router with request deduplication, in-memory caching, and batch tag invalidation.",
+        "codeRepository": "https://github.com/trieb-work/nextjs-turbo-redis-cache",
+        "programmingLanguage": "TypeScript",
+        "runtimePlatform": "Node.js",
+        "license": "https://opensource.org/license/mit",
+        "author": {
+          "@type": "Organization",
+          "name": "TRWK",
+          "url": "https://trwk.de"
+        },
+        "keywords": [
+          "Next.js",
+          "Redis",
+          "Cache Handler",
+          "App Router",
+          "Performance"
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <header class="hero">
+      <p class="eyebrow">Open-source · MIT Licensed</p>
+      <h1>Redis Cache Handler Built for High-Traffic Next.js Apps</h1>
+      <p class="lead">
+        nextjs-turbo-redis-cache is a production-ready cache handler for Next.js 15/16 App Router, designed for
+        speed, consistency tradeoff awareness, and scale.
+      </p>
+      <div class="actions">
+        <a class="button primary" href="https://www.npmjs.com/package/@trieb.work/nextjs-turbo-redis-cache">Install from npm</a>
+        <a class="button" href="https://github.com/trieb-work/nextjs-turbo-redis-cache">View on GitHub</a>
+      </div>
+    </header>
+
+    <main>
+      <section aria-labelledby="features-title">
+        <h2 id="features-title">Why teams use nextjs-turbo-redis-cache</h2>
+        <ul class="feature-list">
+          <li>
+            <h3>Batch tag invalidation</h3>
+            <p>Groups and optimizes delete operations to reduce Redis load during revalidation spikes.</p>
+          </li>
+          <li>
+            <h3>Request deduplication</h3>
+            <p>Prevents duplicate Redis reads in hot paths to lower latency and improve throughput.</p>
+          </li>
+          <li>
+            <h3>In-memory acceleration</h3>
+            <p>Local memory caching reduces repetitive lookups and keeps frequent reads fast.</p>
+          </li>
+          <li>
+            <h3>Cache Components support</h3>
+            <p>Supports Next.js 16+ Cache Components flows including use cache, cacheTag, and cacheLife.</p>
+          </li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="quickstart-title">
+        <h2 id="quickstart-title">Quick start</h2>
+        <p>Install the package and wire it as your cache handler in a Next.js App Router project.</p>
+        <pre><code>pnpm add @trieb.work/nextjs-turbo-redis-cache</code></pre>
+        <p>Then follow the setup guide in the README for configuration, Redis environment variables, and advanced options.</p>
+      </section>
+
+      <section aria-labelledby="links-title" class="links">
+        <h2 id="links-title">Resources</h2>
+        <ul>
+          <li><a href="https://github.com/trieb-work/nextjs-turbo-redis-cache">GitHub Repository</a></li>
+          <li><a href="https://www.npmjs.com/package/@trieb.work/nextjs-turbo-redis-cache">npm Package</a></li>
+          <li><a href="https://trwk.de/case-studies/nextjs-turbo-redis-cache">TRWK Case Study</a></li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="alternatives-title" class="links">
+        <h2 id="alternatives-title">Other cache handler projects</h2>
+        <p>Compare this project with other open-source handlers used in the Next.js ecosystem:</p>
+        <ul>
+          <li><a href="https://github.com/fortedigital/nextjs-cache-handler">fortedigital/nextjs-cache-handler</a></li>
+          <li><a href="https://github.com/mrjasonroy/cache-components-cache-handler">mrjasonroy/cache-components-cache-handler</a></li>
+          <li><a href="https://github.com/leejpsd/nextjs-cache-handler">leejpsd/nextjs-cache-handler</a></li>
+          <li><a href="https://github.com/caching-tools/next-shared-cache">caching-tools/next-shared-cache (@neshca/cache-handler)</a></li>
+          <li><a href="https://github.com/vercel/next.js/tree/canary/examples/cache-handler-redis">vercel/next.js cache-handler-redis example</a></li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      <p>Maintained by <a href="https://trwk.de">TRWK</a>.</p>
+    </footer>
+  </body>
+</html>
