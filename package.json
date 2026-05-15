@@ -16,6 +16,8 @@
     "lint": "eslint -c eslint.config.mjs --fix",
     "format": "prettier --write 'src/**/*.ts' 'src/*.ts'",
     "test": "vitest --coverage --config vite.config.ts",
+    "test:ci": "vitest --run --coverage --config vite.config.ts src/**/*.test.ts src/**/*.test.tsx test/integration/nextjs-cache-handler.integration.test.ts",
+    "test:integration:build-id-prefix": "vitest --run --coverage --config vite.config.ts test/integration/build-id-prefix.integration.test.ts",
     "test:ui": "vitest --ui  --config vite.config.ts",
     "test:unit": "vitest --config vite.config.ts src/**/*.test.ts src/**/*.test.tsx",
     "test:integration": "vitest --config vite.config.ts ./test/integration/nextjs-cache-handler.integration.test.ts",
