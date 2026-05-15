@@ -11,6 +11,10 @@ describe('Next.js 16 Cache Components Integration', () => {
   let redisClient: RedisClientType;
   let keyPrefix: string;
 
+  async function delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   beforeAll(async () => {
     // Connect to Redis
     redisClient = createClient({
@@ -152,6 +156,41 @@ describe('Next.js 16 Cache Components Integration', () => {
       }
 
       expect(freshDataReceived).toBe(true);
+    }, 20_000);
+  });
+
+  describe('cacheLife functionality', () => {
+    it('should respect expire window and eventually return refreshed data', async () => {
+      const res1 = await fetch(`${BASE_URL}/api/cached-with-cachelife`);
+      const data1 = await res1.json();
+      expect(data1.counter).toBe(1);
+
+      const res2 = await fetch(`${BASE_URL}/api/cached-with-cachelife`);
+      const data2 = await res2.json();
+      expect(data2.counter).toBe(data1.counter);
+      expect(data2.timestamp).toBe(data1.timestamp);
+
+      await delay(6500);
+
+      let refreshedData: any;
+      for (let i = 0; i < 10; i++) {
+        const res = await fetch(`${BASE_URL}/api/cached-with-cachelife`);
+        const data = await res.json();
+
+        if (
+          data.counter !== data1.counter ||
+          data.timestamp !== data1.timestamp
+        ) {
+          refreshedData = data;
+          break;
+        }
+
+        await delay(500);
+      }
+
+      expect(refreshedData).toBeDefined();
+      expect(refreshedData.counter).toBeGreaterThan(data1.counter);
+      expect(refreshedData.timestamp).not.toBe(data1.timestamp);
     }, 20_000);
   });
 

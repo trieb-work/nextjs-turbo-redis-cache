@@ -432,7 +432,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           }
 
           // API route counter of revalidated sub-fetch-request should be the same (request deduplication of fetch requests)
-          expect(data1.subFetchData.counter).toBe(data1.subFetchData.counter);
+          expect(data1.subFetchData.counter).toBe(data2.subFetchData.counter);
           subCounter = data1.subFetchData.counter;
         });
 
@@ -625,6 +625,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           );
           // 14 days is default revalidate for pages -> expiration time is 2 * revalidate time -> -10 seconds for testing offset stability
           expect(ttl).toBeGreaterThan(2 * 14 * 24 * 60 * 60 - 30);
+          expect(ttl).toBeLessThanOrEqual(2 * 14 * 24 * 60 * 60);
         });
 
         it('The data in the redis key should match the expected format', async () => {
