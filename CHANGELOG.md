@@ -1,3 +1,10 @@
+## [1.14.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.14.0...v1.14.1) (2026-05-15)
+
+
+### Bug Fixes
+
+* treat Redis GET abort as cache miss ([#65](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/65)) ([52faf38](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/52faf38e267db3188a09a8495750d77c3b693ba8))
+
 # [1.14.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.13.0...v1.14.0) (2026-05-08)
 
 
