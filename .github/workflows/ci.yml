@@ -76,7 +76,7 @@ jobs:
         run: cd test/integration/${{ matrix.next-test-app }} && pnpm build
 
       - name: Run tests
-        run: pnpm test
+        run: pnpm test:ci
         env:
           SKIP_BUILD: true
           NEXT_TEST_APP: ${{ matrix.next-test-app }}
@@ -121,3 +121,50 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # NPM token for publishing
         run: |
           npx semantic-release --dry-run
+
+  build-id-prefix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --ignore-scripts
+
+      - name: Run lint
+        run: pnpm lint
+
+      - name: Build project
+        run: pnpm build
+
+      - name: Start Redis
+        uses: supercharge/redis-github-action@1.8.0
+        with:
+          redis-version: '7'
+          redis-port: 6379
+
+      - name: Install redis-cli
+        run: sudo apt-get update && sudo apt-get install -y redis-tools
+
+      - name: Configure Redis Keyspace Notifications
+        run: redis-cli config set notify-keyspace-events Exe
+
+      - name: Install Integration Test Project
+        run: cd test/integration/next-app-15-4-7 && pnpm install
+
+      - name: Build Integration Test Project
+        run: cd test/integration/next-app-15-4-7 && pnpm build
+
+      - name: Run BUILD_ID integration test
+        run: pnpm test:integration:build-id-prefix
