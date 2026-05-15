@@ -618,6 +618,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         });
 
         it('Redis should have a key for the page which should have a TTL set to 28 days (2 * 14 days default revalidate time)', async () => {
+          await delay(REDIS_BACKGROUND_SYNC_DELAY);
           // check Redis keys
           const ttl = await redisClient.ttl(
             process.env.VERCEL_URL + '/pages/no-fetch/default-page',
