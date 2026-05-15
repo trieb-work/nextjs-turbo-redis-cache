@@ -25,10 +25,29 @@ describe('BUILD_ID-based key prefix (Next handlers)', () => {
   let nextProcess: ChildProcessWithoutNullStreams | undefined;
   let redis: RedisClientType;
   let appDir: string;
+  let tempRootDir: string | undefined;
   let buildId: string;
 
   beforeAll(async () => {
-    appDir = path.join(__dirname, NEXT_APP);
+    const sourceAppDir = path.join(__dirname, NEXT_APP);
+    tempRootDir = fs.mkdtempSync(
+      path.join(__dirname, `.tmp-build-id-prefix-${NEXT_APP}-`),
+    );
+    appDir = path.join(tempRootDir, NEXT_APP);
+    fs.cpSync(sourceAppDir, appDir, {
+      recursive: true,
+      filter: (src) => {
+        const basename = path.basename(src);
+        return basename !== 'node_modules' && basename !== '.next';
+      },
+    });
+
+    const packageJsonPath = path.join(appDir, 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    const repoRoot = path.resolve(__dirname, '../..');
+    packageJson.dependencies['@trieb.work/nextjs-turbo-redis-cache'] =
+      `file:${repoRoot}`;
+    fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
 
     // Ensure clean env so BUILD_ID precedence kicks in
     delete (process.env as Record<string, string | undefined>).KEY_PREFIX;
@@ -82,6 +101,9 @@ describe('BUILD_ID-based key prefix (Next handlers)', () => {
       if (redis) await redis.quit();
     } finally {
       if (nextProcess) nextProcess.kill();
+      if (tempRootDir) {
+        fs.rmSync(tempRootDir, { recursive: true, force: true });
+      }
     }
   });
 
