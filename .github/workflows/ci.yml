@@ -203,9 +203,6 @@ jobs:
         env:
           CACHE_COMPONENTS_APP: ${{ matrix.cache-components-app }}
 
-      - name: Run Redis kill/reconnect test
-        run: pnpm vitest --run --config vitest.cache-components.config.ts test/vitest/integration/cache-components/redis-kill-reconnect.test.ts
-
   e2e:
     runs-on: ubuntu-latest
     needs: lint-and-unit

@@ -75,10 +75,10 @@ async function main() {
   process.env.VERCEL_URL = `e2e-${name}-`;
 
   const { getRedisCacheComponentsHandler } = await import(
-    '../../../src/CacheComponentsHandler'
+    '../../../../../src/CacheComponentsHandler'
   );
   const { default: RedisStringsHandler } = await import(
-    '../../../src/RedisStringsHandler'
+    '../../../../../src/RedisStringsHandler'
   );
 
   // Cache Components handler
