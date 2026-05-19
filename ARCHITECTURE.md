@@ -42,7 +42,7 @@ flowchart TB
         subgraph "In-Memory Maps"
             STM["sharedTagsMap\n(SyncedMap&lt;string[]&gt;)\ncacheKey → tags"]
             RTM["revalidatedTagsMap\n(SyncedMap&lt;number&gt;)\ntag → timestamp"]
-            DEDUP["inMemoryDeduplicationCache\n(SyncedMap&lt;Promise&gt;)\n(RedisStringsHandler only)"]
+            DEDUP["inMemoryDeduplicationCache\n(SyncedMap&lt;Promise&gt;)"]
         end
     end
 
@@ -153,7 +153,7 @@ The tag information _is_ stored inside the cached entry value as well. However, 
 
 ## DeduplicatedRequestHandler
 
-`DeduplicatedRequestHandler<T, K>` (`src/DeduplicatedRequestHandler.ts`) is a generic request deduplication + short-lived in-memory cache wrapper. It is used **only in `RedisStringsHandler`** (the Cache Components handler does not use it).
+`DeduplicatedRequestHandler<T, K>` (`src/DeduplicatedRequestHandler.ts`) is a generic request deduplication + short-lived in-memory cache wrapper. It is used by **both** `RedisStringsHandler` and `CacheComponentsHandler`.
 
 ### Motivation
 
@@ -170,7 +170,7 @@ When `set()` stores a value in Redis, it also **seeds** the deduplication cache 
 ```mermaid
 sequenceDiagram
     participant NX as Next.js
-    participant H as RedisStringsHandler
+    participant H as Cache Handler (either)
     participant DC as DeduplicationCache
     participant R as Redis
 
@@ -245,7 +245,7 @@ flowchart TD
 
 1. **Timeout**: Every `Redis GET` uses `AbortSignal.timeout(getTimeoutMs)` (default 500ms). If Redis is slow, the handler returns `null` so the page can be server-rendered instead of waiting.
 
-2. **Deduplication** (RedisStringsHandler only): Before hitting Redis, the deduplication cache is checked for an existing in-flight or recently resolved promise for the same key.
+2. **Deduplication** (both handlers): Before hitting Redis, the deduplication cache is checked for an existing in-flight or recently resolved promise for the same key. Enabled by default (`redisGetDeduplication: true`) with a 10s caching window (`inMemoryCachingTime: 10_000`).
 
 3. **Lazy tag invalidation**: Instead of eagerly deleting all fetch entries when a page tag is revalidated, the handler records the revalidation timestamp in `revalidatedTagsMap`. During `get`, it compares `lastModified` / `timestamp` against the max revalidation timestamp of all related tags. If the entry is stale, it is deleted and `null` is returned. This is necessary because `revalidateTag` for implicit tags (`_N_T_` prefix) does not know which fetch cache keys are affected.
 
@@ -306,7 +306,7 @@ flowchart TD
     D2 --> E["Redis SET prefix:key serialized EX ttl"]
     D3 --> E
 
-    C --> SEED["RedisStringsHandler only:\nSeed deduplication cache"]
+    C --> SEED["Seed deduplication cache\n(if redisGetDeduplication enabled)"]
 
     E --> F{Tags changed?}
     F -->|"Yes (or new)"| G["sharedTagsMap.set(key, tags)\n→ HSET + PUBLISH"]
@@ -322,7 +322,7 @@ flowchart TD
 
 2. **Tag deduplication**: Before writing to `sharedTagsMap`, both handlers check if the current tags are identical to the already stored tags. If so, the write is skipped to reduce Redis operations.
 
-3. **Dedup cache seeding** (RedisStringsHandler only): The serialized value is immediately seeded into the `DeduplicatedRequestHandler`, so a following `get()` for the same key can be served from memory.
+3. **Dedup cache seeding** (both handlers): The serialized value is immediately seeded into the `DeduplicatedRequestHandler`, so a following `get()` for the same key can be served from memory.
 
 4. **Stream handling** (CacheComponentsHandler): The `ReadableStream` from Next.js is tee'd – one branch is consumed to produce the stored base64 value, while the original stream is left intact for Next.js to continue using.
 
@@ -365,7 +365,7 @@ flowchart TD
 
     G --> H["Delete from sharedTagsMap\n→ HDEL + PUBLISH"]
 
-    G --> I["RedisStringsHandler only:\nDelete from inMemoryDeduplicationCache"]
+    G --> I["Delete from inMemoryDeduplicationCache\n(if redisGetDeduplication enabled)"]
 
     H --> J["Done"]
     I --> J
@@ -379,7 +379,7 @@ flowchart TD
 
 3. **Cross-instance propagation**: The `sharedTagsMap.delete()` publishes a Pub/Sub message, so all other instances immediately remove the deleted keys from their local maps as well.
 
-4. **Dedup cache cleanup** (RedisStringsHandler only): Revalidated keys are also removed from the `inMemoryDeduplicationCache` to prevent stale data from being served from memory.
+4. **Dedup cache cleanup** (both handlers): Revalidated keys are also removed from the `inMemoryDeduplicationCache` to prevent stale data from being served from memory.
 
 ---
 
@@ -394,8 +394,8 @@ flowchart TD
 | **set() receives**        | Resolved data                                                                    | `Promise<CacheComponentsEntry>` (may not yet be resolved)                       |
 | **TTL calculation**       | `estimateExpireAge(revalidate)` – configurable function                          | `entry.expire` – passed directly by Next.js                                     |
 | **Tag source in set**     | `x-next-cache-tags` header + `ctx.tags`                                          | `entry.tags`                                                                    |
-| **Request deduplication** | Yes (`DeduplicatedRequestHandler`)                                               | No                                                                              |
-| **In-memory caching**     | Yes (configurable `inMemoryCachingTime`)                                         | No                                                                              |
+| **Request deduplication** | Yes (`DeduplicatedRequestHandler`, default on)                                   | Yes (`DeduplicatedRequestHandler`, default on)                                  |
+| **In-memory caching**     | Yes (configurable `inMemoryCachingTime`, default 10s)                            | Yes (configurable `inMemoryCachingTime`, default 10s)                           |
 | **Revalidation function** | `revalidateTag(tagOrTags)`                                                       | `updateTags(tags, durations?)`                                                  |
 | **Implicit tag handling** | Stores timestamp in `revalidatedTagsMap`, lazy check in `get()` for `FETCH` kind | Stores timestamp in `revalidatedTagsMap`, lazy check in `get()` for all entries |
 | **Singleton pattern**     | External (user wraps in `module.exports`)                                        | Built-in `getRedisCacheComponentsHandler()` singleton                           |
@@ -412,16 +412,20 @@ flowchart LR
         A["Redis Strings\n(actual cache data)"]
         B["sharedTagsMap\n(key → tags)"]
         C["revalidatedTagsMap\n(tag → timestamp)"]
+        D["inMemoryDeduplicationCache\n(key → Promise)"]
     end
 
     SET["set()"] --> A
     SET --> B
-    GET["get()"] --> A
+    SET -.->|"seed"| D
+    GET["get()"] --> D
+    GET -->|"on miss"| A
     GET -.->|"check staleness"| C
     REV["revalidateTag()\nupdateTags()"] --> C
     REV -->|"find keys via"| B
     REV -->|"UNLINK"| A
     REV -->|"cleanup"| B
+    REV -->|"evict"| D
 ```
 
-Both handlers rely on `SyncedMap` for cross-instance consistency of the tag maps and use the same pattern of "find affected keys via `sharedTagsMap` → batch delete from Redis → clean up maps".
+Both handlers rely on `SyncedMap` for cross-instance consistency of the tag maps and use the same pattern of "find affected keys via `sharedTagsMap` → batch delete from Redis → clean up maps". Both also use `DeduplicatedRequestHandler` (enabled by default) to reduce Redis load by deduplicating concurrent `get()` calls for the same key and seeding the cache on `set()`.

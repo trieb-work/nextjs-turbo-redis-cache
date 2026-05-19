@@ -6,6 +6,7 @@ import {
   redisErrorHandler,
 } from './RedisStringsHandler';
 import { SyncedMap } from './SyncedMap';
+import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
 import { debug } from './utils/debug';
 import { resolveKeyPrefix } from './utils/prefix';
 
@@ -87,8 +88,19 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
   private client: Client;
   private revalidatedTagsMap: SyncedMap<number>;
   private sharedTagsMap: SyncedMap<string[]>;
+  private inMemoryDeduplicationCache: SyncedMap<
+    Promise<ReturnType<Client['get']>>
+  >;
   private keyPrefix: string;
   private getTimeoutMs: number;
+  private redisGet: Client['get'];
+  private redisDeduplicationHandler: DeduplicatedRequestHandler<
+    Client['get'],
+    string | Buffer | null
+  >;
+  private deduplicatedRedisGet: (key: string) => Client['get'];
+  private redisGetDeduplication: boolean;
+  private inMemoryCachingTime: number;
 
   constructor({
     redisUrl = process.env.REDIS_URL
@@ -103,6 +115,8 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
       : 500,
     revalidateTagQuerySize = 250,
     avgResyncIntervalMs = 60 * 60 * 1_000,
+    redisGetDeduplication = true,
+    inMemoryCachingTime = 10_000,
     socketOptions,
     clientOptions,
     killContainerOnErrorThreshold = process.env
@@ -118,6 +132,8 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         env: process.env,
       });
       this.getTimeoutMs = getTimeoutMs;
+      this.redisGetDeduplication = redisGetDeduplication;
+      this.inMemoryCachingTime = inMemoryCachingTime;
 
       this.client = createClient({
         url: redisUrl,
@@ -208,6 +224,29 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
           avgResyncIntervalMs / 10 +
           Math.random() * (avgResyncIntervalMs / 10),
       });
+
+      this.inMemoryDeduplicationCache = new SyncedMap({
+        client: this.client,
+        keyPrefix: this.keyPrefix,
+        redisKey: '__cacheComponents_inMemoryDeduplicationCache__',
+        database,
+        querySize: revalidateTagQuerySize,
+        filterKeys,
+        customizedSync: {
+          withoutRedisHashmap: true,
+          withoutSetSync: true,
+        },
+      });
+
+      const redisGet: Client['get'] = this.client.get.bind(this.client);
+      this.redisDeduplicationHandler = new DeduplicatedRequestHandler(
+        redisGet,
+        inMemoryCachingTime,
+        this.inMemoryDeduplicationCache,
+      );
+      this.redisGet = redisGet;
+      this.deduplicatedRedisGet =
+        this.redisDeduplicationHandler.deduplicatedFunction;
     } catch (error) {
       console.error('RedisCacheComponentsHandler constructor error', error);
       throw error;
@@ -253,12 +292,18 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
     try {
       await this.assertClientIsReady();
 
+      const clientGet = this.redisGetDeduplication
+        ? this.deduplicatedRedisGet(cacheKey)
+        : this.redisGet;
+
       const serialized = await redisErrorHandler(
-        'RedisCacheComponentsHandler.get(), operation: get ' +
+        'RedisCacheComponentsHandler.get(), operation: get' +
+          (this.redisGetDeduplication ? ' deduplicated' : '') +
+          ' ' +
           this.getTimeoutMs +
           'ms ' +
           redisKey,
-        this.client.get(
+        clientGet(
           commandOptions({ signal: AbortSignal.timeout(this.getTimeoutMs) }),
           redisKey,
         ),
@@ -355,6 +400,10 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         throw jsonError;
       }
 
+      if (this.redisGetDeduplication) {
+        this.redisDeduplicationHandler.seedRequestReturn(cacheKey, serialized);
+      }
+
       // expire is already a duration in seconds, use it directly
       const ttlSeconds =
         Number.isFinite(stored.expire) && stored.expire > 0
@@ -449,6 +498,12 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         'RedisCacheComponentsHandler.updateTags(), operation: unlink',
         this.client.unlink(fullRedisKeys),
       );
+
+      if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
+        for (const key of keysToDelete) {
+          this.inMemoryDeduplicationCache.delete(key);
+        }
+      }
 
       // Delete from sharedTagsMap
       const deleteTagsOperation = this.sharedTagsMap.delete(cacheKeys);

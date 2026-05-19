@@ -135,27 +135,27 @@ const nextConfig = {
 }
 ```
 
-A working example of above can be found in the `test/integration/next-app-customized` folder.
+A working example of above can be found in the `test/nextjs-test-projects/next-app-customized` folder.
 
 ## Available Options
 
-| Option                        | Description                                                                                                                                                | Default Value                                                                                                                                                                                                                |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| redisUrl                      | Redis connection url                                                                                                                                       | `process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST ? redis://${process.env.REDISHOST}:${process.env.REDISPORT} : 'redis://localhost:6379'`                                                                |
-| database                      | Redis database number to use. Uses DB 0 for production, DB 1 otherwise                                                                                     | `process.env.VERCEL_ENV === 'production' ? 0 : 1`                                                                                                                                                                            |
-| keyPrefix                     | Prefix added to all Redis keys                                                                                                                             | `RedisStringsHandler` default: `process.env.KEY_PREFIX \|\| process.env.VERCEL_URL \|\| 'UNDEFINED_URL_'`<br> Next handlers resolve: `options.keyPrefix \|\| KEY_PREFIX \|\| VERCEL_URL \|\| BUILD_ID \|\| 'UNDEFINED_URL_'` |
-| sharedTagsKey                 | Key used to store shared tags hash map in Redis                                                                                                            | `'__sharedTags__'`                                                                                                                                                                                                           |
-| getTimeoutMs                  | Timeout in milliseconds for time critical Redis operations. If Redis get is not fulfilled within this time, returns null to avoid blocking site rendering. | `process.env.REDIS_COMMAND_TIMEOUT_MS ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 500) : 500`                                                                                                                |
-| revalidateTagQuerySize        | Number of entries to query in one batch during full sync of shared tags hash map                                                                           | `250`                                                                                                                                                                                                                        |
-| avgResyncIntervalMs           | Average interval in milliseconds between tag map full re-syncs                                                                                             | `3600000` (1 hour)                                                                                                                                                                                                           |
-| redisGetDeduplication         | Enable deduplication of Redis get requests via internal in-memory cache.                                                                                   | `true`                                                                                                                                                                                                                       |
-| inMemoryCachingTime           | Time in milliseconds to cache Redis get results in memory. Set this to 0 to disable in-memory caching completely.                                          | `10000`                                                                                                                                                                                                                      |
-| defaultStaleAge               | Default stale age in seconds for cached items                                                                                                              | `1209600` (14 days)                                                                                                                                                                                                          |
-| estimateExpireAge             | Function to calculate expire age (redis TTL value) from stale age                                                                                          | Production: `staleAge * 2`<br> Other: `staleAge * 1.2`                                                                                                                                                                       |
-| socketOptions                 | Redis client socket options for TLS/SSL configuration (e.g., `{ tls: true, rejectUnauthorized: false }`)                                                   | `{ connectTimeout: timeoutMs }`                                                                                                                                                                                              |
-| clientOptions                 | Additional Redis client options (e.g., username, password)                                                                                                 | `undefined`                                                                                                                                                                                                                  |
-| killContainerOnErrorThreshold | Number of consecutive errors before the container is killed. Set to 0 to disable.                                                                          | `Number.parseInt(process.env.KILL_CONTAINER_ON_ERROR_THRESHOLD) ?? 0 : 0`                                                                                                                                                    |
-| valueSerializer               | Pluggable wire-format codec for Redis string values (compression, encryption, custom encoding). See [Custom value serializer](#custom-value-serializer-compression-encryption). | `jsonCacheValueSerializer` (`JSON.stringify` with built-in `Buffer` and `Map` encoding)                                                                       |
+| Option                        | Description                                                                                                                                                                     | Default Value                                                                                                                                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| redisUrl                      | Redis connection url                                                                                                                                                            | `process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST ? redis://${process.env.REDISHOST}:${process.env.REDISPORT} : 'redis://localhost:6379'`                                                                |
+| database                      | Redis database number to use. Uses DB 0 for production, DB 1 otherwise                                                                                                          | `process.env.VERCEL_ENV === 'production' ? 0 : 1`                                                                                                                                                                            |
+| keyPrefix                     | Prefix added to all Redis keys                                                                                                                                                  | `RedisStringsHandler` default: `process.env.KEY_PREFIX \|\| process.env.VERCEL_URL \|\| 'UNDEFINED_URL_'`<br> Next handlers resolve: `options.keyPrefix \|\| KEY_PREFIX \|\| VERCEL_URL \|\| BUILD_ID \|\| 'UNDEFINED_URL_'` |
+| sharedTagsKey                 | Key used to store shared tags hash map in Redis                                                                                                                                 | `'__sharedTags__'`                                                                                                                                                                                                           |
+| getTimeoutMs                  | Timeout in milliseconds for time critical Redis operations. If Redis get is not fulfilled within this time, returns null to avoid blocking site rendering.                      | `process.env.REDIS_COMMAND_TIMEOUT_MS ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 500) : 500`                                                                                                                |
+| revalidateTagQuerySize        | Number of entries to query in one batch during full sync of shared tags hash map                                                                                                | `250`                                                                                                                                                                                                                        |
+| avgResyncIntervalMs           | Average interval in milliseconds between tag map full re-syncs                                                                                                                  | `3600000` (1 hour)                                                                                                                                                                                                           |
+| redisGetDeduplication         | Enable deduplication of Redis get requests via internal in-memory cache.                                                                                                        | `true`                                                                                                                                                                                                                       |
+| inMemoryCachingTime           | Time in milliseconds to cache Redis get results in memory. Set this to 0 to disable in-memory caching completely.                                                               | `10000`                                                                                                                                                                                                                      |
+| defaultStaleAge               | Default stale age in seconds for cached items                                                                                                                                   | `1209600` (14 days)                                                                                                                                                                                                          |
+| estimateExpireAge             | Function to calculate expire age (redis TTL value) from stale age                                                                                                               | Production: `staleAge * 2`<br> Other: `staleAge * 1.2`                                                                                                                                                                       |
+| socketOptions                 | Redis client socket options for TLS/SSL configuration (e.g., `{ tls: true, rejectUnauthorized: false }`)                                                                        | `{ connectTimeout: timeoutMs }`                                                                                                                                                                                              |
+| clientOptions                 | Additional Redis client options (e.g., username, password)                                                                                                                      | `undefined`                                                                                                                                                                                                                  |
+| killContainerOnErrorThreshold | Number of consecutive errors before the container is killed. Set to 0 to disable.                                                                                               | `Number.parseInt(process.env.KILL_CONTAINER_ON_ERROR_THRESHOLD) ?? 0 : 0`                                                                                                                                                    |
+| valueSerializer               | Pluggable wire-format codec for Redis string values (compression, encryption, custom encoding). See [Custom value serializer](#custom-value-serializer-compression-encryption). | `jsonCacheValueSerializer` (`JSON.stringify` with built-in `Buffer` and `Map` encoding)                                                                                                                                      |
 
 ## Custom value serializer (compression, encryption)
 
@@ -302,7 +302,6 @@ export default class CustomizedCacheHandler {
   affects `RedisStringsHandler`. The Next.js 16+ `CacheComponentsHandler` does
   not currently route through `valueSerializer`; that's a candidate follow-up.
 
-
 ## TLS Configuration
 
 To connect to Redis using TLS/SSL (e.g., when using Redis over `rediss://` URLs), you can configure the socket options. Here's an example:
@@ -330,6 +329,8 @@ module.exports = class CustomizedCacheHandler {
 
 ## Consistency of Redis and this caching implementation
 
+> For a detailed description of the shared hash maps (`sharedTagsMap`, `revalidatedTagsMap`), the `SyncedMap` Pub/Sub mechanism, and the `DeduplicatedRequestHandler`, see [ARCHITECTURE.md](./ARCHITECTURE.md).
+
 To understand consistency levels of this caching implementation we first have to understand the consistency of redis itself:
 Redis executes commands in a single-threaded manner. This ensures that all operations are processed sequentially, so clients always see a consistent view of the data.
 But depending on the setup of redis this can change:
@@ -338,23 +339,43 @@ But depending on the setup of redis this can change:
 - Eventual consistency: In a master-replica setup (strong consistency only while there is no failover)
 - Eventual consistency: In Redis Cluster mode
 
-Consistency levels of Caching Handler:
-If Redis is used in a single node setup and Request Deduplication is turned off, only then the caching handler will have strong consistency.
+### Consistency levels of the Caching Handler
 
-If using Request Deduplication, the strong consistency is not guaranteed anymore. The following sequence can happen with request deduplication:
+Strong consistency is only achievable when **all** of the following conditions are met:
+
+1. Redis is used in a single node setup
+2. Only a **single application instance** is running (no cross-instance Pub/Sub propagation delay)
+3. Request Deduplication is turned off (`redisGetDeduplication: false`)
+
+In practice, most deployments run multiple application instances, which introduces eventual consistency through two mechanisms:
+
+#### Source 1: SyncedMap Pub/Sub propagation (both handlers)
+
+Both `RedisStringsHandler` and `CacheComponentsHandler` maintain in-memory maps (`sharedTagsMap`, `revalidatedTagsMap`) that are synchronized across instances via Redis Pub/Sub (see [SyncedMap in ARCHITECTURE.md](./ARCHITECTURE.md#syncedmap--the-synchronization-primitive)). When a tag is revalidated on instance 1, the Pub/Sub message must propagate to instance 2 before its local maps reflect the change. Until the message arrives, `get()` on instance 2 may still consider a cache entry valid.
+
+This is especially relevant for **implicit tags** (`_N_T_` prefix): when `revalidatePath("/products")` is called, the handler records a timestamp in `revalidatedTagsMap` and lazily invalidates nested fetch entries on the next `get()`. If another instance hasn't received the Pub/Sub update yet, it can serve a stale fetch result.
+
+The propagation delay is typically in the order of a few milliseconds (Redis Pub/Sub round-trip).
+
+#### Source 2: Request Deduplication (both handlers)
+
+Both `RedisStringsHandler` and `CacheComponentsHandler` use `DeduplicatedRequestHandler` (enabled by default via `redisGetDeduplication: true`). It caches Redis GET results in memory for `inMemoryCachingTime` (default 10s). The following sequence can occur across instances:
+
+```
 Instance 1: call set A 1
 Instance 1: served set A 1
-Instance 2: call get A
-Instance 1: call delete A
-Instance 2: call get A
-Instance 2: served get A -> 1
-Instance 2: served get A -> 1 (served 1 but should already be deleted)
+Instance 2: call get A           → result cached in dedup cache
+Instance 1: call delete A        → revalidateTag deletes from Redis + publishes Pub/Sub delete
+Instance 2: call get A           → served from dedup cache (stale!) if Pub/Sub delete hasn't arrived
+Instance 2: served get A → 1     (should already be deleted)
 Instance 1: served delete A
+```
 
-The time window for this eventual consistency to occur is typically around the length of a single redis command. Depending on your load ranging from 5ms to max 100ms.
-If using local in-memory caching (Enabled by RedisStringsHandler option inMemoryCachingTime), the window for this eventual consistency to occur can be even higher because additionally also synchronization messages have to get delivered. Depending on your load typically ranging around 50ms to max of 120ms.
+When `revalidateTag` / `updateTags` runs, it also deletes the affected keys from the `inMemoryDeduplicationCache` and broadcasts this deletion via Pub/Sub. So the consistency window is bounded by the Pub/Sub propagation time (typically 5–100ms), not the full `inMemoryCachingTime`. Only if the Pub/Sub message is lost would the stale entry persist for the full caching duration.
 
-Since all caching calls in one api/page/server action request is always served by the same instance this problem will not occur inside a single request but rather in a combination of multiple parallel requests. The probability that this will occur for a single user during a request sequence is very low, since typically a single user will not make the follow up request during this small time window of typically 50ms. To further mitigate the Problem and increase performance (increase local in-memory cache hit ratio) make sure that your load balancer will always serve one user to the same instance (sticky sessions).
+#### Practical impact
+
+Since all caching calls within one API/page/server action request are always served by the same instance, this problem will not occur inside a single request but rather in a combination of multiple parallel requests across instances. The probability that this will affect a single user during a request sequence is very low, since typically a single user will not make a follow-up request during this small time window of typically <100ms. To further mitigate the problem and increase performance (increase local in-memory cache hit ratio) make sure that your load balancer will always serve one user to the same instance (sticky sessions).
 
 By accepting and tolerating this eventual consistency, the performance of the caching handler is significantly increased.
 
@@ -384,9 +405,9 @@ pnpm test:integration:build-id-prefix
 
 Folder layout / runners:
 
-- **Vitest** (unit + integration) lives in `src/**/*.test.ts(x)` and `test/**`.
-- **Playwright** (E2E) lives in `tests/**` (see `playwright.config.ts`).
-- `test/browser/**` contains Vitest tests that hit a running Next.js app over HTTP. Despite the folder name, this is not Playwright and does not use Vitest browser mode.
+- **Vitest** unit tests live in `test/vitest/unit/**`; integration tests in `test/vitest/integration/**`.
+- **Playwright** (E2E) lives in `test/playwright/**` (see `playwright.config.ts`).
+- **Test fixtures** (Next.js apps) live in `test/nextjs-test-projects/`.
 
 ### Unit tests
 
@@ -410,14 +431,6 @@ To run the BUILD_ID integration test independently:
 pnpm build && pnpm test:integration:build-id-prefix
 ```
 
-### E2E tests (Playwright)
-
-To run Playwright tests (`tests/**`) you can use:
-
-```bash
-pnpm test:e2e
-```
-
 The integration tests will start a Next.js server and test the caching handler. You can modify testing behavior by setting the following environment variables:
 
 - SKIP_BUILD: If set to true, the integration tests will not build the Next.js app. Therefore the nextjs app needs to be built before running the tests. Or you execute the test once without skip build and the re-execute `pnpm test:integration` with skip build set to true.
@@ -425,6 +438,14 @@ The integration tests will start a Next.js server and test the caching handler. 
 - DEBUG_INTEGRATION: If set to true, the integration tests will print debug information of the test itself to the console.
 
 Integration tests may have dependencies between test cases, so individual test failures should be evaluated in the context of the full test suite rather than in isolation.
+
+### E2E tests (Playwright)
+
+To run Playwright tests (`test/playwright/**`) you can use:
+
+```bash
+pnpm test:e2e
+```
 
 ## Cache Components handler (Next.js 16+)
 
@@ -489,8 +510,8 @@ This repo includes a dedicated Next.js Cache Components integration app with rea
 1. Install + start the Cache Components test app:
 
 ```bash
-pnpm -C test/integration/next-app-16-2-3-cache-components install
-pnpm -C test/integration/next-app-16-2-3-cache-components dev
+pnpm -C test/nextjs-test-projects/next-app-16-2-3-cache-components install
+pnpm -C test/nextjs-test-projects/next-app-16-2-3-cache-components dev
 ```
 
 Then open the Cache Lab pages:

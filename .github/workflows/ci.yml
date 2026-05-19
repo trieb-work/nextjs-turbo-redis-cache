@@ -8,31 +8,15 @@ on:
     branches:
       - main
 
-# Default-deny: every job inherits read-only access. Jobs that need more
-# elevate explicitly via their own `permissions:` block (see `build` below).
 permissions:
   contents: read
 
 jobs:
-  build:
+  lint-and-unit:
     runs-on: ubuntu-latest
     permissions:
-      contents: read # Required for actions/checkout
-      pull-requests: write # Required for the coverage-comments action on PRs
-    strategy:
-      matrix:
-        include:
-          - next-test-app: next-app-15-0-3
-            run-cache-components: false
-          - next-test-app: next-app-15-3-2
-            run-cache-components: false
-          - next-test-app: next-app-15-4-7
-            run-cache-components: false
-          - next-test-app: next-app-16-0-3
-            run-cache-components: true
-          - next-test-app: next-app-16-2-3
-            run-cache-components: true
-
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -47,8 +31,6 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        # --ignore-scripts blocks lifecycle scripts of all dependencies to mitigate
-        # supply-chain attacks via compromised postinstall hooks.
         run: pnpm install --ignore-scripts
 
       - name: Run lint
@@ -57,55 +39,8 @@ jobs:
       - name: Build project
         run: pnpm build
 
-      - name: Start Redis
-        uses: supercharge/redis-github-action@1.8.0
-        with:
-          redis-version: '7'
-          redis-port: 6379
-
-      - name: Install redis-cli
-        run: sudo apt-get update && sudo apt-get install -y redis-tools
-
-      - name: Configure Redis Keyspace Notifications
-        run: redis-cli config set notify-keyspace-events Exe
-
-      - name: Install Integration Test Project
-        run: cd test/integration/${{ matrix.next-test-app }} && pnpm install
-
-      - name: Build Integration Test Project
-        run: cd test/integration/${{ matrix.next-test-app }} && pnpm build
-
-      - name: Run tests
-        run: pnpm test:ci
-        env:
-          SKIP_BUILD: true
-          NEXT_TEST_APP: ${{ matrix.next-test-app }}
-
-      - name: Install Cache Components Integration Test Project
-        if: matrix.run-cache-components
-        run: cd test/integration/next-app-16-2-3-cache-components && pnpm install
-
-      - name: Build Cache Components Integration Test Project
-        if: matrix.run-cache-components
-        run: cd test/integration/next-app-16-2-3-cache-components && pnpm build
-
-      - name: Run Cache Components integration tests
-        if: matrix.run-cache-components
-        run: pnpm test:cache-components
-
-      - name: Run Redis kill/restart E2E test (cache-components)
-        if: matrix.run-cache-components
-        run: pnpm vitest --run --config vitest.cache-components.config.ts test/cache-components/redis-kill-reconnect.spec.ts
-
-      - name: Install Playwright browsers
-        if: matrix.run-cache-components
-        run: pnpm exec playwright install --with-deps
-
-      - name: Run Playwright E2E tests
-        if: matrix.run-cache-components
-        run: pnpm test:e2e
-        env:
-          PLAYWRIGHT_BASE_URL: http://localhost:3101
+      - name: Run unit tests
+        run: pnpm test:unit:coverage
 
       - name: Code Coverage Comments
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -117,15 +52,21 @@ jobs:
       - name: Dry run the release
         if: github.event_name == 'pull_request'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub token for Semantic Release
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # NPM token for publishing
-        run: |
-          npx semantic-release --dry-run
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npx semantic-release --dry-run
 
-  build-id-prefix:
+  integration:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    needs: lint-and-unit
+    strategy:
+      matrix:
+        next-test-app:
+          - next-app-15-0-3
+          - next-app-15-3-2
+          - next-app-15-4-7
+          - next-app-16-0-3
+          - next-app-16-2-3
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -142,8 +83,51 @@ jobs:
       - name: Install dependencies
         run: pnpm install --ignore-scripts
 
-      - name: Run lint
-        run: pnpm lint
+      - name: Build project
+        run: pnpm build
+
+      - name: Start Redis
+        uses: supercharge/redis-github-action@1.8.0
+        with:
+          redis-version: '7'
+          redis-port: 6379
+
+      - name: Install redis-cli
+        run: sudo apt-get update && sudo apt-get install -y redis-tools
+
+      - name: Configure Redis Keyspace Notifications
+        run: redis-cli config set notify-keyspace-events Exe
+
+      - name: Install test project
+        run: cd test/nextjs-test-projects/${{ matrix.next-test-app }} && pnpm install
+
+      - name: Build test project
+        run: cd test/nextjs-test-projects/${{ matrix.next-test-app }} && pnpm build
+
+      - name: Run integration tests
+        run: pnpm test:integration
+        env:
+          SKIP_BUILD: true
+          NEXT_TEST_APP: ${{ matrix.next-test-app }}
+
+  integration-build-id-prefix:
+    runs-on: ubuntu-latest
+    needs: lint-and-unit
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --ignore-scripts
 
       - name: Build project
         run: pnpm build
@@ -160,11 +144,117 @@ jobs:
       - name: Configure Redis Keyspace Notifications
         run: redis-cli config set notify-keyspace-events Exe
 
-      - name: Install Integration Test Project
-        run: cd test/integration/next-app-15-4-7 && pnpm install
+      - name: Install test project
+        run: cd test/nextjs-test-projects/next-app-15-4-7 && pnpm install
 
-      - name: Build Integration Test Project
-        run: cd test/integration/next-app-15-4-7 && pnpm build
+      - name: Build test project
+        run: cd test/nextjs-test-projects/next-app-15-4-7 && pnpm build
 
-      - name: Run BUILD_ID integration test
+      - name: Run BUILD_ID prefix integration test
         run: pnpm test:integration:build-id-prefix
+
+  integration-cache-components:
+    runs-on: ubuntu-latest
+    needs: lint-and-unit
+    strategy:
+      matrix:
+        cache-components-app:
+          - next-app-16-0-3-cache-components
+          - next-app-16-2-3-cache-components
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --ignore-scripts
+
+      - name: Build project
+        run: pnpm build
+
+      - name: Start Redis
+        uses: supercharge/redis-github-action@1.8.0
+        with:
+          redis-version: '7'
+          redis-port: 6379
+
+      - name: Install redis-cli
+        run: sudo apt-get update && sudo apt-get install -y redis-tools
+
+      - name: Configure Redis Keyspace Notifications
+        run: redis-cli config set notify-keyspace-events Exe
+
+      - name: Install test project
+        run: cd test/nextjs-test-projects/${{ matrix.cache-components-app }} && pnpm install
+
+      - name: Build test project
+        run: cd test/nextjs-test-projects/${{ matrix.cache-components-app }} && pnpm build
+
+      - name: Run cache-components integration tests
+        run: pnpm test:integration:cache-components
+        env:
+          CACHE_COMPONENTS_APP: ${{ matrix.cache-components-app }}
+
+      - name: Run Redis kill/reconnect test
+        run: pnpm vitest --run --config vitest.cache-components.config.ts test/vitest/integration/cache-components/redis-kill-reconnect.test.ts
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: lint-and-unit
+    strategy:
+      matrix:
+        cache-components-app:
+          - next-app-16-0-3-cache-components
+          - next-app-16-2-3-cache-components
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --ignore-scripts
+
+      - name: Build project
+        run: pnpm build
+
+      - name: Start Redis
+        uses: supercharge/redis-github-action@1.8.0
+        with:
+          redis-version: '7'
+          redis-port: 6379
+
+      - name: Install redis-cli
+        run: sudo apt-get update && sudo apt-get install -y redis-tools
+
+      - name: Configure Redis Keyspace Notifications
+        run: redis-cli config set notify-keyspace-events Exe
+
+      - name: Install test project
+        run: cd test/nextjs-test-projects/${{ matrix.cache-components-app }} && pnpm install
+
+      - name: Build test project
+        run: cd test/nextjs-test-projects/${{ matrix.cache-components-app }} && pnpm build
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps
+
+      - name: Run Playwright E2E tests
+        run: pnpm test:e2e
+        env:
+          PLAYWRIGHT_TEST_APP: ${{ matrix.cache-components-app }}
