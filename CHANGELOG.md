@@ -1,3 +1,15 @@
+# [1.15.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.14.1...v1.15.0) (2026-05-19)
+
+
+### Bug Fixes
+
+* **serializer:** treat deserialize failures as cache misses ([a33b2c8](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/a33b2c8dd5d94686a451ed004b05a7883131f623))
+
+
+### Features
+
+* **serializer:** add pluggable valueSerializer for compression and custom encoding ([f55d0a3](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/f55d0a3ccb9f007d231826e27bca04785bcd2c50))
+
 ## [1.14.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.14.0...v1.14.1) (2026-05-15)
 
 
