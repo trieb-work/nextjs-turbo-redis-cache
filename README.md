@@ -15,6 +15,8 @@ Key Features:
 
 This library offers you an easy and high performant caching solution for docker, Kubernetes or Google Cloud Run deployments of Next.js. Read more on how it originated at [TRWK> Case Study](https://trwk.de/case-studies/nextjs-turbo-redis-cache).
 
+For a deep dive into the internal architecture (shared hash maps, SyncedMap, request deduplication, and how `get`/`set`/`revalidateTag` work under the hood), see [ARCHITECTURE.md](./ARCHITECTURE.md).
+
 ## Compatibility
 
 This package is compatible with Next.js 15.0.3 and above while using App Router. It is not compatible with Next.js 14.x. or 15-canary or if you are using Pages Router.
@@ -368,6 +370,8 @@ app/<segment>/page.tsx files will request using the APP_PAGE kind.
 /favicon.ico file will request using the APP_ROUTE kind.
 
 Fetch requests (inside app route or page) will request using the FETCH kind.
+
+For details on how these kinds are handled internally (tag maps, deduplication, value transformation), see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## License
 
