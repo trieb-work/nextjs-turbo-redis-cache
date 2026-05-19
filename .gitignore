@@ -9,3 +9,5 @@ debug
 
 /.next/
 **/.next/
+.env.cdn-test
+.cloudflared/
