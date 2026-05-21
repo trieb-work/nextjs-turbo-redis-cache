@@ -1,6 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import { spawn } from 'child_process';
 import path from 'path';
+import { spawnSync } from 'child_process';
+
+function hasContainerRuntime() {
+  const podman = spawnSync('podman', ['--version'], {
+    encoding: 'utf8',
+    timeout: 3_000,
+  });
+  if (!podman.error && (podman.status ?? 1) === 0) return true;
+
+  const docker = spawnSync('docker', ['--version'], {
+    encoding: 'utf8',
+    timeout: 3_000,
+  });
+  return !docker.error && (docker.status ?? 1) === 0;
+}
 
 function runNode(script: string, timeoutMs = 120_000) {
   return new Promise<{ code: number; stdout: string; stderr: string }>(
@@ -26,13 +41,19 @@ function runNode(script: string, timeoutMs = 120_000) {
 }
 
 describe('redis kill/reconnect end-to-end (both handlers)', () => {
-  it('survives redis restart without Socket already opened', async () => {
-    const script = path.join(__dirname, 'scripts', 'redis-kill-reconnect.ts');
+  const runOrSkip = hasContainerRuntime() ? it : it.skip;
 
-    const res = await runNode(script, 180_000);
+  runOrSkip(
+    'survives redis restart without Socket already opened',
+    async () => {
+      const script = path.join(__dirname, 'scripts', 'redis-kill-reconnect.ts');
 
-    expect(res.code).toBe(0);
-    expect(res.stdout).toContain('OK');
-    expect(res.stderr).not.toContain('Socket already opened');
-  }, 180_000);
+      const res = await runNode(script, 180_000);
+
+      expect(res.code).toBe(0);
+      expect(res.stdout).toContain('OK');
+      expect(res.stderr).not.toContain('Socket already opened');
+    },
+    180_000,
+  );
 });
