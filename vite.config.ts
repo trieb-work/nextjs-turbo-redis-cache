@@ -5,9 +5,9 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: [
-      'src/**/*.test.ts',
-      'src/**/*.test.tsx',
-      'test/integration/**/*.test.ts',
+      'test/vitest/unit/**/*.test.ts',
+      'test/vitest/unit/**/*.test.tsx',
+      'test/vitest/integration/**/*.test.ts',
     ],
     exclude: [
       'node_modules',
@@ -15,6 +15,7 @@ export default defineConfig({
       '.git',
       '**/node_modules/**',
       '**/node_modules',
+      'test/vitest/integration/cache-components/**',
     ],
     coverage: {
       provider: 'v8',

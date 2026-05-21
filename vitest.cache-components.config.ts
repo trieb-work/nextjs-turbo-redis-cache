@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['test/cache-components/**/*.spec.ts'],
+    include: ['test/vitest/integration/cache-components/**/*.test.ts'],
     exclude: [
       'node_modules',
       'dist',
