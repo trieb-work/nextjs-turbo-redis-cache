@@ -4,11 +4,11 @@ import fetch from 'node-fetch';
 import { createClient, RedisClientType } from 'redis';
 import { join } from 'path';
 import { CacheEntry } from '../../../src/RedisStringsHandler';
-import { revalidate as revalidatedFetchRouteRevalidate } from '../../nextjs-test-projects/next-app-15-4-7/src/app/api/revalidated-fetch/route';
+import { revalidate as revalidatedFetchRouteRevalidate } from '../../nextjs-test-projects/next-app-15-4-11/src/app/api/revalidated-fetch/route';
 
 // Select which Next.js test app to use. Can be overridden via NEXT_TEST_APP env var
-// Examples: next-app-15-4-7, next-app-16-0-3, next-app-16-2-3
-const NEXT_TEST_APP = process.env.NEXT_TEST_APP || 'next-app-15-4-7';
+// Examples: next-app-15-4-11, next-app-16-0-11, next-app-16-2-6
+const NEXT_TEST_APP = process.env.NEXT_TEST_APP || 'next-app-15-4-11';
 const NEXT_APP_DIR = join(
   __dirname,
   '..',

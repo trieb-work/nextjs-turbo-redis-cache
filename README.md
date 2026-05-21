@@ -27,10 +27,10 @@ Tested versions are:
 - Nextjs 15.0.3 + redis client 4.7.0
 - Nextjs 15.2.4 + redis client 4.7.0
 - Nextjs 15.3.2 + redis client 4.7.0
-- Nextjs 15.4.7 + redis client 4.7.0
-- Nextjs 16.0.3 + redis client 4.7.0 (cacheComponents: false)
-- Nextjs 16.2.3 + redis client 4.7.0 (cacheComponents: false)
-- Nextjs 16.2.3 + redis client 4.7.0 (cacheComponents: true)
+- Nextjs 15.4.11 + redis client 4.7.0
+- Nextjs 16.0.11 + redis client 4.7.0 (cacheComponents: false)
+- Nextjs 16.2.6 + redis client 4.7.0 (cacheComponents: false)
+- Nextjs 16.2.6 + redis client 4.7.0 (cacheComponents: true)
 
 _Cache Components_ (Next.js 16+) are fully supported. Automated test coverage includes `'use cache'`, `cacheTag`, and `cacheLife` flows in the Cache Components integration suite.
 
@@ -510,8 +510,8 @@ This repo includes a dedicated Next.js Cache Components integration app with rea
 1. Install + start the Cache Components test app:
 
 ```bash
-pnpm -C test/nextjs-test-projects/next-app-16-2-3-cache-components install
-pnpm -C test/nextjs-test-projects/next-app-16-2-3-cache-components dev
+pnpm -C test/nextjs-test-projects/next-app-16-2-6-cache-components install
+pnpm -C test/nextjs-test-projects/next-app-16-2-6-cache-components dev
 ```
 
 Then open the Cache Lab pages:

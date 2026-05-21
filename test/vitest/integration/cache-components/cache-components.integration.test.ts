@@ -28,7 +28,7 @@ describe('Next.js 16 Cache Components Integration', () => {
     process.env.VERCEL_URL = keyPrefix;
 
     const cacheComponentsApp =
-      process.env.CACHE_COMPONENTS_APP || 'next-app-16-2-3-cache-components';
+      process.env.CACHE_COMPONENTS_APP || 'next-app-16-2-6-cache-components';
 
     const appDir = path.join(
       __dirname,

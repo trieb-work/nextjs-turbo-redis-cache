@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 // This test assumes the Next 16 app is already running, e.g.:
-//   cd test/nextjs-test-projects/next-app-16-0-3 && pnpm dev
+//   cd test/nextjs-test-projects/next-app-16-0-11 && pnpm dev
 // on the same origin as baseURL.
 
 test('button click triggers Server Action using updateTag', async ({

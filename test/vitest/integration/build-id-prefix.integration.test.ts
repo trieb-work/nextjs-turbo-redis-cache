@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import fetch from 'node-fetch';
 
-const NEXT_APP = 'next-app-15-4-7';
+const NEXT_APP = 'next-app-15-4-11';
 const PORT = 3075;
 const BASE_URL = `http://localhost:${PORT}`;
 

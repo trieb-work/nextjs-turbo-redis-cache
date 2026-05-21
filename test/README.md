@@ -70,12 +70,14 @@ pnpm test:integration:build-id-prefix
 
 ### Cache Components (`cache-components/`)
 
-Integration tests specific to Next.js 16 Cache Components (`use cache`). Uses `next-app-16-2-3-cache-components` as the test app.
+Integration tests specific to Next.js 16 Cache Components (`use cache`). Uses `next-app-16-2-6-cache-components` as the test app.
 
 | File                                   | What it tests                                                                |
 | -------------------------------------- | ---------------------------------------------------------------------------- |
 | `cache-components.integration.test.ts` | `use cache` lifecycle: store, retrieve, tag invalidation, `cacheLife` expiry |
 | `redis-kill-reconnect.test.ts`         | Graceful recovery when Redis drops and reconnects                            |
+
+`redis-kill-reconnect.test.ts` uses a container runtime and auto-detects `podman` first, then `docker`. You can force runtime selection with `CONTAINER_RUNTIME=podman` or `CONTAINER_RUNTIME=docker`.
 
 ```bash
 pnpm test:integration:cache-components
@@ -95,7 +97,7 @@ pnpm install && pnpm build
 **Runner:** Playwright
 **Command:** `pnpm test:e2e`
 **Config:** `playwright.config.ts`
-**Requires:** Redis on localhost:6379 (Playwright auto-starts `next-app-16-2-3-cache-components` via `webServer`)
+**Requires:** Redis on localhost:6379 (Playwright auto-starts `next-app-16-2-6-cache-components` via `webServer`)
 
 Browser-based tests that validate Cache Components behavior from the user's perspective. Playwright was introduced because the Cache Components (`use cache`) feature in Next.js 16 relies on interactions that `fetch()` alone cannot reproduce:
 
@@ -115,7 +117,7 @@ The Vitest cache-components integration tests verify the server-side plumbing (R
 pnpm test:e2e
 
 # Test against a specific Next.js version:
-PLAYWRIGHT_TEST_APP=next-app-16-0-3-cache-components pnpm test:e2e
+PLAYWRIGHT_TEST_APP=next-app-16-0-11-cache-components pnpm test:e2e
 
 # Or point at an already-running server:
 PLAYWRIGHT_BASE_URL=http://localhost:3001 pnpm test:e2e
@@ -127,14 +129,14 @@ PLAYWRIGHT_BASE_URL=http://localhost:3001 pnpm test:e2e
 
 Minimal Next.js applications used as fixtures. They are not test runners — they provide the server that tests run against.
 
-| App                                | Next.js | Used by                                                        |
-| ---------------------------------- | ------- | -------------------------------------------------------------- |
-| `next-app-15-4-7`                  | 15.4.7  | Integration (matrix, default for local), build-id-prefix       |
-| `next-app-16-0-3`                  | 16.0.3  | Integration (matrix)                                           |
-| `next-app-16-2-3`                  | 16.2.3  | Integration (matrix)                                           |
-| `next-app-16-0-3-cache-components` | 16.0.3  | Integration (cache-components matrix), E2E (Playwright matrix) |
-| `next-app-16-2-3-cache-components` | 16.2.3  | Integration (cache-components matrix), E2E (Playwright matrix) |
-| `next-app-customized`              | —       | Example of custom config (referenced in project README)        |
+| App                                 | Next.js | Used by                                                        |
+| ----------------------------------- | ------- | -------------------------------------------------------------- |
+| `next-app-15-4-11`                  | 15.4.11 | Integration (matrix, default for local), build-id-prefix       |
+| `next-app-16-0-11`                  | 16.0.11 | Integration (matrix)                                           |
+| `next-app-16-2-6`                   | 16.2.6  | Integration (matrix)                                           |
+| `next-app-16-0-11-cache-components` | 16.0.11 | Integration (cache-components matrix), E2E (Playwright matrix) |
+| `next-app-16-2-6-cache-components`  | 16.2.6  | Integration (cache-components matrix), E2E (Playwright matrix) |
+| `next-app-customized`               | —       | Example of custom config (referenced in project README)        |
 
 ---
 
@@ -146,19 +148,19 @@ The CI workflow (`.github/workflows/ci.yml`) is structured as:
 lint-and-unit                        → Lint + Unit Tests + Coverage
   ├── integration                    → Matrix: 3 Next.js versions (15.4–16.2)
   ├── integration-build-id-prefix    → Isolated BUILD_ID prefix test
-  ├── integration-cache-components   → Matrix: 16.0.3 + 16.2.3 cache-components
-  └── e2e                            → Matrix: Playwright against 16.0.3 + 16.2.3
+  ├── integration-cache-components   → Matrix: 16.0.11 + 16.2.6 cache-components
+  └── e2e                            → Matrix: Playwright against 16.0.11 + 16.2.6
 ```
 
 `lint-and-unit` runs first as a gate. All other jobs run in parallel after it passes.
 
-| CI Job                         | Test App(s)                                             | What runs                                                       |
-| ------------------------------ | ------------------------------------------------------- | --------------------------------------------------------------- |
-| `lint-and-unit`                | —                                                       | `pnpm lint` + `pnpm test:unit:coverage`                         |
-| `integration`                  | `next-app-15-4-7`, `next-app-16-0-3`, `next-app-16-2-3` | `pnpm test:integration` (per matrix entry)                      |
-| `integration-build-id-prefix`  | `next-app-15-4-7`                                       | `pnpm test:integration:build-id-prefix`                         |
-| `integration-cache-components` | `next-app-16-{0-3,2-3}-cache-components`                | `pnpm test:integration:cache-components` + Redis kill/reconnect |
-| `e2e`                          | `next-app-16-{0-3,2-3}-cache-components`                | `pnpm test:e2e` (Playwright)                                    |
+| CI Job                         | Test App(s)                                               | What runs                                                       |
+| ------------------------------ | --------------------------------------------------------- | --------------------------------------------------------------- |
+| `lint-and-unit`                | —                                                         | `pnpm lint` + `pnpm test:unit:coverage`                         |
+| `integration`                  | `next-app-15-4-11`, `next-app-16-0-11`, `next-app-16-2-6` | `pnpm test:integration` (per matrix entry)                      |
+| `integration-build-id-prefix`  | `next-app-15-4-11`                                        | `pnpm test:integration:build-id-prefix`                         |
+| `integration-cache-components` | `next-app-16-{0-3,2-3}-cache-components`                  | `pnpm test:integration:cache-components` + Redis kill/reconnect |
+| `e2e`                          | `next-app-16-{0-3,2-3}-cache-components`                  | `pnpm test:e2e` (Playwright)                                    |
 
 ---
 
@@ -166,9 +168,9 @@ lint-and-unit                        → Lint + Unit Tests + Coverage
 
 | Variable                | Used by                        | Description                                                               |
 | ----------------------- | ------------------------------ | ------------------------------------------------------------------------- |
-| `NEXT_TEST_APP`         | Integration                    | Which test app to use (default: `next-app-15-4-7`)                        |
-| `CACHE_COMPONENTS_APP`  | Integration (cache-components) | Which cache-components app (default: `next-app-16-2-3-cache-components`)  |
-| `PLAYWRIGHT_TEST_APP`   | E2E                            | Which app Playwright starts (default: `next-app-16-2-3-cache-components`) |
+| `NEXT_TEST_APP`         | Integration                    | Which test app to use (default: `next-app-15-4-11`)                       |
+| `CACHE_COMPONENTS_APP`  | Integration (cache-components) | Which cache-components app (default: `next-app-16-2-6-cache-components`)  |
+| `PLAYWRIGHT_TEST_APP`   | E2E                            | Which app Playwright starts (default: `next-app-16-2-6-cache-components`) |
 | `PLAYWRIGHT_BASE_URL`   | E2E                            | Override base URL (skips `webServer` auto-start)                          |
 | `SKIP_BUILD`            | Integration                    | Skip Next.js build if app is pre-built                                    |
 | `DEBUG_INTEGRATION`     | Integration                    | Print child process stdout/stderr                                         |

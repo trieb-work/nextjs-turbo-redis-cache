@@ -46,7 +46,7 @@ For details on each layer, see `test/README.md`.
 For testing the core cache handler against a new Next.js version (e.g. 16.5.0):
 
 ```bash
-cp -r test/nextjs-test-projects/next-app-16-2-3 test/nextjs-test-projects/next-app-16-5-0
+cp -r test/nextjs-test-projects/next-app-16-2-6 test/nextjs-test-projects/next-app-16-5-0
 rm -rf test/nextjs-test-projects/next-app-16-5-0/{node_modules,.next,pnpm-lock.yaml}
 ```
 
@@ -68,7 +68,7 @@ Then add the app to the CI integration matrix in `.github/workflows/ci.yml`:
 If the new version supports `use cache` / `cacheTag` / `cacheLife`:
 
 ```bash
-cp -r test/nextjs-test-projects/next-app-16-2-3-cache-components test/nextjs-test-projects/next-app-16-5-0-cache-components
+cp -r test/nextjs-test-projects/next-app-16-2-6-cache-components test/nextjs-test-projects/next-app-16-5-0-cache-components
 rm -rf test/nextjs-test-projects/next-app-16-5-0-cache-components/{node_modules,.next,pnpm-lock.yaml}
 ```
 
@@ -105,9 +105,9 @@ Remove the folder, remove it from the CI matrix entries, and update `test/README
 
 | Variable               | Default                            | Purpose                                   |
 | ---------------------- | ---------------------------------- | ----------------------------------------- |
-| `NEXT_TEST_APP`        | `next-app-15-4-7`                  | Which app for `pnpm test:integration`     |
-| `CACHE_COMPONENTS_APP` | `next-app-16-2-3-cache-components` | Which app for cache-components tests      |
-| `PLAYWRIGHT_TEST_APP`  | `next-app-16-2-3-cache-components` | Which app Playwright starts               |
+| `NEXT_TEST_APP`        | `next-app-15-4-11`                 | Which app for `pnpm test:integration`     |
+| `CACHE_COMPONENTS_APP` | `next-app-16-2-6-cache-components` | Which app for cache-components tests      |
+| `PLAYWRIGHT_TEST_APP`  | `next-app-16-2-6-cache-components` | Which app Playwright starts               |
 | `PLAYWRIGHT_BASE_URL`  | `http://localhost:3101`            | Override to use an already-running server |
 | `SKIP_BUILD`           | —                                  | Skip Next.js build in integration tests   |
 | `DEBUG_INTEGRATION`    | —                                  | Print child process output                |

@@ -62,9 +62,9 @@ jobs:
     strategy:
       matrix:
         next-test-app:
-          - next-app-15-4-7
-          - next-app-16-0-3
-          - next-app-16-2-3
+          - next-app-15-4-11
+          - next-app-16-0-11
+          - next-app-16-2-6
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -143,10 +143,10 @@ jobs:
         run: redis-cli config set notify-keyspace-events Exe
 
       - name: Install test project
-        run: cd test/nextjs-test-projects/next-app-15-4-7 && pnpm install
+        run: cd test/nextjs-test-projects/next-app-15-4-11 && pnpm install
 
       - name: Build test project
-        run: cd test/nextjs-test-projects/next-app-15-4-7 && pnpm build
+        run: cd test/nextjs-test-projects/next-app-15-4-11 && pnpm build
 
       - name: Run BUILD_ID prefix integration test
         run: pnpm test:integration:build-id-prefix
@@ -157,8 +157,8 @@ jobs:
     strategy:
       matrix:
         cache-components-app:
-          - next-app-16-0-3-cache-components
-          - next-app-16-2-3-cache-components
+          - next-app-16-0-11-cache-components
+          - next-app-16-2-6-cache-components
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -207,8 +207,8 @@ jobs:
     strategy:
       matrix:
         cache-components-app:
-          - next-app-16-0-3-cache-components
-          - next-app-16-2-3-cache-components
+          - next-app-16-0-11-cache-components
+          - next-app-16-2-6-cache-components
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
