@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
 const testApp =
-  process.env.PLAYWRIGHT_TEST_APP || 'next-app-16-2-3-cache-components';
+  process.env.PLAYWRIGHT_TEST_APP || 'next-app-16-2-6-cache-components';
 
 export default defineConfig({
   testDir: 'test/playwright',
