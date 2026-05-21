@@ -22,8 +22,6 @@
     "test:integration:cache-components": "vitest --run --config vitest.cache-components.config.ts",
     "test:e2e": "playwright test",
     "run-dev-server": "pnpm run-dev-server-15-4-7",
-    "run-dev-server-15-0-3": "cd ./test/nextjs-test-projects/next-app-15-0-3 && pnpm dev",
-    "run-dev-server-15-3-2": "cd ./test/nextjs-test-projects/next-app-15-3-2 && pnpm dev",
     "run-dev-server-15-4-7": "cd ./test/nextjs-test-projects/next-app-15-4-7 && pnpm dev"
   },
   "main": "dist/index.js",

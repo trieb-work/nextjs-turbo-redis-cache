@@ -54,7 +54,7 @@ These tests spawn a real Next.js server as a child process, make `fetch()` reque
 
 ### Standard Integration (`nextjs-cache-handler.integration.test.ts`)
 
-Full cache lifecycle: static pages, fetch caching, revalidation, tag invalidation, TTL behavior. In CI this runs against a matrix of Next.js versions (15.0–16.2).
+Full cache lifecycle: static pages, fetch caching, revalidation, tag invalidation, TTL behavior. In CI this runs against a matrix of Next.js versions (15.4–16.2).
 
 ```bash
 pnpm test:integration
@@ -129,8 +129,6 @@ Minimal Next.js applications used as fixtures. They are not test runners — the
 
 | App                                | Next.js | Used by                                                        |
 | ---------------------------------- | ------- | -------------------------------------------------------------- |
-| `next-app-15-0-3`                  | 15.0.3  | Integration (matrix)                                           |
-| `next-app-15-3-2`                  | 15.3.2  | Integration (matrix)                                           |
 | `next-app-15-4-7`                  | 15.4.7  | Integration (matrix, default for local), build-id-prefix       |
 | `next-app-16-0-3`                  | 16.0.3  | Integration (matrix)                                           |
 | `next-app-16-2-3`                  | 16.2.3  | Integration (matrix)                                           |
@@ -146,7 +144,7 @@ The CI workflow (`.github/workflows/ci.yml`) is structured as:
 
 ```
 lint-and-unit                        → Lint + Unit Tests + Coverage
-  ├── integration                    → Matrix: 5 Next.js versions (15.0–16.2)
+  ├── integration                    → Matrix: 3 Next.js versions (15.4–16.2)
   ├── integration-build-id-prefix    → Isolated BUILD_ID prefix test
   ├── integration-cache-components   → Matrix: 16.0.3 + 16.2.3 cache-components
   └── e2e                            → Matrix: Playwright against 16.0.3 + 16.2.3
@@ -154,13 +152,13 @@ lint-and-unit                        → Lint + Unit Tests + Coverage
 
 `lint-and-unit` runs first as a gate. All other jobs run in parallel after it passes.
 
-| CI Job                         | Test App(s)                              | What runs                                                       |
-| ------------------------------ | ---------------------------------------- | --------------------------------------------------------------- |
-| `lint-and-unit`                | —                                        | `pnpm lint` + `pnpm test:unit:coverage`                         |
-| `integration`                  | `next-app-15-0-3` … `next-app-16-2-3`    | `pnpm test:integration` (per matrix entry)                      |
-| `integration-build-id-prefix`  | `next-app-15-4-7`                        | `pnpm test:integration:build-id-prefix`                         |
-| `integration-cache-components` | `next-app-16-{0-3,2-3}-cache-components` | `pnpm test:integration:cache-components` + Redis kill/reconnect |
-| `e2e`                          | `next-app-16-{0-3,2-3}-cache-components` | `pnpm test:e2e` (Playwright)                                    |
+| CI Job                         | Test App(s)                                             | What runs                                                       |
+| ------------------------------ | ------------------------------------------------------- | --------------------------------------------------------------- |
+| `lint-and-unit`                | —                                                       | `pnpm lint` + `pnpm test:unit:coverage`                         |
+| `integration`                  | `next-app-15-4-7`, `next-app-16-0-3`, `next-app-16-2-3` | `pnpm test:integration` (per matrix entry)                      |
+| `integration-build-id-prefix`  | `next-app-15-4-7`                                       | `pnpm test:integration:build-id-prefix`                         |
+| `integration-cache-components` | `next-app-16-{0-3,2-3}-cache-components`                | `pnpm test:integration:cache-components` + Redis kill/reconnect |
+| `e2e`                          | `next-app-16-{0-3,2-3}-cache-components`                | `pnpm test:e2e` (Playwright)                                    |
 
 ---
 

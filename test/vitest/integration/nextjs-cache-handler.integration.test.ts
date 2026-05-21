@@ -4,10 +4,10 @@ import fetch from 'node-fetch';
 import { createClient, RedisClientType } from 'redis';
 import { join } from 'path';
 import { CacheEntry } from '../../../src/RedisStringsHandler';
-import { revalidate as next1503_revalidatedFetch_route } from '../../nextjs-test-projects/next-app-15-0-3/src/app/api/revalidated-fetch/route';
+import { revalidate as revalidatedFetchRouteRevalidate } from '../../nextjs-test-projects/next-app-15-4-7/src/app/api/revalidated-fetch/route';
 
 // Select which Next.js test app to use. Can be overridden via NEXT_TEST_APP env var
-// Examples: next-app-15-0-3, next-app-15-3-2, next-app-15-4-7
+// Examples: next-app-15-4-7, next-app-16-0-3, next-app-16-2-3
 const NEXT_TEST_APP = process.env.NEXT_TEST_APP || 'next-app-15-4-7';
 const NEXT_APP_DIR = join(
   __dirname,
@@ -297,9 +297,9 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           const ttl = await redisClient.ttl(
             process.env.VERCEL_URL + '/api/revalidated-fetch',
           );
-          expect(ttl).toBeLessThan(2 * next1503_revalidatedFetch_route);
+          expect(ttl).toBeLessThan(2 * revalidatedFetchRouteRevalidate);
           expect(ttl).toBeGreaterThan(
-            2 * next1503_revalidatedFetch_route -
+            2 * revalidatedFetchRouteRevalidate -
               FIRST_DELAY -
               SECOND_DELAY -
               REDIS_BACKGROUND_SYNC_DELAY,
