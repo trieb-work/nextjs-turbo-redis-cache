@@ -11,3 +11,5 @@ debug
 **/.next/
 
 test-results
+
+next-env.d.ts
