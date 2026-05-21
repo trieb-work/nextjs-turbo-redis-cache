@@ -1,5 +1,7 @@
 import { spawnSync } from 'child_process';
 
+type ContainerRuntime = 'podman' | 'docker';
+
 function sh(cmd: string, args: string[], opts: { timeoutMs?: number } = {}) {
   const res = spawnSync(cmd, args, {
     encoding: 'utf8',
@@ -11,6 +13,26 @@ function sh(cmd: string, args: string[], opts: { timeoutMs?: number } = {}) {
     stdout: res.stdout ?? '',
     stderr: res.stderr ?? '',
   };
+}
+
+function canRun(cmd: string) {
+  const res = spawnSync(cmd, ['--version'], {
+    encoding: 'utf8',
+    timeout: 3_000,
+  });
+  return !res.error && (res.status ?? 1) === 0;
+}
+
+function detectContainerRuntime(): ContainerRuntime {
+  if (process.env.CONTAINER_RUNTIME === 'podman') return 'podman';
+  if (process.env.CONTAINER_RUNTIME === 'docker') return 'docker';
+
+  if (canRun('podman')) return 'podman';
+  if (canRun('docker')) return 'docker';
+
+  throw new Error(
+    'Neither podman nor docker is available. Install one of them or set CONTAINER_RUNTIME.',
+  );
 }
 
 async function sleep(ms: number) {
@@ -28,6 +50,7 @@ async function waitUntil(fn: () => Promise<boolean>, timeoutMs = 20_000) {
 }
 
 async function main() {
+  const runtime = detectContainerRuntime();
   const name = `redis-e2e-${Math.random().toString(36).slice(2, 8)}`;
 
   // Pick a free localhost port
@@ -45,12 +68,12 @@ async function main() {
   });
 
   // cleanup
-  sh('podman', ['rm', '-f', name]);
+  sh(runtime, ['rm', '-f', name]);
 
   // Start redis with keyspace notifications enabled (required by SyncedMap)
   {
     const r = sh(
-      'podman',
+      runtime,
       [
         'run',
         '-d',
@@ -153,14 +176,14 @@ async function main() {
   if (!got) throw new Error('expected cache hit (regular handler)');
 
   // Kill redis
-  sh('podman', ['stop', '-t', '0', name], { timeoutMs: 30_000 });
+  sh(runtime, ['stop', '-t', '0', name], { timeoutMs: 30_000 });
 
   // Wait a bit, then start again
   await sleep(500);
 
   {
     const r = sh(
-      'podman',
+      runtime,
       [
         'run',
         '-d',
@@ -176,7 +199,7 @@ async function main() {
       ],
       { timeoutMs: 60_000 },
     );
-    if (r.code !== 0) throw new Error(`podman run2 failed: ${r.stderr}`);
+    if (r.code !== 0) throw new Error(`${runtime} run2 failed: ${r.stderr}`);
   }
 
   // Should recover (both)
@@ -205,7 +228,7 @@ async function main() {
   } catch {}
 
   // cleanup best effort
-  sh('podman', ['rm', '-f', name]);
+  sh(runtime, ['rm', '-f', name]);
 
   // If we reach here without crashing due to Socket already opened, we're good.
   // (Vitest will check stdout for this line.)
