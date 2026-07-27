@@ -28,12 +28,13 @@ test/
 
 Fast tests with no external dependencies. Mocks are used where needed.
 
-| File                                      | What it tests                                                                    |
-| ----------------------------------------- | -------------------------------------------------------------------------------- |
-| `serializer.test.ts`                      | `CacheValueSerializer` interface, JSON round-trips, singleton stability          |
-| `index.test.ts`                           | `RedisStringsHandler` constructor options, default behaviors                     |
-| `utils/prefix.test.ts`                    | `resolveKeyPrefix` logic (BUILD_ID fallback, env var precedence)                 |
-| `reconnect-socket-already-opened.test.ts` | Regression: reconnect logic doesn't call `connect()` when socket is already open |
+| File                                      | What it tests                                                                                  |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `serializer.test.ts`                      | `CacheValueSerializer` interface, JSON round-trips, singleton stability                        |
+| `index.test.ts`                           | `RedisStringsHandler` constructor options, default behaviors                                   |
+| `utils/prefix.test.ts`                    | `resolveKeyPrefix` logic (BUILD_ID fallback, env var precedence)                               |
+| `reconnect-socket-already-opened.test.ts` | Regression: reconnect logic doesn't call `connect()` when socket is already open               |
+| `pages-router-kinds.test.ts`              | Pages Router cache kinds (`PAGES`, `REDIRECT`, `null`/notFound), implicit tags, TTL derivation |
 
 ```bash
 pnpm test:unit          # single run
@@ -58,6 +59,16 @@ Full cache lifecycle: static pages, fetch caching, revalidation, tag invalidatio
 
 ```bash
 pnpm test:integration
+```
+
+### Pages Router (`pages-router.integration.test.ts`)
+
+Pages Router cache lifecycle against the `next-pages-16-2-6` app: `PAGES` entry format, TTL derivation from `getStaticProps` `revalidate`, `fallback: 'blocking'` first hits, `notFound: true` (null cache entries), `redirect:` results, and `revalidate: false` TTL fallback.
+
+Starts **two** `next start` instances of the same build sharing one Redis and proves that on-demand revalidation (`res.revalidate(path)`) triggered on instance A is served fresh by instance B (HTML and `/_next/data` pageData JSON) — the multi-instance ISR scenario behind a load balancer.
+
+```bash
+pnpm test:integration:pages
 ```
 
 ### BUILD_ID Prefix (`build-id-prefix.integration.test.ts`)
@@ -134,6 +145,7 @@ Minimal Next.js applications used as fixtures. They are not test runners — the
 | `next-app-15-4-11`                  | 15.4.11 | Integration (matrix, default for local), build-id-prefix       |
 | `next-app-16-0-11`                  | 16.0.11 | Integration (matrix)                                           |
 | `next-app-16-2-6`                   | 16.2.6  | Integration (matrix)                                           |
+| `next-pages-16-2-6`                 | 16.2.6  | Integration (Pages Router, two-instance revalidation)          |
 | `next-app-16-0-11-cache-components` | 16.0.11 | Integration (cache-components matrix), E2E (Playwright matrix) |
 | `next-app-16-2-6-cache-components`  | 16.2.6  | Integration (cache-components matrix), E2E (Playwright matrix) |
 | `next-app-customized`               | —       | Example of custom config (referenced in project README)        |
@@ -147,6 +159,7 @@ The CI workflow (`.github/workflows/ci.yml`) is structured as:
 ```
 lint-and-unit                        → Lint + Unit Tests + Coverage
   ├── integration                    → Matrix: 3 Next.js versions (15.4–16.2)
+  ├── integration-pages              → Pages Router (two-instance revalidation)
   ├── integration-build-id-prefix    → Isolated BUILD_ID prefix test
   ├── integration-cache-components   → Matrix: 16.0.11 + 16.2.6 cache-components
   └── e2e                            → Matrix: Playwright against 16.0.11 + 16.2.6
@@ -158,6 +171,7 @@ lint-and-unit                        → Lint + Unit Tests + Coverage
 | ------------------------------ | --------------------------------------------------------- | --------------------------------------------------------------- |
 | `lint-and-unit`                | —                                                         | `pnpm lint` + `pnpm test:unit:coverage`                         |
 | `integration`                  | `next-app-15-4-11`, `next-app-16-0-11`, `next-app-16-2-6` | `pnpm test:integration` (per matrix entry)                      |
+| `integration-pages`            | `next-pages-16-2-6`                                       | `pnpm test:integration:pages`                                   |
 | `integration-build-id-prefix`  | `next-app-15-4-11`                                        | `pnpm test:integration:build-id-prefix`                         |
 | `integration-cache-components` | `next-app-16-{0-3,2-3}-cache-components`                  | `pnpm test:integration:cache-components` + Redis kill/reconnect |
 | `e2e`                          | `next-app-16-{0-3,2-3}-cache-components`                  | `pnpm test:e2e` (Playwright)                                    |
@@ -169,6 +183,7 @@ lint-and-unit                        → Lint + Unit Tests + Coverage
 | Variable                | Used by                        | Description                                                               |
 | ----------------------- | ------------------------------ | ------------------------------------------------------------------------- |
 | `NEXT_TEST_APP`         | Integration                    | Which test app to use (default: `next-app-15-4-11`)                       |
+| `NEXT_PAGES_TEST_APP`   | Integration (Pages Router)     | Which Pages Router test app to use (default: `next-pages-16-2-6`)         |
 | `CACHE_COMPONENTS_APP`  | Integration (cache-components) | Which cache-components app (default: `next-app-16-2-6-cache-components`)  |
 | `PLAYWRIGHT_TEST_APP`   | E2E                            | Which app Playwright starts (default: `next-app-16-2-6-cache-components`) |
 | `PLAYWRIGHT_BASE_URL`   | E2E                            | Override base URL (skips `webServer` auto-start)                          |

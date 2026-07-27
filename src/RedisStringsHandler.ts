@@ -13,6 +13,79 @@ export type CacheEntry = {
   tags: string[];
 };
 
+/** Discriminated union of the `ctx` argument Next.js passes to
+ * {@link RedisStringsHandler.get}. The Pages Router (`PAGES`) has no PPR
+ * concept, so `isRoutePPREnabled` is optional for it. */
+export type GetContext =
+  | {
+      kind: 'APP_ROUTE' | 'APP_PAGE';
+      isRoutePPREnabled: boolean;
+      isFallback: boolean;
+    }
+  | {
+      kind: 'PAGES';
+      isRoutePPREnabled?: boolean;
+      isFallback: boolean;
+    }
+  | {
+      kind: 'FETCH';
+      revalidate: number;
+      fetchUrl: string;
+      fetchIdx: number;
+      tags: string[];
+      softTags: string[];
+      isFallback: boolean;
+    };
+
+/** Discriminated union of cache payloads accepted by
+ * {@link RedisStringsHandler.set}. `null` is a valid payload: the Pages Router
+ * stores `notFound: true` results as a cache entry with a null value. */
+export type SetCacheValue =
+  | {
+      kind: 'APP_PAGE';
+      status?: number;
+      headers: {
+        'x-nextjs-stale-time': string; // timestamp in ms
+        'x-next-cache-tags': string; // comma separated paths (tags)
+      };
+      html: string;
+      rscData: Buffer;
+      segmentData: unknown;
+      postboned: unknown;
+    }
+  | {
+      kind: 'APP_ROUTE';
+      status: number;
+      headers: {
+        'cache-control'?: string;
+        'x-nextjs-stale-time': string; // timestamp in ms
+        'x-next-cache-tags': string; // comma separated paths (tags)
+      };
+      body: Buffer;
+    }
+  | {
+      kind: 'PAGES';
+      html: string;
+      pageData: object;
+      headers?: Record<string, number | string | string[] | undefined>;
+      status?: number;
+    }
+  | {
+      kind: 'REDIRECT';
+      props: object;
+    }
+  | {
+      kind: 'FETCH';
+      data: {
+        headers: Record<string, string>;
+        body: string; // base64 encoded
+        status: number;
+        url: string;
+      };
+      revalidate: number | false;
+    }
+  | null;
+
 export function redisErrorHandler<T extends Promise<unknown>>(
   debugInfo: string,
   redisCommandResult: T,
@@ -143,6 +216,24 @@ const NEXT_CACHE_IMPLICIT_TAG_ID = '_N_T_';
 // Redis key used to store a map of tags and their last revalidation timestamps
 // This helps track when specific tags were last invalidated
 const REVALIDATED_TAGS_KEY = '__revalidated_tags__';
+
+// Cache kinds this handler is designed and tested for. Kept as the single
+// source of truth for both payload validation and the warning message, so
+// adding a kind is a one-line change here instead of edits scattered across
+// the type union, the guard chain, and the log string.
+const SUPPORTED_GET_KINDS = [
+  'APP_ROUTE',
+  'APP_PAGE',
+  'PAGES',
+  'FETCH',
+] as const;
+const SUPPORTED_SET_KINDS = [
+  'APP_ROUTE',
+  'APP_PAGE',
+  'PAGES',
+  'REDIRECT',
+  'FETCH',
+] as const;
 
 let killContainerOnErrorCount: number = 0;
 export default class RedisStringsHandler {
@@ -371,35 +462,14 @@ export default class RedisStringsHandler {
     }
   }
 
-  public async get(
-    key: string,
-    ctx:
-      | {
-          kind: 'APP_ROUTE' | 'APP_PAGE';
-          isRoutePPREnabled: boolean;
-          isFallback: boolean;
-        }
-      | {
-          kind: 'FETCH';
-          revalidate: number;
-          fetchUrl: string;
-          fetchIdx: number;
-          tags: string[];
-          softTags: string[];
-          isFallback: boolean;
-        },
-  ): Promise<CacheEntry | null> {
+  public async get(key: string, ctx: GetContext): Promise<CacheEntry | null> {
     try {
-      if (
-        ctx.kind !== 'APP_ROUTE' &&
-        ctx.kind !== 'APP_PAGE' &&
-        ctx.kind !== 'FETCH'
-      ) {
+      if (!(SUPPORTED_GET_KINDS as readonly string[]).includes(ctx.kind)) {
         console.warn(
           'RedisStringsHandler.get() called with',
           key,
           ctx,
-          ' this cache handler is only designed and tested for kind APP_ROUTE and APP_PAGE and not for kind ',
+          `this cache handler is only designed and tested for kinds ${SUPPORTED_GET_KINDS.join(', ')} and not for kind`,
           (ctx as { kind: string })?.kind,
         );
       }
@@ -479,7 +549,10 @@ export default class RedisStringsHandler {
           'cacheEntry is mall formed (missing tags)',
         );
       }
-      if (!cacheEntry?.value) {
+      // value === null is a legitimate entry: the Pages Router stores
+      // `notFound: true` results as a cache entry with a null value.
+      // Only an absent value indicates a malformed entry.
+      if (cacheEntry?.value === undefined) {
         console.warn(
           'RedisStringsHandler.get() called with',
           key,
@@ -589,69 +662,47 @@ export default class RedisStringsHandler {
   }
   public async set(
     key: string,
-    data:
-      | {
-          kind: 'APP_PAGE';
-          status?: number;
-          headers: {
-            'x-nextjs-stale-time': string; // timestamp in ms
-            'x-next-cache-tags': string; // comma separated paths (tags)
-          };
-          html: string;
-          rscData: Buffer;
-          segmentData: unknown;
-          postboned: unknown;
-        }
-      | {
-          kind: 'APP_ROUTE';
-          status: number;
-          headers: {
-            'cache-control'?: string;
-            'x-nextjs-stale-time': string; // timestamp in ms
-            'x-next-cache-tags': string; // comma separated paths (tags)
-          };
-          body: Buffer;
-        }
-      | {
-          kind: 'FETCH';
-          data: {
-            headers: Record<string, string>;
-            body: string; // base64 encoded
-            status: number;
-            url: string;
-          };
-          revalidate: number | false;
-        },
+    data: SetCacheValue,
     ctx: {
       isRoutePPREnabled: boolean;
       isFallback: boolean;
       tags?: string[];
       // Different versions of Next.js use different arguments for the same functionality
       revalidate?: number | false; // Version 15.0.3
-      cacheControl?: { revalidate: 5; expire: undefined }; // Version 15.0.3
+      cacheControl?: { revalidate: number | false; expire: number | undefined }; // Version 15.0.3+
     },
   ) {
     try {
       if (
-        data.kind !== 'APP_ROUTE' &&
-        data.kind !== 'APP_PAGE' &&
-        data.kind !== 'FETCH'
+        data !== null &&
+        !(SUPPORTED_SET_KINDS as readonly string[]).includes(data.kind)
       ) {
         console.warn(
           'RedisStringsHandler.set() called with',
           key,
           ctx,
           data,
-          ' this cache handler is only designed and tested for kind APP_ROUTE and APP_PAGE and not for kind ',
+          `this cache handler is only designed and tested for kinds ${SUPPORTED_SET_KINDS.join(', ')} and not for kind`,
           (data as { kind: string })?.kind,
         );
       }
 
       await this.assertClientIsReady();
 
-      if (data.kind === 'APP_PAGE' || data.kind === 'APP_ROUTE') {
+      if (data?.kind === 'APP_PAGE' || data?.kind === 'APP_ROUTE') {
         const tags = data.headers['x-next-cache-tags']?.split(',');
         ctx.tags = [...(ctx.tags || []), ...(tags || [])];
+      }
+
+      // Pages Router entries (PAGES, REDIRECT and null/notFound results) do not
+      // carry an x-next-cache-tags header. Attach the implicit path tag
+      // (_N_T_/<path>) so that revalidatePath()/revalidateTag('_N_T_/<path>')
+      // invalidates them the same way as App Router entries.
+      if (data === null || data.kind === 'PAGES' || data.kind === 'REDIRECT') {
+        const implicitTag = NEXT_CACHE_IMPLICIT_TAG_ID + key;
+        if (!ctx.tags?.includes(implicitTag)) {
+          ctx.tags = [...(ctx.tags || []), implicitTag];
+        }
       }
 
       // Constructing and serializing the value for storing it in redis
@@ -676,10 +727,13 @@ export default class RedisStringsHandler {
       // Constructing the expire time for the cache entry
       const revalidate =
         // For fetch requests in newest versions, the revalidate context property is never used, and instead the revalidate property of the passed-in data is used
-        (data.kind === 'FETCH' && data.revalidate) ||
+        (data?.kind === 'FETCH' && data.revalidate) ||
         ctx.revalidate ||
         ctx.cacheControl?.revalidate ||
-        (data as { revalidate?: number | false })?.revalidate;
+        // Legacy fallback: older Next.js versions attached `revalidate` directly
+        // to the data payload. FETCH is already handled above, so this only
+        // matters for those older, non-discriminated shapes.
+        (data as { revalidate?: number | false } | null)?.revalidate;
       const expireAt =
         revalidate && Number.isSafeInteger(revalidate) && revalidate > 0
           ? this.estimateExpireAge(revalidate)

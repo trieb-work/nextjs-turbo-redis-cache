@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@trieb.work/nextjs-turbo-redis-cache.svg)](https://www.npmjs.com/package/@trieb.work/nextjs-turbo-redis-cache)
 ![Turbo redis cache image](https://github.com/user-attachments/assets/4103191e-4f4d-4139-a519-0b5bfab3e8b4)
 
-The ultimate Redis Cache Handler for Next.js 15 / 16 and the app router. Built for production-ready, large-scale projects, it delivers unparalleled performance and efficiency with features tailored for high-traffic applications. This package has been created after extensibly testing the @neshca package and finding several major issues with it.
+The ultimate Redis Cache Handler for Next.js 15 / 16, supporting both the App Router and the Pages Router. Built for production-ready, large-scale projects, it delivers unparalleled performance and efficiency with features tailored for high-traffic applications. This package has been created after extensibly testing the @neshca package and finding several major issues with it.
 
 Key Features:
 
@@ -19,8 +19,10 @@ For a deep dive into the internal architecture (shared hash maps, SyncedMap, req
 
 ## Compatibility
 
-This package is compatible with Next.js 15.0.3 and above while using App Router. It is not compatible with Next.js 14.x. or 15-canary or if you are using Pages Router.
+This package is compatible with Next.js 15.0.3 and above, with the App Router, the Pages Router, or both together in a hybrid app. It is not compatible with Next.js 14.x. or 15-canary.
 Redis Server need to have Redis Server Version 2.8.0 or higher and have to be configured with `notify-keyspace-events` to be able to use the key-space notifications feature.
+
+Pages Router support covers ISR pages (`getStaticProps` + `revalidate`, `getStaticPaths` with `fallback`), `notFound: true` and `redirect:` results, and on-demand revalidation via `res.revalidate(path)` — including across multiple server instances sharing one Redis (see the two-instance integration test). App Router and Pages Router entries are handled side by side by the same handler instance, so hybrid apps that use both routers work without any extra configuration.
 
 Tested versions are:
 
@@ -31,6 +33,7 @@ Tested versions are:
 - Nextjs 16.0.11 + redis client 4.7.0 (cacheComponents: false)
 - Nextjs 16.2.6 + redis client 4.7.0 (cacheComponents: false)
 - Nextjs 16.2.6 + redis client 4.7.0 (cacheComponents: true)
+- Nextjs 16.2.6 + redis client 4.7.0 (Pages Router)
 
 _Cache Components_ (Next.js 16+) are fully supported. Automated test coverage includes `'use cache'`, `cacheTag`, and `cacheLife` flows in the Cache Components integration suite.
 

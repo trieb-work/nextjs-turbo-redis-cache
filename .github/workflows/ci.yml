@@ -108,6 +108,51 @@ jobs:
           SKIP_BUILD: true
           NEXT_TEST_APP: ${{ matrix.next-test-app }}
 
+  integration-pages:
+    runs-on: ubuntu-latest
+    needs: lint-and-unit
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --ignore-scripts
+
+      - name: Build project
+        run: pnpm build
+
+      - name: Start Redis
+        uses: supercharge/redis-github-action@1.8.0
+        with:
+          redis-version: '7'
+          redis-port: 6379
+
+      - name: Install redis-cli
+        run: sudo apt-get update && sudo apt-get install -y redis-tools
+
+      - name: Configure Redis Keyspace Notifications
+        run: redis-cli config set notify-keyspace-events Exe
+
+      - name: Install test project
+        run: cd test/nextjs-test-projects/next-pages-16-2-6 && pnpm install
+
+      - name: Build test project
+        run: cd test/nextjs-test-projects/next-pages-16-2-6 && pnpm build
+
+      - name: Run Pages Router integration tests
+        run: pnpm test:integration:pages
+        env:
+          SKIP_BUILD: true
+
   integration-build-id-prefix:
     runs-on: ubuntu-latest
     needs: lint-and-unit

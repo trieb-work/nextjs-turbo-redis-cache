@@ -3,7 +3,7 @@ import tsParser from '@typescript-eslint/parser';
 
 const config = [
   {
-    ignores: ['dist', 'node_modules'],
+    ignores: ['dist', 'node_modules', '**/.next/'],
   },
   {
     files: ['src/**/*.ts', 'src/**/*.tsx'],
