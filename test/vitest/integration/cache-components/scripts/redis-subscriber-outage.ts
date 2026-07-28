@@ -334,7 +334,10 @@ async function main() {
     `A reconnected=${reconnectedA}, B reconnected=${reconnectedB}`,
   );
 
-  // 14. Test: PubSub sync after outage (THE BUG — expected to FAIL)
+  // Wait a bit for subscriber reconnection to complete
+  await sleep(2_000);
+
+  // 14. Test: PubSub sync after outage (was the bug — should now PASS)
   if (reconnectedA) {
     await handlerA.set(
       'key2',
@@ -351,10 +354,14 @@ async function main() {
       { isRoutePPREnabled: false, isFallback: false, tags: ['tag2'] },
     );
 
+    // Give the subscriber reconnect loop time to succeed after Redis
+    // restarts. The backoff delays are 500ms, 1s, 2s, 4s, 8s, capped at 10s.
+    // After a 3s outage + restart, the subscriber may need up to ~10s to
+    // reconnect depending on which backoff slot it's in.
     const pubsubAfter = await waitUntil(async () => {
       const tags = (handlerB as any).sharedTagsMap.get('key2');
       return !!tags && tags.length === 1 && tags[0] === 'tag2';
-    }, 5_000);
+    }, 20_000);
 
     record(
       'pubsub-after-outage-strings',
@@ -390,9 +397,25 @@ async function main() {
   );
 
   // 16. Test: get() works after Redis restart (main client path)
+  // Redis was restarted with --rm (data lost), so re-seed key1 first
+  // to verify the main client can write and read after restart.
   let getAfter = false;
   let getAfterDetail = '';
   try {
+    await handlerA.set(
+      'key1',
+      {
+        kind: 'FETCH',
+        data: {
+          headers: {},
+          body: Buffer.from('hello').toString('base64'),
+          status: 200,
+          url: 'https://example.com/e2e',
+        },
+        revalidate: 10,
+      },
+      { isRoutePPREnabled: false, isFallback: false, tags: ['tag1'] },
+    );
     const result = await handlerA.get('key1', {
       kind: 'FETCH',
       revalidate: 10,

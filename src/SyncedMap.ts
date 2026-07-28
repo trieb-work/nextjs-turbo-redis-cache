@@ -41,6 +41,7 @@ export class SyncedMap<V> {
 
   private setupLock: Promise<void>;
   private setupLockResolve!: () => void;
+  private isReconnecting = false;
 
   constructor(options: SyncedMapOptions) {
     this.client = options.client;
@@ -209,6 +210,16 @@ export class SyncedMap<V> {
     };
 
     try {
+      // Attach error handler BEFORE subscribing so that errors during
+      // subscribe or after connection loss are always caught and trigger
+      // a reconnection. Previously this was attached after the subscribe()
+      // calls, which meant if subscribe threw during an outage the handler
+      // was never attached and the subscriber was permanently dead.
+      this.subscriberClient.on('error', async (err) => {
+        console.error('Subscriber client error:', err);
+        await this.reconnectSubscriber();
+      });
+
       const connectIfNeeded = async () => {
         // Avoid overlapping connect() calls which can lead to
         // "Socket already opened" errors when a connect is already in progress
@@ -241,7 +252,9 @@ export class SyncedMap<V> {
           throw new Error(
             'Keyspace event configuration is set to "' +
               keyspaceEventConfig +
-              "\" but has to include 'E' for Keyevent events, published with __keyevent@<db>__ prefix. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
+              " but has to include 'E' for Keyevent events, " +
+              'published with __keyevent@<db>__ prefix. We recommend to set it to ' +
+              "'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
           );
         }
         if (
@@ -254,7 +267,9 @@ export class SyncedMap<V> {
           throw new Error(
             'Keyspace event configuration is set to "' +
               keyspaceEventConfig +
-              "\" but has to include 'A' or 'x' and 'e' for expired and evicted events. We recommend to set it to 'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
+              " but has to include 'A' or 'x' and 'e' for expired and " +
+              'evicted events. We recommend to set it to ' +
+              "'Exe' like so `redis-cli -h localhost config set notify-keyspace-events Exe`",
           );
         }
       }
@@ -275,24 +290,52 @@ export class SyncedMap<V> {
           keyEventHandler,
         ),
       ]);
-
-      // Error handling for reconnection
-      this.subscriberClient.on('error', async (err) => {
-        console.error('Subscriber client error:', err);
-        try {
-          await this.subscriberClient.quit();
-          this.subscriberClient = this.client.duplicate();
-          await this.setupPubSub();
-        } catch (reconnectError) {
-          console.error(
-            'Failed to reconnect subscriber client:',
-            reconnectError,
-          );
-        }
-      });
     } catch (error) {
       console.error('Error setting up pub/sub client:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Reconnect the subscriber client with exponential backoff.
+   * Guarded by `isReconnecting` to prevent concurrent reconnection
+   * attempts when multiple error events fire during an outage.
+   * Retries indefinitely (with capped delay) so the subscriber
+   * eventually recovers once Redis is available again.
+   */
+  private async reconnectSubscriber(): Promise<void> {
+    if (this.isReconnecting) return;
+    this.isReconnecting = true;
+
+    try {
+      let attempt = 0;
+      while (true) {
+        try {
+          // Quit old client — ignore errors since it may already be dead
+          try {
+            await this.subscriberClient.quit();
+          } catch {
+            // expected during outage
+          }
+          // Create a fresh subscriber client
+          this.subscriberClient = this.client.duplicate();
+          await this.setupPubSub();
+          return; // success
+        } catch (error) {
+          attempt++;
+          const delay = Math.min(
+            500 * Math.pow(2, Math.min(attempt, 5)),
+            10_000,
+          );
+          console.error(
+            `Subscriber reconnect attempt ${attempt} failed, retrying in ${delay}ms`,
+            error,
+          );
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+    } finally {
+      this.isReconnecting = false;
     }
   }
 
