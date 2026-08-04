@@ -311,9 +311,15 @@ export class SyncedMap<V> {
       let attempt = 0;
       while (true) {
         try {
-          // Quit old client — ignore errors since it may already be dead
+          // Forcibly tear down the old subscriber so its internal reconnect
+          // loop cannot come back to life once Redis recovers. `quit()` waits
+          // for the server and can silently fail during an outage, leaving a
+          // zombie client that still fires our error handler. Remove that
+          // handler first so a delayed error from the old socket cannot tear
+          // down the replacement subscriber we are about to create.
           try {
-            await this.subscriberClient.quit();
+            this.subscriberClient.removeAllListeners('error');
+            await this.subscriberClient.disconnect();
           } catch {
             // expected during outage
           }
@@ -322,11 +328,11 @@ export class SyncedMap<V> {
           await this.setupPubSub();
           return; // success
         } catch (error) {
-          attempt++;
           const delay = Math.min(
             500 * Math.pow(2, Math.min(attempt, 5)),
             10_000,
           );
+          attempt++;
           console.error(
             `Subscriber reconnect attempt ${attempt} failed, retrying in ${delay}ms`,
             error,

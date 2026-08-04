@@ -77,6 +77,7 @@ Integration tests specific to Next.js 16 Cache Components (`use cache`). Uses `n
 | `cache-components.integration.test.ts` | `use cache` lifecycle: store, retrieve, tag invalidation, `cacheLife` expiry                           |
 | `redis-kill-reconnect.test.ts`         | Graceful recovery when Redis drops and reconnects (main client ping only)                              |
 | `redis-subscriber-outage.test.ts`      | Issue #86: subscriber PubSub does not recover after Redis outage (expected to fail until bug is fixed) |
+| `redis-quit-vs-disconnect.test.ts`     | `quit()` does not reliably close a subscriber during an outage; `disconnect()` does                    |
 
 `redis-kill-reconnect.test.ts` uses a container runtime and auto-detects `podman` first, then `docker`. You can force runtime selection with `CONTAINER_RUNTIME=podman` or `CONTAINER_RUNTIME=docker`.
 

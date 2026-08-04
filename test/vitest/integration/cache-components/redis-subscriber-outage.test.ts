@@ -1,79 +1,11 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { spawn } from 'child_process';
 import path from 'path';
-import { spawnSync } from 'child_process';
-
-function hasContainerRuntime() {
-  const podman = spawnSync('podman', ['--version'], {
-    encoding: 'utf8',
-    timeout: 3_000,
-  });
-  if (!podman.error && (podman.status ?? 1) === 0) return true;
-
-  const docker = spawnSync('docker', ['--version'], {
-    encoding: 'utf8',
-    timeout: 3_000,
-  });
-  return !docker.error && (docker.status ?? 1) === 0;
-}
-
-function runNode(script: string, timeoutMs = 300_000) {
-  return new Promise<{ code: number; stdout: string; stderr: string }>(
-    (resolve, reject) => {
-      const p = spawn('pnpm', ['-s', 'tsx', script], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env },
-      });
-      let stdout = '';
-      let stderr = '';
-      p.stdout.on('data', (d) => (stdout += d.toString()));
-      p.stderr.on('data', (d) => (stderr += d.toString()));
-      const t = setTimeout(() => {
-        p.kill('SIGKILL');
-        reject(new Error('timeout'));
-      }, timeoutMs);
-      p.on('close', (code) => {
-        clearTimeout(t);
-        resolve({ code: code ?? -1, stdout, stderr });
-      });
-    },
-  );
-}
-
-interface TestResult {
-  name: string;
-  pass: boolean;
-  detail: string;
-}
-
-function parseResults(stdout: string): Map<string, TestResult> {
-  const map = new Map<string, TestResult>();
-  // Try JSON first
-  const jsonLine = stdout
-    .split('\n')
-    .find((l) => l.startsWith('RESULTS_JSON|'));
-  if (jsonLine) {
-    try {
-      const json: TestResult[] = JSON.parse(
-        jsonLine.slice('RESULTS_JSON|'.length),
-      );
-      for (const r of json) map.set(r.name, r);
-      return map;
-    } catch {}
-  }
-  // Fallback: parse RESULT lines
-  for (const line of stdout.split('\n')) {
-    const m = line.match(/^RESULT\|([^|]+)\|(PASS|FAIL)\|(.*)$/);
-    if (m) {
-      map.set(m[1], {
-        name: m[1],
-        pass: m[2] === 'PASS',
-        detail: m[3],
-      });
-    }
-  }
-  return map;
-}
+import {
+  hasContainerRuntime,
+  runNode,
+  parseResults,
+  type TestResult,
+} from './scripts/redis-test-helpers';
 
 const describeOrSkip = hasContainerRuntime() ? describe : describe.skip;
 

@@ -21,104 +21,19 @@
  * followed by `RESULTS_JSON|<json>` on the last line.
  */
 
-import { spawnSync } from 'child_process';
-
-type ContainerRuntime = 'podman' | 'docker';
-
-function sh(cmd: string, args: string[], opts: { timeoutMs?: number } = {}) {
-  const res = spawnSync(cmd, args, {
-    encoding: 'utf8',
-    timeout: opts.timeoutMs ?? 30_000,
-  });
-  if (res.error) throw res.error;
-  return {
-    code: res.status ?? -1,
-    stdout: res.stdout ?? '',
-    stderr: res.stderr ?? '',
-  };
-}
-
-function canRun(cmd: string) {
-  const res = spawnSync(cmd, ['--version'], {
-    encoding: 'utf8',
-    timeout: 3_000,
-  });
-  return !res.error && (res.status ?? 1) === 0;
-}
-
-function detectContainerRuntime(): ContainerRuntime {
-  if (process.env.CONTAINER_RUNTIME === 'podman') return 'podman';
-  if (process.env.CONTAINER_RUNTIME === 'docker') return 'docker';
-  if (canRun('podman')) return 'podman';
-  if (canRun('docker')) return 'docker';
-  throw new Error(
-    'Neither podman nor docker is available. Install one of them or set CONTAINER_RUNTIME.',
-  );
-}
-
-async function sleep(ms: number) {
-  await new Promise((r) => setTimeout(r, ms));
-}
-
-async function waitUntil(
-  fn: () => Promise<boolean>,
-  timeoutMs = 20_000,
-  intervalMs = 200,
-) {
-  const start = Date.now();
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    if (await fn()) return true;
-    if (Date.now() - start > timeoutMs) return false;
-    await sleep(intervalMs);
-  }
-}
-
-async function getFreePort(): Promise<number> {
-  const net = await import('net');
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.on('error', reject);
-    srv.listen(0, '127.0.0.1', () => {
-      const addr = srv.address();
-      if (!addr || typeof addr === 'string')
-        return reject(new Error('bad addr'));
-      const p = addr.port;
-      srv.close(() => resolve(p));
-    });
-  });
-}
-
-function startRedis(runtime: ContainerRuntime, name: string, port: number) {
-  const r = sh(
-    runtime,
-    [
-      'run',
-      '-d',
-      '--rm',
-      '--name',
-      name,
-      '-p',
-      `${port}:6379`,
-      'docker.io/redis:7-alpine',
-      'redis-server',
-      '--notify-keyspace-events',
-      'Exe',
-    ],
-    { timeoutMs: 60_000 },
-  );
-  if (r.code !== 0) throw new Error(`${runtime} run failed: ${r.stderr}`);
-}
+import {
+  detectContainerRuntime,
+  getFreePort,
+  sh,
+  sleep,
+  startRedis,
+  waitUntil,
+  type TestResult,
+} from './redis-test-helpers';
 
 // ---------------------------------------------------------------------------
 // Result tracking
 // ---------------------------------------------------------------------------
-
-interface TestResult {
-  name: string;
-  pass: boolean;
-  detail: string;
-}
 
 const results: TestResult[] = [];
 
