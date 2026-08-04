@@ -15,7 +15,12 @@ export type CacheEntry = {
 
 /** Discriminated union of the `ctx` argument Next.js passes to
  * {@link RedisStringsHandler.get}. The Pages Router (`PAGES`) has no PPR
- * concept, so `isRoutePPREnabled` is optional for it. */
+ * concept, so `isRoutePPREnabled` is optional for it.
+ *
+ * Note: `REDIRECT` is intentionally absent. Next.js always calls `get()` with
+ * `kind: 'PAGES'` for Pages Router routes, even when the stored value has
+ * `kind: 'REDIRECT'`. The handler returns whatever value is cached and Next.js
+ * interprets it accordingly. */
 export type GetContext =
   | {
       kind: 'APP_ROUTE' | 'APP_PAGE';
