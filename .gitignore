@@ -1,6 +1,5 @@
 node_modules
 dist
-.env
 coverage
 .DS_Store
 .idea
@@ -13,3 +12,4 @@ debug
 test-results
 
 next-env.d.ts
+config.bat
