@@ -71,13 +71,13 @@ export type SetCacheValue =
   | {
       kind: 'PAGES';
       html: string;
-      pageData: object;
+      pageData: Record<string, unknown>;
       headers?: Record<string, number | string | string[] | undefined>;
       status?: number;
     }
   | {
       kind: 'REDIRECT';
-      props: object;
+      props: Record<string, unknown>;
     }
   | {
       kind: 'FETCH';
