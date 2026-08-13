@@ -92,8 +92,9 @@ async function main() {
     if (r.code !== 0) throw new Error(`podman run failed: ${r.stderr}`);
   }
 
-  // IMPORTANT: importing from "src" will eagerly instantiate the singleton via `redisCacheHandler`.
-  // So we must set env BEFORE importing.
+  // Set env BEFORE importing in case any module-level code reads REDIS_URL.
+  // (With lazy init the singleton is no longer created at import time, but
+  //  setting env first is still good practice.)
   process.env.REDIS_URL = `redis://127.0.0.1:${port}`;
   process.env.VERCEL_URL = `e2e-${name}-`;
 
@@ -112,9 +113,6 @@ async function main() {
       // allow redis client to reconnect; this scenario is about stability under restart
       reconnectStrategy: (retries) => Math.min(50 + retries * 50, 500),
     },
-    clientOptions: {
-      disableOfflineQueue: true,
-    } as any,
   });
 
   const cacheComponentsClient = (cacheComponentsHandler as any).client as {

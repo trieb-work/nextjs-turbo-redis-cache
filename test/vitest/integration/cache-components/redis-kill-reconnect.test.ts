@@ -50,6 +50,12 @@ describe('redis kill/reconnect end-to-end (both handlers)', () => {
 
       const res = await runNode(script, 180_000);
 
+      if (res.code !== 0) {
+        console.error('Script exited with code', res.code);
+        console.error('stdout:', res.stdout);
+        console.error('stderr:', res.stderr);
+      }
+
       expect(res.code).toBe(0);
       expect(res.stdout).toContain('OK');
       expect(res.stderr).not.toContain('Socket already opened');
