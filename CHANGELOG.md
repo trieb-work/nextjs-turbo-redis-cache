@@ -1,3 +1,10 @@
+# [1.17.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.16.2...v1.17.0) (2026-08-13)
+
+
+### Features
+
+* add Next.js 16.3.0 support ([f7b40b5](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/f7b40b54e76cb605b8986f2bd01477662d94bd06))
+
 ## [1.16.2](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.16.1...v1.16.2) (2026-08-13)
 
 
