@@ -1,5 +1,58 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
+vi.mock('redis', () => ({
+  createClient: vi.fn(() => {
+    const listeners = new Map<string, Function[]>();
+    const client = {
+      isOpen: false,
+      isReady: false,
+      on: vi.fn((event: string, cb: Function) => {
+        if (!listeners.has(event)) listeners.set(event, []);
+        listeners.get(event)!.push(cb);
+      }),
+      emit: vi.fn((event: string, ...args: unknown[]) => {
+        (listeners.get(event) ?? []).forEach((cb) => cb(...args));
+      }),
+      connect: vi.fn(async () => undefined),
+      disconnect: vi.fn(),
+      quit: vi.fn(async () => undefined),
+      duplicate: vi.fn(() => ({
+        connect: vi.fn(async () => undefined),
+        subscribe: vi.fn(async () => undefined),
+        on: vi.fn(),
+        quit: vi.fn(async () => undefined),
+        configGet: vi.fn(async () => ({ 'notify-keyspace-events': 'Exe' })),
+      })),
+      get: vi.fn(async () => null),
+      hScan: vi.fn(async () => ({ cursor: 0, tuples: [] })),
+      scan: vi.fn(async () => ({ cursor: 0, keys: [] })),
+      hSet: vi.fn(async () => 1),
+      hDel: vi.fn(async () => 1),
+      publish: vi.fn(async () => 1),
+      unlink: vi.fn(async () => 1),
+      set: vi.fn(async () => 'OK'),
+    };
+    return client;
+  }),
+  commandOptions: vi.fn((opts) => opts),
+}));
+
+vi.mock('../../../src/SyncedMap', () => {
+  class SyncedMap {
+    waitUntilReady = vi.fn(async () => undefined);
+    get = vi.fn(() => undefined);
+    set = vi.fn(async () => undefined);
+    delete = vi.fn(async () => undefined);
+    entries = vi.fn(function* () {
+      return;
+    });
+
+    constructor() {}
+  }
+
+  return { SyncedMap };
+});
+
 /**
  * Deterministic regression test for:
  *   "Failed to reconnect RedisCacheComponentsHandler client after connection loss: Error: Socket already opened"
@@ -33,6 +86,9 @@ describe('RedisCacheComponentsHandler reconnect logic', () => {
     });
 
     const client = (handler as any).client;
+
+    // Clear the initial connect() call from the constructor.
+    vi.mocked(client.connect).mockClear();
 
     // Simulate a connection-loss situation where the socket is still open.
     Object.defineProperty(client, 'isOpen', { value: true });

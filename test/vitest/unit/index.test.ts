@@ -4,7 +4,7 @@ import type { CreateRedisStringsHandlerOptions } from '../../../src/index';
 import RedisStringsHandler from '../../../src/RedisStringsHandler';
 
 vi.mock('redis', () => {
-  const createClient = () => {
+  const createClient = vi.fn(() => {
     return {
       isReady: true,
       on: vi.fn(),
@@ -31,7 +31,7 @@ vi.mock('redis', () => {
       unlink: vi.fn(async () => 1),
       set: vi.fn(async () => 'OK'),
     };
-  };
+  });
   return {
     createClient,
     commandOptions: vi.fn((opts) => opts),
@@ -94,5 +94,52 @@ describe('Public exports', () => {
     };
 
     expect(_typeCheck.keyPrefix).toBe('test');
+  });
+});
+
+describe('redisCacheHandler lazy proxy', () => {
+  it('does not construct a Redis connection on import', async () => {
+    vi.resetModules();
+    const { createClient } = await import('redis');
+    vi.mocked(createClient).mockClear();
+
+    // Importing the module should NOT trigger a Redis connection
+    await import('../../../src');
+
+    expect(vi.mocked(createClient)).not.toHaveBeenCalled();
+  });
+
+  it('has trap returns true for known methods without constructing the handler', async () => {
+    vi.resetModules();
+    const { createClient } = await import('redis');
+    vi.mocked(createClient).mockClear();
+
+    const { redisCacheHandler } = await import('../../../src');
+
+    expect('getExpiration' in redisCacheHandler).toBe(true);
+    expect('get' in redisCacheHandler).toBe(true);
+    expect('set' in redisCacheHandler).toBe(true);
+    expect('refreshTags' in redisCacheHandler).toBe(true);
+    expect('updateTags' in redisCacheHandler).toBe(true);
+
+    expect(vi.mocked(createClient)).not.toHaveBeenCalled();
+  });
+
+  it('method call delegates to the singleton and binds correctly', async () => {
+    vi.resetModules();
+    const { createClient } = await import('redis');
+    vi.mocked(createClient).mockClear();
+
+    const { redisCacheHandler } = await import('../../../src');
+
+    // Accessing a method triggers construction and delegates to the real handler
+    const getFn = redisCacheHandler.get;
+    expect(typeof getFn).toBe('function');
+    expect(vi.mocked(createClient)).toHaveBeenCalledTimes(1);
+
+    // Subsequent accesses reuse the same singleton (no extra construction)
+    const getFn2 = redisCacheHandler.get;
+    expect(vi.mocked(createClient)).toHaveBeenCalledTimes(1);
+    expect(typeof getFn2).toBe('function');
   });
 });
