@@ -444,21 +444,32 @@ export default class RedisStringsHandler {
         'assertClientIsReady called more than 10 times without being ready.',
       );
     }
-    await Promise.race([
-      Promise.all([
-        this.sharedTagsMap.waitUntilReady(),
-        this.revalidatedTagsMap.waitUntilReady(),
-      ]),
-      new Promise((_, reject) =>
-        setTimeout(() => {
-          reject(
-            new Error(
-              'assertClientIsReady: Timeout waiting for Redis maps to be ready',
-            ),
-          );
-        }, 30_000),
-      ),
-    ]);
+    let readyTimeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.all([
+          this.sharedTagsMap.waitUntilReady(),
+          this.revalidatedTagsMap.waitUntilReady(),
+        ]),
+        new Promise((_, reject) => {
+          readyTimeout = setTimeout(() => {
+            reject(
+              new Error(
+                'assertClientIsReady: Timeout waiting for Redis maps to be ready',
+              ),
+            );
+          }, 30_000);
+        }),
+      ]);
+    } finally {
+      // Always clear the timeout: once the race is won (the common case after
+      // the initial sync), the timer would otherwise stay pending for the full
+      // 30s. Timers capture the ambient async context (AsyncLocalStorage),
+      // so in a Next.js server every leaked timer pins the request's store —
+      // and with it the whole response object graph — for at least 30s on
+      // every single cache operation.
+      clearTimeout(readyTimeout);
+    }
     this.clientReadyCalls = 0;
     if (!this.client.isReady) {
       throw new Error(

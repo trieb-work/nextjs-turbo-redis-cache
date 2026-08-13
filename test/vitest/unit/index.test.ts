@@ -85,6 +85,34 @@ describe('RedisStringsHandler', () => {
     expect(res).toBeNull();
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
+
+  it('does not leave the readiness timeout timer pending after an operation', async () => {
+    vi.useFakeTimers();
+    try {
+      const handler = new RedisStringsHandler({
+        redisUrl: 'redis://localhost:6379',
+        keyPrefix: 'test:',
+        database: 0,
+        getTimeoutMs: 1,
+        redisGetDeduplication: false,
+      });
+
+      const timersBefore = vi.getTimerCount();
+      await handler.get('missing-key', {
+        kind: 'APP_PAGE',
+        isRoutePPREnabled: false,
+        isFallback: false,
+      });
+
+      // assertClientIsReady() races waitUntilReady() against a 30s timeout;
+      // the timer must not stay pending once the race is settled, because
+      // pending timers retain the ambient async context (and with it, in a
+      // Next.js server, the whole per-request object graph).
+      expect(vi.getTimerCount()).toBe(timersBefore);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('Public exports', () => {
