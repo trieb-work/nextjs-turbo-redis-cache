@@ -3,7 +3,6 @@
 [![npm version](https://img.shields.io/npm/v/@trieb.work/nextjs-turbo-redis-cache.svg)](https://www.npmjs.com/package/@trieb.work/nextjs-turbo-redis-cache)
 <img width="2512" height="1602" alt="Turbo redis cache image" src="https://github.com/user-attachments/assets/6f46e1fb-fcf7-4157-856c-196a1483534f" />
 
-
 The ultimate Redis Cache Handler for Next.js 15 / 16, supporting both the App Router and the Pages Router. Built for production-ready, large-scale projects, it delivers unparalleled performance and efficiency with features tailored for high-traffic applications. This package has been created after extensibly testing the @neshca package and finding several major issues with it.
 
 Key Features:
@@ -35,6 +34,9 @@ Tested versions are:
 - Nextjs 16.2.6 + redis client 4.7.0 (cacheComponents: false)
 - Nextjs 16.2.6 + redis client 4.7.0 (cacheComponents: true)
 - Nextjs 16.2.6 + redis client 4.7.0 (Pages Router)
+- Nextjs 16.3.0 + redis client 4.7.0 (cacheComponents: false)
+- Nextjs 16.3.0 + redis client 4.7.0 (cacheComponents: true)
+- Nextjs 16.3.0 + redis client 4.7.0 (Pages Router)
 
 _Cache Components_ (Next.js 16+) are fully supported. Automated test coverage includes `'use cache'`, `cacheTag`, and `cacheLife` flows in the Cache Components integration suite.
 

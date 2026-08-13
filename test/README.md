@@ -55,7 +55,7 @@ These tests spawn a real Next.js server as a child process, make `fetch()` reque
 
 ### Standard Integration (`nextjs-cache-handler.integration.test.ts`)
 
-Full cache lifecycle: static pages, fetch caching, revalidation, tag invalidation, TTL behavior. In CI this runs against a matrix of Next.js versions (15.4–16.2).
+Full cache lifecycle: static pages, fetch caching, revalidation, tag invalidation, TTL behavior. In CI this runs against Next.js 15.4, 16.0, 16.2, and 16.3. Nested fetch entries are resolved from their explicit cache tag in Redis's shared-tags map rather than Next.js's internal fetch-key hash, which changed in Next.js 16.3.
 
 ```bash
 pnpm test:integration
@@ -63,7 +63,7 @@ pnpm test:integration
 
 ### Pages Router (`pages-router.integration.test.ts`)
 
-Pages Router cache lifecycle against the `next-pages-16-2-6` app: `PAGES` entry format, TTL derivation from `getStaticProps` `revalidate`, `fallback: 'blocking'` first hits, `notFound: true` (null cache entries), `redirect:` results, and `revalidate: false` TTL fallback.
+Pages Router cache lifecycle against the `next-pages-16-2-6` and `next-pages-16-3-0` apps: `PAGES` entry format, TTL derivation from `getStaticProps` `revalidate`, `fallback: 'blocking'` first hits, `notFound: true` (null cache entries), `redirect:` results, and `revalidate: false` TTL fallback.
 
 Starts **two** `next start` instances of the same build sharing one Redis and proves that on-demand revalidation (`res.revalidate(path)`) triggered on instance A is served fresh by instance B (HTML and `/_next/data` pageData JSON) — the multi-instance ISR scenario behind a load balancer.
 
@@ -81,7 +81,7 @@ pnpm test:integration:build-id-prefix
 
 ### Cache Components (`cache-components/`)
 
-Integration tests specific to Next.js 16 Cache Components (`use cache`). Uses `next-app-16-2-6-cache-components` as the test app.
+Integration tests specific to Next.js 16 Cache Components (`use cache`). CI runs them against the 16.0, 16.2, and 16.3 Cache Components test apps.
 
 | File                                   | What it tests                                                                                          |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------ |
