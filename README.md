@@ -505,6 +505,14 @@ Optional:
 - `VERCEL_URL`: used as a key prefix for multi-tenant isolation (also useful in tests). If unset, a default prefix is used.
 - `REDIS_COMMAND_TIMEOUT_MS`: timeout (ms) for Redis commands used by the handler.
 
+### Lazy initialization
+
+The `redisCacheHandler` export is **lazily initialized** — importing the package does **not** open a Redis connection. The connection is deferred until the first method call on the handler (when Next.js invokes it). This means:
+
+- Importing the package (e.g. for `RedisStringsHandler` only) never opens a Redis connection, even if Cache Components is not used.
+- `getRedisCacheComponentsHandler(options)` can be called with custom options **before** first use to configure the singleton.
+- If `getRedisCacheComponentsHandler(options)` is called **after** the handler has already been used, the options are ignored (the singleton is already constructed).
+
 ### Local manual testing (Cache Lab)
 
 This repo includes a dedicated Next.js Cache Components integration app with real pages for manual testing.

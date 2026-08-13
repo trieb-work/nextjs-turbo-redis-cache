@@ -530,5 +530,38 @@ export function getRedisCacheComponentsHandler(
   return singletonHandler;
 }
 
-export const redisCacheHandler: CacheComponentsHandler =
-  getRedisCacheComponentsHandler();
+// Lazily resolve the default Cache Components handler.
+//
+// Constructing a RedisCacheComponentsHandler opens a Redis connection in its
+// constructor. Building the singleton at module-eval time therefore means that simply
+// *importing this package* — e.g. only for `RedisStringsHandler` (the legacy
+// `cacheHandler`), with Cache Components never enabled — eagerly connects to Redis,
+// defaulting to `redis://localhost:6379` when neither `REDIS_URL` nor `REDISHOST` is
+// set. In a deployment whose Redis is not on localhost that yields a non-stop
+// `RedisCacheComponentsHandler client error ECONNREFUSED 127.0.0.1:6379` reconnect
+// loop, and it also makes a consumer's later `getRedisCacheComponentsHandler(options)`
+// a no-op, because the singleton was already built with defaults (see #84).
+//
+// Defer construction to first use via a Proxy: importing the package never connects, a
+// consumer that configures the handler via `getRedisCacheComponentsHandler(options)`
+// before it is first used has that configuration honored, and a consumer that never
+// touches Cache Components never opens a Redis connection at all.
+let resolvedHandler: CacheComponentsHandler | undefined;
+
+export const redisCacheHandler: CacheComponentsHandler = new Proxy(
+  {} as CacheComponentsHandler,
+  {
+    get(_target, prop) {
+      if (!resolvedHandler) {
+        resolvedHandler = getRedisCacheComponentsHandler();
+      }
+      const value = resolvedHandler[prop as keyof CacheComponentsHandler];
+      return typeof value === 'function'
+        ? (value as (...args: unknown[]) => unknown).bind(resolvedHandler)
+        : value;
+    },
+    has(_target, prop) {
+      return prop in RedisCacheComponentsHandler.prototype;
+    },
+  },
+);
