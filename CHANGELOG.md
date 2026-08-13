@@ -1,3 +1,10 @@
+## [1.16.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.16.0...v1.16.1) (2026-08-13)
+
+
+### Bug Fixes
+
+* make redisCacheHandler lazy to avoid import-time Redis connection (supersedes [#85](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/85)) ([#92](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/92)) ([2d0b063](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/2d0b063176596ecd0fed385ba66bbc50e0c64fcc))
+
 # [1.16.0](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.15.0...v1.16.0) (2026-08-13)
 
 
