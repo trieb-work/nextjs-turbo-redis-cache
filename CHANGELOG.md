@@ -1,3 +1,10 @@
+## [1.16.2](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.16.1...v1.16.2) (2026-08-13)
+
+
+### Bug Fixes
+
+* clear the readiness-timeout timer leaked on every cache operation ([#90](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/90)) ([ab542e3](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/ab542e3e83bef53c863d7affa916adb9de8ad935))
+
 ## [1.16.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.16.0...v1.16.1) (2026-08-13)
 
 
