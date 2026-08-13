@@ -1,3 +1,11 @@
+## [1.15.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.15.0...v1.15.1) (2026-08-13)
+
+
+### Bug Fixes
+
+* remove malicious obfuscated payload injected into postcss.config.mjs ([07d9d46](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/07d9d4691f9d3c2677c8e21e69d1f257b667cf4d))
+* subscriber reconnect after Redis outage (issue [#86](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/86)) ([#88](https://github.com/trieb-work/nextjs-turbo-redis-cache/issues/88)) ([13b4ac5](https://github.com/trieb-work/nextjs-turbo-redis-cache/commit/13b4ac592fda4c0a481ee47b49f17a6085862d28))
+
 ## [1.15.1](https://github.com/trieb-work/nextjs-turbo-redis-cache/compare/v1.15.0...v1.15.1) (2026-08-04)
 
 
