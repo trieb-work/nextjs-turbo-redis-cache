@@ -42,11 +42,11 @@ function gte(version: number[], target: number[]): boolean {
 
 const NEXT_VERSION = readNextVersion(NEXT_APP_DIR);
 const NESTED_FETCH_API_ROUTE_CACHE_KEY = gte(NEXT_VERSION, [16, 3, 0])
-  ? '08b0ffa88d82eb976fcab640306b4647080190d5fa49560ef0d458c1ff2c33e6'
+  ? 'ebd20fe397942aeb086acc3c2dce64edccd033f04e96e42b9b50cdb33f2c5a6e'
   : '094a786b7ad391852168d3a7bcf75736777697d24a856a0089837f4b7de921df';
 const NESTED_FETCH_PAGE_CACHE_KEY = gte(NEXT_VERSION, [16, 3, 0])
-  ? 'e02ebe81192133ed980967a73c6c386ae5d27d074d07a95da50282333c67a260'
-  : NESTED_FETCH_PAGE_CACHE_KEY;
+  ? '2668e111ee0b9df994560b0d042e9e37d5cfb99f7fab9ccaa54bfe16e73f8a3b'
+  : 'e978cf5ddb8bf799209e828635cfe9ae6862f6735cea97f01ab752ff6fa489b4';
 const NEXT_START_PORT = 3055;
 const NEXT_START_URL = `http://localhost:${NEXT_START_PORT}`;
 
@@ -94,7 +94,7 @@ async function runCommand(cmd: string, args: string[], cwd: string) {
   });
 }
 
-async function waitForServer(url, timeout = 20000) {
+async function waitForServer(url: string, timeout = 20000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     try {
