@@ -19,6 +19,7 @@
     "test:unit:coverage": "vitest --run --coverage --config vite.config.ts test/vitest/unit",
     "test:integration": "vitest --run --config vite.config.ts test/vitest/integration/nextjs-cache-handler.integration.test.ts",
     "test:integration:build-id-prefix": "vitest --run --config vite.config.ts test/vitest/integration/build-id-prefix.integration.test.ts",
+    "test:integration:pages": "vitest --run --config vite.config.ts test/vitest/integration/pages-router.integration.test.ts",
     "test:integration:cache-components": "vitest --run --config vitest.cache-components.config.ts",
     "test:e2e": "playwright test",
     "run-dev-server": "pnpm run-dev-server-15-4-11",
