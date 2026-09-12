@@ -1,63 +1,126 @@
 /**
- * Per-tag revalidation state stored in `revalidatedTagsMap` (Cache Components).
+ * Tag manifest matching Next.js 16.0–16.3
+ * `next/dist/server/lib/cache-handlers/default.js` `updateTags`
+ * and `next/dist/server/lib/incremental-cache/tags-manifest.external.js`.
  *
- * Next.js treats a cache entry as stale when `getExpiration(tags)` is greater
- * than the entry timestamp. `revalidateTag(tag, 'max')` must therefore record
- * `Date.now()` immediately — `durations.expire` is the SWR stale-serve window,
- * not a delay before the tag becomes stale.
- *
- * Values may be a legacy number or `{ last, pending }`. `pending` is only
- * folded in once elapsed so older records stay readable.
+ * `revalidateTag(tag, profile)` resolves `cacheLife[profile].expire` (seconds)
+ * and calls `updateTags(tags, { expire })`. `updateTag` / no profile calls
+ * `updateTags(tags)` with no durations (immediate hard expire).
  */
-export type TagRevalidationState = {
-  last: number;
-  pending: number;
+export type TagManifestEntry = {
+  stale?: number;
+  expired?: number;
 };
 
-export function normalizeTagRevalidation(
-  stored: unknown,
-  now: number,
-): TagRevalidationState {
+export function normalizeTagManifest(stored: unknown): TagManifestEntry {
   if (typeof stored === 'number' && Number.isFinite(stored)) {
-    return stored > now
-      ? { last: 0, pending: stored }
-      : { last: stored, pending: 0 };
+    return { expired: stored };
   }
 
   if (stored && typeof stored === 'object') {
-    const rec = stored as { last?: unknown; pending?: unknown };
-    const last =
-      typeof rec.last === 'number' && Number.isFinite(rec.last) ? rec.last : 0;
-    const pending =
-      typeof rec.pending === 'number' && Number.isFinite(rec.pending)
-        ? rec.pending
-        : 0;
-    return { last, pending };
+    const rec = stored as {
+      stale?: unknown;
+      expired?: unknown;
+      last?: unknown;
+      pending?: unknown;
+    };
+    const stale =
+      typeof rec.stale === 'number' && Number.isFinite(rec.stale)
+        ? rec.stale
+        : typeof rec.last === 'number' && Number.isFinite(rec.last)
+          ? rec.last
+          : undefined;
+    const expired =
+      typeof rec.expired === 'number' && Number.isFinite(rec.expired)
+        ? rec.expired
+        : typeof rec.pending === 'number' && Number.isFinite(rec.pending)
+          ? rec.pending
+          : undefined;
+    return {
+      ...(stale !== undefined ? { stale } : {}),
+      ...(expired !== undefined ? { expired } : {}),
+    };
   }
 
-  return { last: 0, pending: 0 };
-}
-
-export function effectiveRevalidationTimestamp(
-  state: TagRevalidationState,
-  now: number,
-): number {
-  let last = state.last;
-  if (state.pending > 0 && state.pending <= now) {
-    last = Math.max(last, state.pending);
-  }
-  return last;
-}
-
-export function applyImmediateRevalidation(now: number): TagRevalidationState {
-  return { last: now, pending: 0 };
+  return {};
 }
 
 /**
- * `revalidateTag(tag)` / `updateTag(tag)` / `{ expire: 0 }` are blocking
- * misses. Any positive `expire` (including cacheLife `'max'` ~1y) is SWR:
- * mark stale now, keep Redis entries so `get()` can serve them.
+ * Mirrors Next.js DefaultCacheHandler.updateTags().
  */
-export function isHardTagExpiration(expire?: number): boolean {
-  return expire === undefined || expire === 0;
+export function applyTagUpdate(
+  existing: TagManifestEntry,
+  durations: { expire?: number } | undefined,
+  now: number,
+): TagManifestEntry {
+  if (durations) {
+    const updates = { ...existing };
+    updates.stale = now;
+    if (durations.expire !== undefined) {
+      updates.expired = now + durations.expire * 1000;
+    }
+    return updates;
+  }
+
+  return {
+    ...existing,
+    expired: now,
+  };
+}
+
+/**
+ * Mirrors Next.js `areTagsExpired`: hard miss once `expired` has elapsed
+ * and is newer than the entry timestamp.
+ */
+export function areTagsExpired(
+  tags: string[],
+  entryTimestamp: number,
+  now: number,
+  getEntry: (tag: string) => TagManifestEntry | undefined,
+): boolean {
+  for (const tag of tags) {
+    const expiredAt = getEntry(tag)?.expired;
+    if (
+      typeof expiredAt === 'number' &&
+      expiredAt <= now &&
+      expiredAt > entryTimestamp
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Mirrors Next.js `areTagsStale`: SWR when `stale` is newer than the entry.
+ */
+export function areTagsStale(
+  tags: string[],
+  entryTimestamp: number,
+  getEntry: (tag: string) => TagManifestEntry | undefined,
+): boolean {
+  for (const tag of tags) {
+    const staleAt = getEntry(tag)?.stale ?? 0;
+    if (typeof staleAt === 'number' && staleAt > entryTimestamp) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Mirrors Next.js DefaultCacheHandler.getExpiration(): max `expired` or 0.
+ */
+export function maxExpiredTimestamp(
+  tags: string[],
+  getEntry: (tag: string) => TagManifestEntry | undefined,
+): number {
+  let max = 0;
+  for (const tag of tags) {
+    const expired = getEntry(tag)?.expired || 0;
+    if (expired > max) {
+      max = expired;
+    }
+  }
+  return max;
 }

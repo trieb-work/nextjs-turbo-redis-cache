@@ -11,11 +11,12 @@ import { debug } from './utils/debug';
 import { resolveKeyPrefix } from './utils/prefix';
 import { shouldDeferRedisConnection } from './utils/redisConnection';
 import {
-  applyImmediateRevalidation,
-  effectiveRevalidationTimestamp,
-  isHardTagExpiration,
-  normalizeTagRevalidation,
-  type TagRevalidationState,
+  applyTagUpdate,
+  areTagsExpired,
+  areTagsStale,
+  maxExpiredTimestamp,
+  normalizeTagManifest,
+  type TagManifestEntry,
 } from './utils/tagRevalidation';
 
 export interface CacheComponentsEntry {
@@ -94,7 +95,7 @@ function bufferToReadableStream(
 
 class RedisCacheComponentsHandler implements CacheComponentsHandler {
   private client: Client;
-  private revalidatedTagsMap: SyncedMap<TagRevalidationState | number>;
+  private revalidatedTagsMap: SyncedMap<TagManifestEntry | number>;
   private sharedTagsMap: SyncedMap<string[]>;
   private inMemoryDeduplicationCache: SyncedMap<
     Promise<ReturnType<Client['get']>>
@@ -211,7 +212,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
       const filterKeys = (key: string): boolean =>
         key !== REVALIDATED_TAGS_KEY && key !== SHARED_TAGS_KEY;
 
-      this.revalidatedTagsMap = new SyncedMap<TagRevalidationState | number>({
+      this.revalidatedTagsMap = new SyncedMap<TagManifestEntry | number>({
         client: this.client,
         keyPrefix: this.keyPrefix,
         redisKey: REVALIDATED_TAGS_KEY,
@@ -293,27 +294,17 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
     return this.redisConnectionDeferred || !this.client.isReady;
   }
 
-  private async computeMaxRevalidation(tags: string[]): Promise<number> {
-    const now = Date.now();
-    let max = 0;
-    for (const tag of tags) {
-      const ts = effectiveRevalidationTimestamp(
-        normalizeTagRevalidation(this.revalidatedTagsMap.get(tag), now),
-        now,
-      );
-      if (ts > max) {
-        max = ts;
-      }
-    }
-    return max;
+  private tagManifestFor(tag: string): TagManifestEntry {
+    return normalizeTagManifest(this.revalidatedTagsMap.get(tag));
   }
 
   async get(
     cacheKey: string,
     _softTags: string[],
   ): Promise<CacheComponentsEntry | undefined> {
-    // Soft-tag staleness is handled by Next.js via getExpiration(); see official
-    // cache-handler-redis example. Intentionally unused here.
+    // Soft-tag staleness is handled by Next.js via getExpiration() (implicit
+    // `_N_T_` tags). Explicit cacheTag()s are checked below via the tag
+    // manifest, matching DefaultCacheHandler.get() in Next.js 16.0–16.3.
     void _softTags;
 
     // Construct the full Redis key
@@ -350,6 +341,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
 
       const stored: StoredCacheEntry = JSON.parse(serialized);
       const now = Date.now();
+      const tags = stored.tags || [];
 
       // expire is a duration in seconds, calculate absolute expiry time
       const expiryTime = stored.timestamp + stored.expire * 1000;
@@ -363,15 +355,34 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         return undefined;
       }
 
+      if (
+        areTagsExpired(tags, stored.timestamp, now, (tag) =>
+          this.tagManifestFor(tag),
+        )
+      ) {
+        await this.client.unlink(redisKey).catch(() => {});
+        await this.sharedTagsMap.delete(cacheKey).catch(() => {});
+        return undefined;
+      }
+
       const valueBuffer =
         typeof stored.value === 'string'
           ? new Uint8Array(Buffer.from(stored.value, 'base64'))
           : stored.value;
 
-      return {
+      const entry: CacheComponentsEntry = {
         ...stored,
         value: bufferToReadableStream(valueBuffer),
       };
+
+      if (
+        areTagsStale(tags, stored.timestamp, (tag) => this.tagManifestFor(tag))
+      ) {
+        // Next.js DefaultCacheHandler signals SWR by returning revalidate: -1.
+        entry.revalidate = -1;
+      }
+
+      return entry;
     } catch (error) {
       console.error(
         'RedisCacheComponentsHandler.get() Error occurred while getting cache entry. Returning undefined so site can continue to serve content while cache is disabled. The original error was:',
@@ -478,7 +489,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
   async getExpiration(tags: string[]): Promise<number> {
     try {
       await this.assertClientIsReady();
-      return this.computeMaxRevalidation(tags || []);
+      return maxExpiredTimestamp(tags || [], (tag) => this.tagManifestFor(tag));
     } catch (error) {
       console.error(
         'RedisCacheComponentsHandler.getExpiration() Error occurred while getting expiration for tags. The original error was:',
@@ -486,36 +497,6 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
       );
       return 0;
     }
-  }
-
-  private async unlinkTaggedCacheEntries(tagsSet: Set<string>): Promise<void> {
-    const keysToDelete: Set<string> = new Set();
-
-    for (const [key, storedTags] of this.sharedTagsMap.entries()) {
-      if (storedTags.some((tag) => tagsSet.has(tag))) {
-        keysToDelete.add(key);
-      }
-    }
-
-    if (keysToDelete.size === 0) {
-      return;
-    }
-
-    const cacheKeys = Array.from(keysToDelete);
-    const fullRedisKeys = cacheKeys.map((key) => `${this.keyPrefix}${key}`);
-
-    await redisErrorHandler(
-      'RedisCacheComponentsHandler.updateTags(), operation: unlink',
-      this.client.unlink(fullRedisKeys),
-    );
-
-    if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
-      for (const key of keysToDelete) {
-        this.inMemoryDeduplicationCache.delete(key);
-      }
-    }
-
-    await this.sharedTagsMap.delete(cacheKeys);
   }
 
   async updateTags(
@@ -528,17 +509,10 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         return;
       }
 
-      const tagsSet = new Set(tags || []);
       const now = Date.now();
-      for (const tag of tagsSet) {
-        await this.revalidatedTagsMap.set(tag, applyImmediateRevalidation(now));
-      }
-
-      // expire > 0 (revalidateTag(tag, 'max') / { expire: N }): SWR — timestamp
-      // is already in Redis, keep entries so get() can serve stale. expire 0 /
-      // omitted: hard miss (updateTag / webhook).
-      if (isHardTagExpiration(durations?.expire)) {
-        await this.unlinkTaggedCacheEntries(tagsSet);
+      for (const tag of tags || []) {
+        const next = applyTagUpdate(this.tagManifestFor(tag), durations, now);
+        await this.revalidatedTagsMap.set(tag, next);
       }
     } catch (error) {
       console.error(

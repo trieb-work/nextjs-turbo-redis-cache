@@ -86,10 +86,10 @@ Without an additional data structure, the only way to find all keys for a tag wo
 
 ### The Solution: Two SyncedMaps
 
-| Map                  | Key                             | Value                            | Purpose                                                                                                                                                                     |
-| -------------------- | ------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sharedTagsMap`      | cache key (e.g. `/products/42`) | `string[]` of tags               | Reverse index: given a tag, iterate this map to find all affected cache keys                                                                                                |
-| `revalidatedTagsMap` | tag name (e.g. `product`)       | timestamp or `{ last, pending }` | Tracks _when_ a tag was last revalidated. ISR uses a number and lazy-checks it in `get()`. Cache Components stores `{ last, pending }` and exposes it via `getExpiration()` |
+| Map                  | Key                             | Value                             | Purpose                                                                                                                                                                                                                                                                 |
+| -------------------- | ------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sharedTagsMap`      | cache key (e.g. `/products/42`) | `string[]` of tags                | Reverse index: given a tag, iterate this map to find all affected cache keys                                                                                                                                                                                            |
+| `revalidatedTagsMap` | tag name (e.g. `product`)       | timestamp or `{ stale, expired }` | Tracks _when_ a tag was last revalidated. ISR uses a number and lazy-checks it in `get()`. Cache Components stores `{ stale, expired }` matching Next.js `tagsManifest`; `get()` applies `areTagsExpired` / `areTagsStale`, and `getExpiration()` returns max `expired` |
 
 Both maps live **in-memory** in every Node.js process and are **synchronized across instances** through Redis Hash + Pub/Sub (see [SyncedMap](#syncedmap--the-synchronization-primitive)).
 
@@ -217,7 +217,7 @@ get(key: string, ctx: {
 get(cacheKey: string, softTags: string[])
 ```
 
-The Cache Components interface is simpler: it receives only the cache key and soft tags. Soft-tag staleness is **not** checked in `get()` — Next.js calls `getExpiration()` for that.
+The Cache Components interface is simpler: it receives only the cache key and soft tags. Soft-tag staleness for implicit `_N_T_` tags is handled by Next.js via `getExpiration()`. Explicit `cacheTag()`s are checked in `get()` (`areTagsExpired` / `areTagsStale`), matching `DefaultCacheHandler.get()`.
 
 ### What `get` Does
 
@@ -229,9 +229,14 @@ flowchart TD
     C -->|Yes| D["JSON.parse result"]
 
     D --> CC{CacheComponents?}
-    CC -->|Yes| EXP{"Hard expire elapsed?"}
+    CC -->|Yes| EXP{"entry.expire TTL elapsed?"}
     EXP -->|Yes| DEL1["UNLINK key\nDelete from sharedTagsMap\nReturn undefined"]
-    EXP -->|No| H["Return cache entry"]
+    EXP -->|No| TAGX{"areTagsExpired(entry.tags)?"}
+    TAGX -->|Yes| DEL1
+    TAGX -->|No| TAGS{"areTagsStale(entry.tags)?"}
+    TAGS -->|Yes| SETR["Set revalidate = -1"]
+    TAGS -->|No| H["Return cache entry"]
+    SETR --> H
 
     CC -->|No / ISR| E["Check revalidatedTagsMap\nfor all tags + softTags"]
     E --> F{Any tag revalidated\nafter entry.lastModified/timestamp?}
@@ -248,7 +253,7 @@ flowchart TD
 
 2. **Deduplication** (both handlers): Before hitting Redis, the deduplication cache is checked for an existing in-flight or recently resolved promise for the same key. Enabled by default (`redisGetDeduplication: true`) with a 10s caching window (`inMemoryCachingTime: 10_000`).
 
-3. **Lazy tag invalidation (ISR only)**: Instead of eagerly deleting all fetch entries when a page tag is revalidated, `RedisStringsHandler` records the revalidation timestamp in `revalidatedTagsMap`. During `get`, it compares `lastModified` against the max revalidation timestamp of all related tags. If the entry is stale, it is deleted and `null` is returned. This is necessary because `revalidateTag` for implicit tags (`_N_T_` prefix) does not know which fetch cache keys are affected. **Cache Components** does not do this in `get()` — Next.js asks `getExpiration(tags)` instead, and `get()` only enforces the hard `expire` TTL.
+3. **Lazy tag invalidation**: Instead of eagerly deleting all fetch entries when a page tag is revalidated, `RedisStringsHandler` records the revalidation timestamp in `revalidatedTagsMap`. During `get`, it compares `lastModified` against the max revalidation timestamp of all related tags. If the entry is stale, it is deleted and `null` is returned. This is necessary because `revalidateTag` for implicit tags (`_N_T_` prefix) does not know which fetch cache keys are affected. **Cache Components** matches Next.js `DefaultCacheHandler.get()`: `areTagsExpired` → miss, `areTagsStale` → return the entry with `revalidate: -1` (SWR). Next.js uses `getExpiration()` only for implicit/soft tags.
 
 4. **Value transformation** (CacheComponentsHandler): The stored value is a base64-encoded string (from a `ReadableStream<Uint8Array>`). On read, it is decoded back to `Uint8Array` and wrapped in a new `ReadableStream`.
 
@@ -354,58 +359,65 @@ In both cases, the handler receives **only tag names** – no cache keys.
 ```mermaid
 flowchart TD
     A["revalidateTag / updateTags"] --> B["Normalize tags to Set"]
+    B --> ISR{Cache Components?}
 
-    B --> C["Persist Date.now() in revalidatedTagsMap"]
-    C --> NOTE["getExpiration() reports stale immediately\n(ISR also lazy-checks this in get())"]
-
-    C --> HARD{"Cache Components\nand durations.expire > 0?"}
-    HARD -->|Yes SWR| SKIP["Do not UNLINK\nget() can still serve stale"]
-    HARD -->|No / expire 0| D["Scan sharedTagsMap:\nFor each (key, storedTags):\n  if any storedTag ∈ tags → add key to keysToDelete"]
-
+    ISR -->|No ISR| C["Persist Date.now() in revalidatedTagsMap"]
+    C --> D["Scan sharedTagsMap for matching keys"]
     D --> E{keysToDelete empty?}
     E -->|Yes| F["Return early"]
-    E -->|No| G["UNLINK all matching Redis keys\n(batch operation)"]
-
-    G --> H["Delete from sharedTagsMap\n→ HDEL + PUBLISH"]
-
-    G --> I["Delete from inMemoryDeduplicationCache\n(if redisGetDeduplication enabled)"]
-
+    E -->|No| G["UNLINK matching Redis keys"]
+    G --> H["Delete from sharedTagsMap + Pub/Sub"]
+    G --> I["Delete from inMemoryDeduplicationCache"]
     H --> J["Done"]
     I --> J
-    SKIP --> J
+
+    ISR -->|Yes| K{"durations provided?"}
+    K -->|No updateTag / deprecated revalidateTag| L["Write { expired: now }"]
+    K -->|Yes| M["Write stale = now"]
+    M --> N{"durations.expire defined?"}
+    N -->|Yes| O["expired = now + expire * 1000"]
+    N -->|No| P["keep prior expired"]
+    L --> Q["Persist in revalidatedTagsMap\nno UNLINK"]
+    O --> Q2["expire: 0 → expired=now blocking miss\nexpire>0 → SWR window"]
+    P --> Q
+    Q2 --> Q
 ```
 
 ### Key Details
 
 1. **Implicit tags (`_N_T_` prefix)**: When Next.js calls `revalidatePath("/products")`, it internally translates this to `revalidateTag("_N_T_/products")`. The handler cannot know which _fetch_ cache keys are nested inside that page. Therefore, it only records the timestamp in `revalidatedTagsMap`. The actual cleanup happens lazily in `get()` when the fetch entry is next accessed.
 
-2. **SWR `updateTags` (Cache Components)**: Next.js passes `durations.expire` from `revalidateTag(tag, profile)` / `{ expire }`. That value is the stale-serve window, not a delay before invalidation. The handler always writes `Date.now()` so `getExpiration()` marks entries stale on the next read. For `expire > 0` (including `'max'` ~1 year) Redis entries stay so `get()` can serve stale while Next.js refreshes. `expire: 0` or omitted unlinks keys (blocking miss / `updateTag`).
+2. **SWR `updateTags` (Cache Components)**: Matches Next.js `DefaultCacheHandler.updateTags()` (`default.js` in 16.0.11, 16.2.6, 16.3.0) and the [revalidateTag docs](https://nextjs.org/docs/app/api-reference/functions/revalidateTag). `revalidateTag(tag, profile)` looks up `cacheLife[profile].expire` (seconds) and calls `updateTags(tags, { expire })`. The handler never unlinks in `updateTags`:
 
-3. **Batch deletion**: All matching Redis keys are deleted in a single `UNLINK` call (non-blocking Redis delete), minimizing network round-trips. SWR (`expire > 0`) skips UNLINK.
+   - No `durations` (`updateTag` / deprecated single-arg `revalidateTag`): `{ expired: now }` — next `get()` is a hard miss.
+   - `{ expire: 0 }`: `{ stale: now, expired: now }` — blocking miss, same HTTP effect.
+   - `{ expire: N }` including `'max'` (~1 year) and `'default'` (`INFINITE_CACHE`): `{ stale: now, expired: now + N * 1000 }`. `get()` returns the entry with `revalidate: -1` until `expired`. Past `expired`, `areTagsExpired` is a miss.
 
-4. **Cross-instance propagation**: The `sharedTagsMap.delete()` publishes a Pub/Sub message, so all other instances immediately remove the deleted keys from their local maps as well. Revalidation timestamps propagate the same way via `revalidatedTagsMap` Pub/Sub.
+3. **Batch deletion (ISR only)**: `RedisStringsHandler.revalidateTag` deletes matching Redis keys in a single `UNLINK`. Cache Components leaves keys in place; `get()` drops them only after `areTagsExpired`.
 
-5. **Dedup cache cleanup** (hard-expire path): Revalidated keys are also removed from the `inMemoryDeduplicationCache` to prevent stale data from being served from memory.
+4. **Cross-instance propagation**: Tag-manifest writes publish via Pub/Sub, so all instances see `{ stale, expired }` without waiting for `refreshTags()`.
+
+5. **Preset expire seconds** (from Next.js `config-shared.js`): `seconds` 60, `minutes` 3600, `hours` 86400, `days` 604800, `weeks` 2592000, `max` 31536000, `default` 4294967294 (`0xfffffffe`).
 
 ---
 
 ## RedisStringsHandler vs CacheComponentsHandler
 
-| Aspect                    | RedisStringsHandler                                                                                              | CacheComponentsHandler                                                                           |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| **Next.js version**       | 15+ (legacy `cacheHandler`)                                                                                      | 16+ (`cacheHandlers.default`)                                                                    |
-| **Cache kinds**           | `APP_PAGE`, `APP_ROUTE`, `FETCH`                                                                                 | Unified (all via `'use cache'`, `cacheTag`, `cacheLife`)                                         |
-| **Value format**          | Arbitrary JSON (page HTML, RSC data, fetch response)                                                             | `ReadableStream<Uint8Array>` ↔ base64 string                                                    |
-| **Entry shape**           | `{ value, lastModified, tags }`                                                                                  | `{ value, tags, stale, timestamp, expire, revalidate }`                                          |
-| **set() receives**        | Resolved data                                                                                                    | `Promise<CacheComponentsEntry>` (may not yet be resolved)                                        |
-| **TTL calculation**       | `resolveCacheEntryTtlSeconds()` – prefers `cacheControl.expire`, legacy `estimateExpireAge(revalidate)` fallback | `entry.expire` – passed directly by Next.js                                                      |
-| **Tag source in set**     | `x-next-cache-tags` header + `ctx.tags`                                                                          | `entry.tags`                                                                                     |
-| **Request deduplication** | Yes (`DeduplicatedRequestHandler`, default on)                                                                   | Yes (`DeduplicatedRequestHandler`, default on)                                                   |
-| **In-memory caching**     | Yes (configurable `inMemoryCachingTime`, default 10s)                                                            | Yes (configurable `inMemoryCachingTime`, default 10s)                                            |
-| **Revalidation function** | `revalidateTag(tagOrTags)`                                                                                       | `updateTags(tags, durations?)`                                                                   |
-| **Implicit tag handling** | Stores timestamp in `revalidatedTagsMap`, lazy check in `get()` for `FETCH` kind                                 | Stores `{ last, pending }` in `revalidatedTagsMap`; Next.js uses `getExpiration()` (not `get()`) |
-| **Singleton pattern**     | External (user wraps in `module.exports`)                                                                        | Built-in `getRedisCacheComponentsHandler()` singleton                                            |
-| **Key prefix resolution** | `keyPrefix` option or `KEY_PREFIX` / `VERCEL_URL` env                                                            | `resolveKeyPrefix()` with BUILD_ID fallback                                                      |
+| Aspect                    | RedisStringsHandler                                                                                              | CacheComponentsHandler                                                                                                                                      |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Next.js version**       | 15+ (legacy `cacheHandler`)                                                                                      | 16+ (`cacheHandlers.default`)                                                                                                                               |
+| **Cache kinds**           | `APP_PAGE`, `APP_ROUTE`, `FETCH`                                                                                 | Unified (all via `'use cache'`, `cacheTag`, `cacheLife`)                                                                                                    |
+| **Value format**          | Arbitrary JSON (page HTML, RSC data, fetch response)                                                             | `ReadableStream<Uint8Array>` ↔ base64 string                                                                                                               |
+| **Entry shape**           | `{ value, lastModified, tags }`                                                                                  | `{ value, tags, stale, timestamp, expire, revalidate }`                                                                                                     |
+| **set() receives**        | Resolved data                                                                                                    | `Promise<CacheComponentsEntry>` (may not yet be resolved)                                                                                                   |
+| **TTL calculation**       | `resolveCacheEntryTtlSeconds()` – prefers `cacheControl.expire`, legacy `estimateExpireAge(revalidate)` fallback | `entry.expire` – passed directly by Next.js                                                                                                                 |
+| **Tag source in set**     | `x-next-cache-tags` header + `ctx.tags`                                                                          | `entry.tags`                                                                                                                                                |
+| **Request deduplication** | Yes (`DeduplicatedRequestHandler`, default on)                                                                   | Yes (`DeduplicatedRequestHandler`, default on)                                                                                                              |
+| **In-memory caching**     | Yes (configurable `inMemoryCachingTime`, default 10s)                                                            | Yes (configurable `inMemoryCachingTime`, default 10s)                                                                                                       |
+| **Revalidation function** | `revalidateTag(tagOrTags)`                                                                                       | `updateTags(tags, durations?)`                                                                                                                              |
+| **Implicit tag handling** | Stores timestamp in `revalidatedTagsMap`, lazy check in `get()` for `FETCH` kind                                 | Stores `{ stale, expired }` in `revalidatedTagsMap`; `get()` applies `areTagsExpired` / `areTagsStale`; `getExpiration()` returns max `expired` (soft tags) |
+| **Singleton pattern**     | External (user wraps in `module.exports`)                                                                        | Built-in `getRedisCacheComponentsHandler()` singleton                                                                                                       |
+| **Key prefix resolution** | `keyPrefix` option or `KEY_PREFIX` / `VERCEL_URL` env                                                            | `resolveKeyPrefix()` with BUILD_ID fallback                                                                                                                 |
 
 ### Shared Architecture
 

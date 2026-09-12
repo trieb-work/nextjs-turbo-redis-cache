@@ -66,11 +66,11 @@ function cachedEntry(tags: string[], timestamp: number) {
     stale: 1,
     timestamp,
     expire: 3600,
-    revalidate: 1,
+    revalidate: 60,
   };
 }
 
-describe('RedisCacheComponentsHandler.updateTags durations', () => {
+describe('RedisCacheComponentsHandler.updateTags vs Next.js default handler', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     hoisted.store.clear();
@@ -93,91 +93,124 @@ describe('RedisCacheComponentsHandler.updateTags durations', () => {
     });
   }
 
-  it('marks tags stale immediately for SWR expire without unlinking', async () => {
-    const handler = await createHandler('durations-test:');
-    const now = Date.now();
+  it('SWR expire keeps the entry and sets revalidate=-1 until the window elapses', async () => {
+    const handler = await createHandler('swr:');
+    const createdAt = Date.now();
 
     await handler.set(
       'page',
-      Promise.resolve(cachedEntry(['cache-lab:swr'], now)),
+      Promise.resolve(cachedEntry(['posts'], createdAt)),
     );
-    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout');
-    await handler.updateTags(['cache-lab:swr'], { expire: 2 });
+    // Next.js areTagsStale/areTagsExpired require stale/expired > entry.timestamp.
+    await vi.advanceTimersByTimeAsync(1);
+    const revalidatedAt = Date.now();
+    await handler.updateTags(['posts'], { expire: 2 });
 
-    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 2000)).toBe(
-      false,
-    );
-    timeoutSpy.mockRestore();
+    expect(await handler.getExpiration(['posts'])).toBe(revalidatedAt + 2_000);
 
-    expect(await handler.getExpiration(['cache-lab:swr'])).toBe(now);
+    const served = await handler.get('page', []);
+    expect(served).toBeDefined();
+    expect(served?.revalidate).toBe(-1);
     expect(hoisted.unlinkedKeys).toEqual([]);
-    expect(await handler.get('page', [])).toBeDefined();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(await handler.get('page', [])).toBeUndefined();
   });
 
-  it('marks tags stale immediately for cacheLife max-style expire (~1y)', async () => {
-    const handler = await createHandler('max-profile:');
-    const now = Date.now();
+  it('cacheLife max expire (~1y) is SWR, not a delay before staleness', async () => {
+    const handler = await createHandler('max:');
+    const createdAt = Date.now();
     const oneYear = 60 * 60 * 24 * 365;
 
-    await handler.set('page', Promise.resolve(cachedEntry(['posts'], now)));
+    await handler.set(
+      'page',
+      Promise.resolve(cachedEntry(['posts'], createdAt)),
+    );
+    await vi.advanceTimersByTimeAsync(1);
+    const revalidatedAt = Date.now();
     await handler.updateTags(['posts'], { expire: oneYear });
 
-    expect(await handler.getExpiration(['posts'])).toBe(now);
-    expect(hoisted.unlinkedKeys).toEqual([]);
+    expect(await handler.getExpiration(['posts'])).toBe(
+      revalidatedAt + oneYear * 1000,
+    );
+    const served = await handler.get('page', []);
+    expect(served?.revalidate).toBe(-1);
     expect(await handler.get('page', [])).toBeDefined();
   });
 
-  it('survives a simulated restart because the timestamp is already in the map', async () => {
-    const handler = await createHandler('restart:');
+  it('omitted durations is a blocking miss (updateTag / deprecated revalidateTag)', async () => {
+    const handler = await createHandler('hard:');
+    const createdAt = Date.now();
+
+    await handler.set(
+      'page',
+      Promise.resolve(cachedEntry(['posts'], createdAt)),
+    );
+    await vi.advanceTimersByTimeAsync(1);
+    const revalidatedAt = Date.now();
+    await handler.updateTags(['posts']);
+
+    expect(await handler.getExpiration(['posts'])).toBe(revalidatedAt);
+    expect(await handler.get('page', [])).toBeUndefined();
+  });
+
+  it('{ expire: 0 } is a blocking miss', async () => {
+    const handler = await createHandler('zero:');
+    const createdAt = Date.now();
+
+    await handler.set(
+      'page',
+      Promise.resolve(cachedEntry(['posts'], createdAt)),
+    );
+    await vi.advanceTimersByTimeAsync(1);
+    const revalidatedAt = Date.now();
+    await handler.updateTags(['posts'], { expire: 0 });
+
+    expect(await handler.getExpiration(['posts'])).toBe(revalidatedAt);
+    expect(await handler.get('page', [])).toBeUndefined();
+  });
+
+  it('persists stale+expired so a later getExpiration still sees the window', async () => {
+    const handler = await createHandler('persist:');
     const startedAt = Date.now();
 
-    await handler.updateTags(['cache-lab:swr'], { expire: 2 });
-    const stored = (handler as any).revalidatedTagsMap.get('cache-lab:swr');
+    await handler.updateTags(['posts'], { expire: 2 });
+    const stored = (handler as any).revalidatedTagsMap.get('posts');
 
-    const { effectiveRevalidationTimestamp, normalizeTagRevalidation } =
-      await import('../../../src/utils/tagRevalidation');
-
-    expect(
-      effectiveRevalidationTimestamp(
-        normalizeTagRevalidation(stored, startedAt),
-        startedAt,
-      ),
-    ).toBe(startedAt);
-    expect(
-      effectiveRevalidationTimestamp(
-        normalizeTagRevalidation(stored, startedAt + 2_000),
-        startedAt + 2_000,
-      ),
-    ).toBe(startedAt);
+    expect(stored).toEqual({
+      stale: startedAt,
+      expired: startedAt + 2_000,
+    });
   });
 
-  it('hard-expires when durations is omitted', async () => {
-    const handler = await createHandler('immediate-test:');
-    const now = Date.now();
+  it.each([
+    ['seconds', 60],
+    ['minutes', 60 * 60],
+    ['hours', 60 * 60 * 24],
+    ['days', 60 * 60 * 24 * 7],
+    ['weeks', 60 * 60 * 24 * 30],
+    ['max', 60 * 60 * 24 * 365],
+    ['default', 0xfffffffe],
+  ] as const)(
+    'cacheLife %s expire writes getExpiration=now+expire*1000 and SWR',
+    async (_profile, expireSeconds) => {
+      const handler = await createHandler(`preset-${_profile}:`);
+      const createdAt = Date.now();
 
-    await handler.set(
-      'page',
-      Promise.resolve(cachedEntry(['cache-lab:tag'], now)),
-    );
-    await handler.updateTags(['cache-lab:tag']);
+      await handler.set(
+        'page',
+        Promise.resolve(cachedEntry(['posts'], createdAt)),
+      );
+      await vi.advanceTimersByTimeAsync(1);
+      const revalidatedAt = Date.now();
+      await handler.updateTags(['posts'], { expire: expireSeconds });
 
-    expect(await handler.getExpiration(['cache-lab:tag'])).toBe(now);
-    expect(hoisted.unlinkedKeys).toContain('immediate-test:page');
-    expect(await handler.get('page', [])).toBeUndefined();
-  });
-
-  it('hard-expires when expire is 0', async () => {
-    const handler = await createHandler('expire-zero:');
-    const now = Date.now();
-
-    await handler.set(
-      'page',
-      Promise.resolve(cachedEntry(['cache-lab:tag'], now)),
-    );
-    await handler.updateTags(['cache-lab:tag'], { expire: 0 });
-
-    expect(await handler.getExpiration(['cache-lab:tag'])).toBe(now);
-    expect(hoisted.unlinkedKeys).toContain('expire-zero:page');
-    expect(await handler.get('page', [])).toBeUndefined();
-  });
+      expect(await handler.getExpiration(['posts'])).toBe(
+        revalidatedAt + expireSeconds * 1000,
+      );
+      const served = await handler.get('page', []);
+      expect(served?.revalidate).toBe(-1);
+      expect(await handler.get('page', [])).toBeDefined();
+    },
+  );
 });
