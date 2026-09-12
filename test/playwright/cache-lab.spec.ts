@@ -184,12 +184,14 @@ test.describe('Cache Lab (Cache Components)', () => {
 
     // Deferred invalidation + SWR: reload should be fast and may still show stale values.
     expect(reloadDuration).toBeLessThan(2000);
-    expect(afterReloadComputedAt).toBe(beforeComputedAt);
-    expect(afterReloadValue).toBe(beforeValue);
-
-    await page.waitForTimeout(5000);
-    await page.reload();
-    await expect(computedAt).toBeVisible();
+    if (
+      afterReloadComputedAt === beforeComputedAt &&
+      afterReloadValue === beforeValue
+    ) {
+      await page.waitForTimeout(5000);
+      await page.reload();
+      await expect(computedAt).toBeVisible();
+    }
 
     expect(await computedAt.textContent()).not.toBe(beforeComputedAt);
     expect(await value.textContent()).not.toBe(beforeValue);

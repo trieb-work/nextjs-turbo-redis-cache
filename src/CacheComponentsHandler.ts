@@ -481,6 +481,49 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
     }
   }
 
+  private async applyImmediateTagInvalidation(
+    tagsSet: Set<string>,
+  ): Promise<void> {
+    const now = Date.now();
+
+    for (const tag of tagsSet) {
+      const existing = this.deferredTagRevalidations.get(tag);
+      if (existing) {
+        clearTimeout(existing);
+        this.deferredTagRevalidations.delete(tag);
+      }
+      await this.revalidatedTagsMap.set(tag, now);
+    }
+
+    const keysToDelete: Set<string> = new Set();
+
+    for (const [key, storedTags] of this.sharedTagsMap.entries()) {
+      if (storedTags.some((tag) => tagsSet.has(tag))) {
+        keysToDelete.add(key);
+      }
+    }
+
+    if (keysToDelete.size === 0) {
+      return;
+    }
+
+    const cacheKeys = Array.from(keysToDelete);
+    const fullRedisKeys = cacheKeys.map((key) => `${this.keyPrefix}${key}`);
+
+    await redisErrorHandler(
+      'RedisCacheComponentsHandler.updateTags(), operation: unlink',
+      this.client.unlink(fullRedisKeys),
+    );
+
+    if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
+      for (const key of keysToDelete) {
+        this.inMemoryDeduplicationCache.delete(key);
+      }
+    }
+
+    await this.sharedTagsMap.delete(cacheKeys);
+  }
+
   async updateTags(
     tags: string[],
     durations?: { expire?: number },
@@ -507,7 +550,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
 
           const timeout = setTimeout(() => {
             this.deferredTagRevalidations.delete(tag);
-            void this.revalidatedTagsMap.set(tag, Date.now());
+            void this.applyImmediateTagInvalidation(new Set([tag]));
           }, deferSeconds * 1000);
 
           this.deferredTagRevalidations.set(tag, timeout);
@@ -515,48 +558,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         return;
       }
 
-      const now = Date.now();
-
-      for (const tag of tagsSet) {
-        const existing = this.deferredTagRevalidations.get(tag);
-        if (existing) {
-          clearTimeout(existing);
-          this.deferredTagRevalidations.delete(tag);
-        }
-        await this.revalidatedTagsMap.set(tag, now);
-      }
-
-      const keysToDelete: Set<string> = new Set();
-
-      for (const [key, storedTags] of this.sharedTagsMap.entries()) {
-        if (storedTags.some((tag) => tagsSet.has(tag))) {
-          keysToDelete.add(key);
-        }
-      }
-
-      if (keysToDelete.size === 0) {
-        return;
-      }
-
-      const cacheKeys = Array.from(keysToDelete);
-
-      // Construct full Redis keys (same format as in get/set)
-      const fullRedisKeys = cacheKeys.map((key) => `${this.keyPrefix}${key}`);
-
-      await redisErrorHandler(
-        'RedisCacheComponentsHandler.updateTags(), operation: unlink',
-        this.client.unlink(fullRedisKeys),
-      );
-
-      if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
-        for (const key of keysToDelete) {
-          this.inMemoryDeduplicationCache.delete(key);
-        }
-      }
-
-      // Delete from sharedTagsMap
-      const deleteTagsOperation = this.sharedTagsMap.delete(cacheKeys);
-      await deleteTagsOperation;
+      await this.applyImmediateTagInvalidation(tagsSet);
     } catch (error) {
       console.error(
         'RedisCacheComponentsHandler.updateTags() Error occurred while updating tags. The original error was:',

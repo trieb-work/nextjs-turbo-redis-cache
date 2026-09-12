@@ -15,6 +15,21 @@ describe('Next.js 16 Cache Components Integration', () => {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  async function waitForRedisKeys(
+    pattern: string,
+    minCount = 1,
+    timeoutMs = 5000,
+  ) {
+    for (let elapsed = 0; elapsed < timeoutMs; elapsed += 100) {
+      const keys = await redisClient.keys(pattern);
+      if (keys.length >= minCount) {
+        return keys;
+      }
+      await delay(100);
+    }
+    return redisClient.keys(pattern);
+  }
+
   beforeAll(async () => {
     // Connect to Redis
     redisClient = createClient({
@@ -108,8 +123,7 @@ describe('Next.js 16 Cache Components Integration', () => {
     it('should store cache entry in Redis', async () => {
       await fetch(`${BASE_URL}/api/cached-static-fetch`);
 
-      // Check Redis for cache keys
-      const keys = await redisClient.keys(`${keyPrefix}*`);
+      const keys = await waitForRedisKeys(`${keyPrefix}*`);
       expect(keys.length).toBeGreaterThan(0);
     });
   });
