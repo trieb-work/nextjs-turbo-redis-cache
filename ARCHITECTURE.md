@@ -300,7 +300,7 @@ flowchart TD
     B3 --> C
 
     C --> D["Calculate TTL"]
-    D --> D2["RedisStringsHandler:\nestimateExpireAge(revalidate || defaultStaleAge)"]
+    D --> D2["RedisStringsHandler:\nresolveCacheEntryTtlSeconds()\nprefer cacheControl.expire,\nlegacy fallback to estimateExpireAge(revalidate)"]
     D --> D3["CacheComponentsHandler:\nentry.expire (already in seconds)"]
 
     D2 --> E["Redis SET prefix:key serialized EX ttl"]
@@ -385,21 +385,21 @@ flowchart TD
 
 ## RedisStringsHandler vs CacheComponentsHandler
 
-| Aspect                    | RedisStringsHandler                                                              | CacheComponentsHandler                                                          |
-| ------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| **Next.js version**       | 15+ (legacy `cacheHandler`)                                                      | 16+ (`cacheHandlers.default`)                                                   |
-| **Cache kinds**           | `APP_PAGE`, `APP_ROUTE`, `FETCH`                                                 | Unified (all via `'use cache'`, `cacheTag`, `cacheLife`)                        |
-| **Value format**          | Arbitrary JSON (page HTML, RSC data, fetch response)                             | `ReadableStream<Uint8Array>` ↔ base64 string                                   |
-| **Entry shape**           | `{ value, lastModified, tags }`                                                  | `{ value, tags, stale, timestamp, expire, revalidate }`                         |
-| **set() receives**        | Resolved data                                                                    | `Promise<CacheComponentsEntry>` (may not yet be resolved)                       |
-| **TTL calculation**       | `estimateExpireAge(revalidate)` – configurable function                          | `entry.expire` – passed directly by Next.js                                     |
-| **Tag source in set**     | `x-next-cache-tags` header + `ctx.tags`                                          | `entry.tags`                                                                    |
-| **Request deduplication** | Yes (`DeduplicatedRequestHandler`, default on)                                   | Yes (`DeduplicatedRequestHandler`, default on)                                  |
-| **In-memory caching**     | Yes (configurable `inMemoryCachingTime`, default 10s)                            | Yes (configurable `inMemoryCachingTime`, default 10s)                           |
-| **Revalidation function** | `revalidateTag(tagOrTags)`                                                       | `updateTags(tags, durations?)`                                                  |
-| **Implicit tag handling** | Stores timestamp in `revalidatedTagsMap`, lazy check in `get()` for `FETCH` kind | Stores timestamp in `revalidatedTagsMap`, lazy check in `get()` for all entries |
-| **Singleton pattern**     | External (user wraps in `module.exports`)                                        | Built-in `getRedisCacheComponentsHandler()` singleton                           |
-| **Key prefix resolution** | `keyPrefix` option or `KEY_PREFIX` / `VERCEL_URL` env                            | `resolveKeyPrefix()` with BUILD_ID fallback                                     |
+| Aspect                    | RedisStringsHandler                                                                                              | CacheComponentsHandler                                                          |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Next.js version**       | 15+ (legacy `cacheHandler`)                                                                                      | 16+ (`cacheHandlers.default`)                                                   |
+| **Cache kinds**           | `APP_PAGE`, `APP_ROUTE`, `FETCH`                                                                                 | Unified (all via `'use cache'`, `cacheTag`, `cacheLife`)                        |
+| **Value format**          | Arbitrary JSON (page HTML, RSC data, fetch response)                                                             | `ReadableStream<Uint8Array>` ↔ base64 string                                   |
+| **Entry shape**           | `{ value, lastModified, tags }`                                                                                  | `{ value, tags, stale, timestamp, expire, revalidate }`                         |
+| **set() receives**        | Resolved data                                                                                                    | `Promise<CacheComponentsEntry>` (may not yet be resolved)                       |
+| **TTL calculation**       | `resolveCacheEntryTtlSeconds()` – prefers `cacheControl.expire`, legacy `estimateExpireAge(revalidate)` fallback | `entry.expire` – passed directly by Next.js                                     |
+| **Tag source in set**     | `x-next-cache-tags` header + `ctx.tags`                                                                          | `entry.tags`                                                                    |
+| **Request deduplication** | Yes (`DeduplicatedRequestHandler`, default on)                                                                   | Yes (`DeduplicatedRequestHandler`, default on)                                  |
+| **In-memory caching**     | Yes (configurable `inMemoryCachingTime`, default 10s)                                                            | Yes (configurable `inMemoryCachingTime`, default 10s)                           |
+| **Revalidation function** | `revalidateTag(tagOrTags)`                                                                                       | `updateTags(tags, durations?)`                                                  |
+| **Implicit tag handling** | Stores timestamp in `revalidatedTagsMap`, lazy check in `get()` for `FETCH` kind                                 | Stores timestamp in `revalidatedTagsMap`, lazy check in `get()` for all entries |
+| **Singleton pattern**     | External (user wraps in `module.exports`)                                                                        | Built-in `getRedisCacheComponentsHandler()` singleton                           |
+| **Key prefix resolution** | `keyPrefix` option or `KEY_PREFIX` / `VERCEL_URL` env                                                            | `resolveKeyPrefix()` with BUILD_ID fallback                                     |
 
 ### Shared Architecture
 

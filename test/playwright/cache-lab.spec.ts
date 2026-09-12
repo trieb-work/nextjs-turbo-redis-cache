@@ -124,6 +124,77 @@ test.describe('Cache Lab (Cache Components)', () => {
     expect(payloadB).not.toBe(payloadA1);
   });
 
+  test('use cache: remote values are stable until updateTag', async ({
+    page,
+  }) => {
+    await page.goto('/cache-lab/use-cache-remote');
+
+    const computedAt = page.getByTestId('computedAt');
+    const value = page.getByTestId('value');
+
+    await expect(computedAt).toBeVisible();
+
+    const beforeComputedAt = await computedAt.textContent();
+    const beforeValue = await value.textContent();
+
+    await page.reload();
+    await expect(computedAt).toBeVisible();
+    expect(await computedAt.textContent()).toBe(beforeComputedAt);
+    expect(await value.textContent()).toBe(beforeValue);
+
+    await page
+      .getByRole('button', { name: "updateTag('cache-lab:remote')" })
+      .click();
+    await page.waitForLoadState('networkidle');
+
+    await expect(computedAt).toBeVisible();
+    expect(await computedAt.textContent()).not.toBe(beforeComputedAt);
+    expect(await value.textContent()).not.toBe(beforeValue);
+  });
+
+  test('revalidateTag with durations can serve stale values before refresh completes', async ({
+    page,
+  }) => {
+    await page.goto('/cache-lab/revalidate-durations');
+
+    const computedAt = page.getByTestId('computedAt');
+    const value = page.getByTestId('value');
+
+    await expect(computedAt).toBeVisible();
+
+    const beforeComputedAt = await computedAt.textContent();
+    const beforeValue = await value.textContent();
+
+    await page.waitForTimeout(3000);
+
+    await page
+      .getByRole('button', {
+        name: "revalidateTag('cache-lab:durations', { expire: 2 })",
+      })
+      .click();
+    await page.waitForLoadState('networkidle');
+
+    const reloadStart = Date.now();
+    await page.reload();
+    await expect(computedAt).toBeVisible();
+    const reloadDuration = Date.now() - reloadStart;
+
+    const afterReloadComputedAt = await computedAt.textContent();
+    const afterReloadValue = await value.textContent();
+
+    // Deferred invalidation + SWR: reload should be fast and may still show stale values.
+    expect(reloadDuration).toBeLessThan(2000);
+    expect(afterReloadComputedAt).toBe(beforeComputedAt);
+    expect(afterReloadValue).toBe(beforeValue);
+
+    await page.waitForTimeout(5000);
+    await page.reload();
+    await expect(computedAt).toBeVisible();
+
+    expect(await computedAt.textContent()).not.toBe(beforeComputedAt);
+    expect(await value.textContent()).not.toBe(beforeValue);
+  });
+
   test('stale-while-revalidate demo eventually produces a new value after revalidateTag', async ({
     page,
   }) => {

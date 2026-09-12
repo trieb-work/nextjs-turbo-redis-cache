@@ -3,6 +3,8 @@ import { SyncedMap } from './SyncedMap';
 import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
 import { debug } from './utils/debug';
 import { CacheValueSerializer, jsonCacheValueSerializer } from './serializer';
+import { resolveCacheEntryTtlSeconds } from './utils/cacheTtl';
+import { shouldDeferRedisConnection } from './utils/redisConnection';
 
 export type CommandOptions = ReturnType<typeof commandOptions>;
 export type Client = ReturnType<typeof createClient>;
@@ -262,6 +264,7 @@ export default class RedisStringsHandler {
   private estimateExpireAge: (staleAge: number) => number;
   private killContainerOnErrorThreshold: number;
   private valueSerializer: CacheValueSerializer;
+  private redisConnectionDeferred: boolean;
 
   constructor({
     redisUrl = process.env.REDIS_URL
@@ -301,6 +304,7 @@ export default class RedisStringsHandler {
       this.killContainerOnErrorThreshold = killContainerOnErrorThreshold;
       this.getTimeoutMs = getTimeoutMs;
       this.valueSerializer = valueSerializer;
+      this.redisConnectionDeferred = shouldDeferRedisConnection();
 
       try {
         // Create Redis client with properly typed configuration
@@ -348,15 +352,17 @@ export default class RedisStringsHandler {
           }
         });
 
-        this.client
-          .connect()
-          .then(() => {
-            debug('green', 'Redis client connected.');
-          })
-          .catch((error) => {
-            console.error('Failed to connect Redis client:', error);
-            throw error;
-          });
+        if (!this.redisConnectionDeferred) {
+          this.client
+            .connect()
+            .then(() => {
+              debug('green', 'Redis client connected.');
+            })
+            .catch((error) => {
+              console.error('Failed to connect Redis client:', error);
+              throw error;
+            });
+        }
       } catch (error: unknown) {
         console.error('Failed to initialize Redis client');
         throw error;
@@ -472,10 +478,17 @@ export default class RedisStringsHandler {
     }
     this.clientReadyCalls = 0;
     if (!this.client.isReady) {
+      if (this.redisConnectionDeferred) {
+        return;
+      }
       throw new Error(
         'assertClientIsReady: Redis client is not ready yet or connection is lost.',
       );
     }
+  }
+
+  private isClientUnavailable(): boolean {
+    return this.redisConnectionDeferred || !this.client.isReady;
   }
 
   public async get(key: string, ctx: GetContext): Promise<CacheEntry | null> {
@@ -492,6 +505,9 @@ export default class RedisStringsHandler {
 
       debug('green', 'RedisStringsHandler.get() called with', key, ctx);
       await this.assertClientIsReady();
+      if (this.isClientUnavailable()) {
+        return null;
+      }
 
       const clientGet = this.redisGetDeduplication
         ? this.deduplicatedRedisGet(key)
@@ -704,6 +720,9 @@ export default class RedisStringsHandler {
       }
 
       await this.assertClientIsReady();
+      if (this.isClientUnavailable()) {
+        return;
+      }
 
       if (data?.kind === 'APP_PAGE' || data?.kind === 'APP_ROUTE') {
         const tags = data.headers['x-next-cache-tags']?.split(',');
@@ -739,21 +758,10 @@ export default class RedisStringsHandler {
         );
       }
 
-      // TODO: implement expiration based on cacheControl.expire argument, -> probably relevant for cacheLife and "use cache" etc.: https://nextjs.org/docs/app/api-reference/functions/cacheLife
-      // Constructing the expire time for the cache entry
-      const revalidate =
-        // For fetch requests in newest versions, the revalidate context property is never used, and instead the revalidate property of the passed-in data is used
-        (data?.kind === 'FETCH' && data.revalidate) ||
-        ctx.revalidate ||
-        ctx.cacheControl?.revalidate ||
-        // Legacy fallback: older Next.js versions attached `revalidate` directly
-        // to the data payload. FETCH is already handled above, so this only
-        // matters for those older, non-discriminated shapes.
-        (data as { revalidate?: number | false } | null)?.revalidate;
-      const expireAt =
-        revalidate && Number.isSafeInteger(revalidate) && revalidate > 0
-          ? this.estimateExpireAge(revalidate)
-          : this.estimateExpireAge(this.defaultStaleAge);
+      const expireAt = resolveCacheEntryTtlSeconds(ctx, data, {
+        estimateExpireAge: this.estimateExpireAge,
+        defaultStaleAge: this.defaultStaleAge,
+      });
 
       // Setting the cache entry in redis
       const setOperation: Promise<string | null> = redisErrorHandler(
@@ -762,7 +770,7 @@ export default class RedisStringsHandler {
           ' ' +
           key,
         this.client.set(this.keyPrefix + key, serializedCacheEntry, {
-          EX: expireAt,
+          ...(expireAt ? { EX: expireAt } : {}),
         }),
       );
 

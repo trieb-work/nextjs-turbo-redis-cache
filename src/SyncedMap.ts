@@ -1,6 +1,7 @@
 // SyncedMap.ts
 import { Client, redisErrorHandler } from './RedisStringsHandler';
 import { debugVerbose, debug } from './utils/debug';
+import { shouldDeferRedisConnection } from './utils/redisConnection';
 
 type CustomizedSync = {
   withoutRedisHashmap?: boolean;
@@ -67,6 +68,11 @@ export class SyncedMap<V> {
   }
 
   private async setup() {
+    if (shouldDeferRedisConnection()) {
+      this.setupLockResolve();
+      return;
+    }
+
     let setupPromises: Promise<void>[] = [];
     if (!this.customizedSync?.withoutRedisHashmap) {
       setupPromises.push(this.initialSync());

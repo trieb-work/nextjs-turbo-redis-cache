@@ -467,7 +467,38 @@ Install the package in your Next.js app:
 pnpm add @trieb.work/nextjs-turbo-redis-cache redis
 ```
 
-In your Next.js app, enable Cache Components and point `cacheHandlers.default` to a module that exports the handler instance:
+#### Hybrid setup (ISR + Cache Components + remote)
+
+For production self-hosting, wire up **both** Next.js cache handler APIs against the same Redis instance (aligned with the [official cache-handler-redis example](https://github.com/vercel/next.js/tree/canary/examples/cache-handler-redis)):
+
+```ts
+// next.config.ts
+import type { NextConfig } from 'next';
+
+const nextConfig: NextConfig = {
+  cacheComponents: true,
+  // ISR / incremental cache (pages, route handlers, images)
+  cacheHandler:
+    process.env.NODE_ENV === 'production'
+      ? require.resolve('./cache-handler.js')
+      : undefined,
+  // Cache Components (`'use cache'`, `'use cache: remote'`)
+  cacheHandlers: {
+    default: require.resolve('./cache-handler.js'),
+    remote: require.resolve('./cache-handler.js'),
+  },
+  // Redis is the single shared source of truth across instances
+  cacheMaxMemorySize: 0,
+};
+
+export default nextConfig;
+```
+
+The same `redisCacheHandler` export implements the Cache Components interface (`get`, `set`, `getExpiration`, `updateTags`, `refreshTags`) and can back both `cacheHandlers.default` and `cacheHandlers.remote`.
+
+#### Cache Components only
+
+If you only need Cache Components (no legacy `cacheHandler`), enable Cache Components and point `cacheHandlers.default` to a module that exports the handler instance:
 
 ```ts
 // next.config.ts
@@ -478,6 +509,7 @@ const nextConfig: NextConfig = {
   cacheHandlers: {
     default: require.resolve('./cache-handler.js'),
   },
+  cacheMaxMemorySize: 0,
 };
 
 export default nextConfig;
@@ -508,6 +540,19 @@ Optional:
 - `VERCEL_URL`: used as a key prefix for multi-tenant isolation (also useful in tests). If unset, a default prefix is used.
 - `REDIS_COMMAND_TIMEOUT_MS`: timeout (ms) for Redis commands used by the handler.
 
+### Official caching semantics (Vercel / Next.js self-hosting docs)
+
+This package follows the semantics documented in the [Next.js self-hosting guide](https://nextjs.org/docs/app/guides/self-hosting#configuring-caching) and the official `cache-handler-redis` example:
+
+| Topic                             | Behavior                                                                                                                                                                                                                                             |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **ISR Redis TTL**                 | Key TTL on `cacheControl.expire`, not `revalidate`. Past `revalidate` an entry is only stale (SWR); evicting at that boundary would defeat background refresh. Legacy callers that only pass `revalidate` still get `estimateExpireAge(revalidate)`. |
+| **Tag sources (ISR)**             | `APP_PAGE` / `APP_ROUTE` tags come from `data.headers['x-next-cache-tags']` plus `ctx.tags`. `FETCH` tags come from `ctx.tags`.                                                                                                                      |
+| **Buffer / Map serialization**    | `rscData` (`Buffer`) and `segmentData` (`Map`) require custom JSON encoding — use the built-in `jsonCacheValueSerializer` or wrap it. Plain `JSON.stringify` causes `segmentData.get is not a function` on RSC navigation.                           |
+| **`updateTags(tags, durations)`** | `durations.expire` defers tag revalidation (for `revalidateTag(tag, { expire })` / `cacheLife` profiles). Without `durations`, tags are revalidated immediately.                                                                                     |
+| **`getExpiration` pattern**       | Cache Components staleness is reported via `getExpiration()`; `get()` only checks hard `expire`.                                                                                                                                                     |
+| **Build without Redis**           | During `next build` (`NEXT_PHASE`), Redis connections are skipped so CI/build pipelines without Redis still succeed.                                                                                                                                 |
+
 ### Lazy initialization
 
 The `redisCacheHandler` export is **lazily initialized** — importing the package does **not** open a Redis connection. The connection is deferred until the first method call on the handler (when Next.js invokes it). This means:
@@ -536,6 +581,8 @@ Then open the Cache Lab pages:
 - `/cache-lab/tag-invalidation`
 - `/cache-lab/stale-while-revalidate`
 - `/cache-lab/runtime-data-suspense`
+- `/cache-lab/use-cache-remote`
+- `/cache-lab/revalidate-durations`
 
 To run the Playwright E2E tests against a running dev server:
 

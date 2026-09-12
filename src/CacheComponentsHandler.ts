@@ -9,6 +9,7 @@ import { SyncedMap } from './SyncedMap';
 import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
 import { debug } from './utils/debug';
 import { resolveKeyPrefix } from './utils/prefix';
+import { shouldDeferRedisConnection } from './utils/redisConnection';
 
 export interface CacheComponentsEntry {
   value: ReadableStream<Uint8Array>;
@@ -101,6 +102,11 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
   private deduplicatedRedisGet: (key: string) => Client['get'];
   private redisGetDeduplication: boolean;
   private inMemoryCachingTime: number;
+  private redisConnectionDeferred: boolean;
+  private deferredTagRevalidations = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
 
   constructor({
     redisUrl = process.env.REDIS_URL
@@ -134,6 +140,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
       this.getTimeoutMs = getTimeoutMs;
       this.redisGetDeduplication = redisGetDeduplication;
       this.inMemoryCachingTime = inMemoryCachingTime;
+      this.redisConnectionDeferred = shouldDeferRedisConnection();
 
       this.client = createClient({
         url: redisUrl,
@@ -180,21 +187,23 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         }
       });
 
-      this.client
-        .connect()
-        .then(() => {
-          debug('green', 'RedisCacheComponentsHandler client connected.');
-        })
-        .catch(() => {
-          this.client.connect().catch((error) => {
-            console.error(
-              'Failed to connect RedisCacheComponentsHandler client:',
-              error,
-            );
-            this.client.disconnect();
-            throw error;
+      if (!this.redisConnectionDeferred) {
+        this.client
+          .connect()
+          .then(() => {
+            debug('green', 'RedisCacheComponentsHandler client connected.');
+          })
+          .catch(() => {
+            this.client.connect().catch((error) => {
+              console.error(
+                'Failed to connect RedisCacheComponentsHandler client:',
+                error,
+              );
+              this.client.disconnect();
+              throw error;
+            });
           });
-        });
+      }
 
       const filterKeys = (key: string): boolean =>
         key !== REVALIDATED_TAGS_KEY && key !== SHARED_TAGS_KEY;
@@ -254,6 +263,14 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
   }
 
   private async assertClientIsReady(): Promise<void> {
+    if (this.redisConnectionDeferred) {
+      await Promise.all([
+        this.revalidatedTagsMap.waitUntilReady(),
+        this.sharedTagsMap.waitUntilReady(),
+      ]);
+      return;
+    }
+
     if (!this.client.isReady && !this.client.isOpen) {
       await this.client.connect().catch((error) => {
         console.error(
@@ -269,6 +286,10 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
     ]);
   }
 
+  private isClientUnavailable(): boolean {
+    return this.redisConnectionDeferred || !this.client.isReady;
+  }
+
   private async computeMaxRevalidation(tags: string[]): Promise<number> {
     let max = 0;
     for (const tag of tags) {
@@ -282,8 +303,12 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
 
   async get(
     cacheKey: string,
-    softTags: string[],
+    _softTags: string[],
   ): Promise<CacheComponentsEntry | undefined> {
+    // Soft-tag staleness is handled by Next.js via getExpiration(); see official
+    // cache-handler-redis example. Intentionally unused here.
+    void _softTags;
+
     // Construct the full Redis key
     // For cache components, Next.js provides the full key including environment prefix
     // We prepend our keyPrefix for multi-tenant isolation
@@ -291,6 +316,9 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
 
     try {
       await this.assertClientIsReady();
+      if (this.isClientUnavailable()) {
+        return undefined;
+      }
 
       const clientGet = this.redisGetDeduplication
         ? this.deduplicatedRedisGet(cacheKey)
@@ -328,17 +356,6 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         return undefined;
       }
 
-      const maxRevalidation = await this.computeMaxRevalidation([
-        ...(stored.tags || []),
-        ...(softTags || []),
-      ]);
-
-      if (maxRevalidation > 0 && maxRevalidation > stored.timestamp) {
-        await this.client.unlink(redisKey).catch(() => {});
-        await this.sharedTagsMap.delete(cacheKey).catch(() => {});
-        return undefined;
-      }
-
       const valueBuffer =
         typeof stored.value === 'string'
           ? new Uint8Array(Buffer.from(stored.value, 'base64'))
@@ -364,6 +381,9 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
   ): Promise<void> {
     try {
       await this.assertClientIsReady();
+      if (this.isClientUnavailable()) {
+        return;
+      }
 
       const entry = await pendingEntry;
 
@@ -463,17 +483,46 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
 
   async updateTags(
     tags: string[],
-    _durations?: { expire?: number },
+    durations?: { expire?: number },
   ): Promise<void> {
     try {
-      // Mark optional argument as used to satisfy lint rules while keeping the signature
-      void _durations;
       await this.assertClientIsReady();
-      const now = Date.now();
+      if (this.isClientUnavailable()) {
+        return;
+      }
 
       const tagsSet = new Set(tags || []);
+      const deferSeconds = durations?.expire;
+      const isDeferred =
+        deferSeconds !== undefined &&
+        Number.isFinite(deferSeconds) &&
+        deferSeconds > 0;
+
+      if (isDeferred) {
+        for (const tag of tagsSet) {
+          const existing = this.deferredTagRevalidations.get(tag);
+          if (existing) {
+            clearTimeout(existing);
+          }
+
+          const timeout = setTimeout(() => {
+            this.deferredTagRevalidations.delete(tag);
+            void this.revalidatedTagsMap.set(tag, Date.now());
+          }, deferSeconds * 1000);
+
+          this.deferredTagRevalidations.set(tag, timeout);
+        }
+        return;
+      }
+
+      const now = Date.now();
 
       for (const tag of tagsSet) {
+        const existing = this.deferredTagRevalidations.get(tag);
+        if (existing) {
+          clearTimeout(existing);
+          this.deferredTagRevalidations.delete(tag);
+        }
         await this.revalidatedTagsMap.set(tag, now);
       }
 
