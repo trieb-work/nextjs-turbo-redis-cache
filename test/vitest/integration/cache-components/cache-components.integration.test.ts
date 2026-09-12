@@ -121,9 +121,9 @@ describe('Next.js 16 Cache Components Integration', () => {
     });
 
     it('should store cache entry in Redis', async () => {
-      // cached-with-tag is a dynamic `use cache` route, so the handler
-      // must write through to Redis (static prerendered routes may not).
-      await fetch(`${BASE_URL}/api/cached-with-tag`);
+      // expire-matrix is dynamic (`ƒ`); static prerendered `use cache` routes may
+      // not write through to Redis at runtime on some Next.js versions.
+      await fetch(`${BASE_URL}/api/expire-matrix?id=redis-smoke`);
 
       const keys = await waitForRedisKeys(`${keyPrefix}*`);
       expect(keys.length).toBeGreaterThan(0);
