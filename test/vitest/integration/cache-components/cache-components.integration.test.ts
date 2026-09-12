@@ -250,7 +250,11 @@ describe('Next.js 16 Cache Components Integration', () => {
       for (let elapsed = 0; elapsed < 5_000; elapsed += 50) {
         const raw = await redisClient.hGet(hashKey, tag);
         if (raw) {
-          return JSON.parse(raw) as { stale?: number; expired?: number };
+          const parsed: unknown = JSON.parse(raw);
+          if (typeof parsed === 'number') {
+            return { expired: parsed } as { stale?: number; expired?: number };
+          }
+          return parsed as { stale?: number; expired?: number };
         }
         await delay(50);
       }
@@ -307,8 +311,8 @@ describe('Next.js 16 Cache Components Integration', () => {
       await revalidateMatrix(id, { expire: 0 });
       const manifest = await readTagManifest(`expire-matrix-${id}`);
 
-      expectApproxMs(manifest.stale, startedAt);
       expectApproxMs(manifest.expired, startedAt);
+      expect(manifest.stale).toBeUndefined();
 
       const after = await getMatrix(id);
       expect(after.counter).toBeGreaterThan(before.counter);

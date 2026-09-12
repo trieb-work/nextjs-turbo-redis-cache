@@ -419,7 +419,7 @@ Returning `undefined` when both `cacheControl.expire` and `revalidate` are absen
 
 **Rolling upgrades and `{ stale, expired }` objects**
 
-Older package versions stored a number and compared it numerically. Immediate hard-expires (`expired <= now`) are still persisted as that number so mixed fleets invalidate. SWR windows stay `{ stale, expired }` objects; instances that cannot parse them keep serving until TTL. Prefer a coordinated rollout (or a unique `keyPrefix`) when using `revalidateTag(tag, profile)` SWR.
+Older package versions stored a number and compared it numerically. Immediate hard-expires (`expired <= now` and no newer `stale`) are still persisted as that number so mixed fleets invalidate. A later stale-only update (`updateTags(tags, {})`) that outruns a past `expired` stays an object. SWR windows stay `{ stale, expired }` objects; instances that cannot parse them keep serving until TTL. Prefer a coordinated rollout (or a unique `keyPrefix`) when using `revalidateTag(tag, profile)` SWR.
 
 ---
 

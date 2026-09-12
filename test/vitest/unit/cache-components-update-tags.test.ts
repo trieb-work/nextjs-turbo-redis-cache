@@ -296,4 +296,40 @@ describe('RedisCacheComponentsHandler.updateTags vs Next.js default handler', ()
     expect(served).toBeDefined();
     expect(hoisted.store.get(redisKey)).toBeTruthy();
   });
+
+  it('keeps a later stale-only update after a hard expire and replacement', async () => {
+    const handler = await createHandler('stale-after-hard:');
+    const createdAt = Date.now();
+
+    await handler.set(
+      'page',
+      Promise.resolve(cachedEntry(['posts'], createdAt)),
+    );
+    await vi.advanceTimersByTimeAsync(1);
+    const hardExpiredAt = Date.now();
+    await handler.updateTags(['posts']);
+    expect((handler as any).revalidatedTagsMap.get('posts')).toBe(
+      hardExpiredAt,
+    );
+
+    await vi.advanceTimersByTimeAsync(1);
+    const replacementAt = Date.now();
+    await handler.set(
+      'page',
+      Promise.resolve(cachedEntry(['posts'], replacementAt)),
+    );
+
+    await vi.advanceTimersByTimeAsync(1);
+    const staleAt = Date.now();
+    await handler.updateTags(['posts'], {});
+
+    expect((handler as any).revalidatedTagsMap.get('posts')).toEqual({
+      stale: staleAt,
+      expired: hardExpiredAt,
+    });
+
+    const served = await handler.get('page', []);
+    expect(served).toBeDefined();
+    expect(served?.revalidate).toBe(-1);
+  });
 });

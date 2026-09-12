@@ -94,7 +94,11 @@ export function persistableTagManifest(
   entry: TagManifestEntry,
   now: number,
 ): TagManifestEntry | number {
-  if (typeof entry.expired === 'number' && entry.expired <= now) {
+  if (
+    typeof entry.expired === 'number' &&
+    entry.expired <= now &&
+    (entry.stale === undefined || entry.stale <= entry.expired)
+  ) {
     return entry.expired;
   }
   return entry;

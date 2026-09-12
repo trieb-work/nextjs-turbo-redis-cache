@@ -166,4 +166,13 @@ describe('persistableTagManifest', () => {
     const swr = { stale: now, expired: now + 2_000 };
     expect(persistableTagManifest(swr, now)).toEqual(swr);
   });
+
+  it('keeps the object when a newer stale-only update outruns a past expired', () => {
+    const expired = now - 5_000;
+    const stale = now;
+    expect(persistableTagManifest({ stale, expired }, now)).toEqual({
+      stale,
+      expired,
+    });
+  });
 });
