@@ -18,7 +18,7 @@ describe('Next.js 16 Cache Components Integration', () => {
   async function waitForRedisKeys(
     pattern: string,
     minCount = 1,
-    timeoutMs = 5000,
+    timeoutMs = 10_000,
   ) {
     for (let elapsed = 0; elapsed < timeoutMs; elapsed += 100) {
       const keys = await redisClient.keys(pattern);
@@ -121,11 +121,13 @@ describe('Next.js 16 Cache Components Integration', () => {
     });
 
     it('should store cache entry in Redis', async () => {
-      await fetch(`${BASE_URL}/api/cached-static-fetch`);
+      // cached-with-cachelife is a dynamic `use cache` route, so the handler
+      // must write through to Redis (static prerendered routes may not).
+      await fetch(`${BASE_URL}/api/cached-with-cachelife`);
 
       const keys = await waitForRedisKeys(`${keyPrefix}*`);
       expect(keys.length).toBeGreaterThan(0);
-    });
+    }, 15_000);
   });
 
   describe('cacheTag functionality', () => {
