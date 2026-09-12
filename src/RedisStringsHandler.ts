@@ -847,6 +847,9 @@ export default class RedisStringsHandler {
       );
       const tags = new Set([tagOrTags || []].flat());
       await this.assertClientIsReady();
+      if (this.isClientUnavailable()) {
+        return;
+      }
 
       // find all keys that are related to this tag
       const keysToDelete: Set<string> = new Set();

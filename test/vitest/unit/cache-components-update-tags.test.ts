@@ -40,6 +40,21 @@ vi.mock('redis', () => {
         }
         return list.length;
       }),
+      eval: vi.fn(
+        async (
+          _script: string,
+          options: { keys: string[]; arguments: string[] },
+        ) => {
+          const key = options.keys[0];
+          const expected = options.arguments[0];
+          if (hoisted.store.get(key) === expected) {
+            hoisted.unlinkedKeys.push(key);
+            hoisted.store.delete(key);
+            return 1;
+          }
+          return 0;
+        },
+      ),
       set: vi.fn(async (key: string, value: string) => {
         hoisted.store.set(key, value);
         return 'OK';

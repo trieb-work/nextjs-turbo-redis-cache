@@ -10,6 +10,7 @@ import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
 import { debug } from './utils/debug';
 import { resolveKeyPrefix } from './utils/prefix';
 import { shouldDeferRedisConnection } from './utils/redisConnection';
+import { compareAndUnlink } from './utils/compareAndUnlink';
 import {
   applyTagUpdate,
   areTagsExpired,
@@ -361,12 +362,12 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
             continue;
           }
 
-          const current = await this.redisGet(
-            commandOptions({ signal: AbortSignal.timeout(this.getTimeoutMs) }),
+          const dropped = await compareAndUnlink(
+            this.client,
             redisKey,
+            serialized,
           );
-          if (current === serialized) {
-            await this.client.unlink(redisKey).catch(() => {});
+          if (dropped) {
             await this.sharedTagsMap.delete(cacheKey).catch(() => {});
           }
           return undefined;
