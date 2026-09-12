@@ -294,8 +294,8 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
     return this.redisConnectionDeferred || !this.client.isReady;
   }
 
-  private tagManifestFor(tag: string): TagManifestEntry {
-    return normalizeTagManifest(this.revalidatedTagsMap.get(tag));
+  private tagManifestFor(tag: string, now = Date.now()): TagManifestEntry {
+    return normalizeTagManifest(this.revalidatedTagsMap.get(tag), now);
   }
 
   async get(
@@ -357,7 +357,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
 
       if (
         areTagsExpired(tags, stored.timestamp, now, (tag) =>
-          this.tagManifestFor(tag),
+          this.tagManifestFor(tag, now),
         )
       ) {
         await this.client.unlink(redisKey).catch(() => {});
@@ -376,7 +376,9 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
       };
 
       if (
-        areTagsStale(tags, stored.timestamp, (tag) => this.tagManifestFor(tag))
+        areTagsStale(tags, stored.timestamp, (tag) =>
+          this.tagManifestFor(tag, now),
+        )
       ) {
         // Next.js DefaultCacheHandler signals SWR by returning revalidate: -1.
         entry.revalidate = -1;

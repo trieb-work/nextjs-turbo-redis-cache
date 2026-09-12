@@ -12,9 +12,26 @@ export type TagManifestEntry = {
   expired?: number;
 };
 
-export function normalizeTagManifest(stored: unknown): TagManifestEntry {
+/**
+ * Read a tag-manifest field from Redis.
+ *
+ * Next.js 16.0–16.3 never persists plain numbers here — `updateTags` always
+ * writes `{ stale, expired }` via `applyTagUpdate()`. A plain number can only
+ * appear from older releases of this package that stored `Date.now()` directly
+ * (before the `{ stale, expired }` manifest). ISR uses a separate Redis hash
+ * (`__revalidated_tags__`) and is unaffected.
+ *
+ * A future-looking plain number is not produced by Next.js and is not the same
+ * as intentional SWR (`{ stale: now, expired: now + N }`). It can only happen
+ * when another instance wrote the timestamp with a faster clock (NTP skew).
+ * Clamp to `now` on read so the revalidation is not delayed on slower instances.
+ */
+export function normalizeTagManifest(
+  stored: unknown,
+  now: number = Date.now(),
+): TagManifestEntry {
   if (typeof stored === 'number' && Number.isFinite(stored)) {
-    return { expired: stored };
+    return { expired: Math.min(stored, now) };
   }
 
   if (stored && typeof stored === 'object') {

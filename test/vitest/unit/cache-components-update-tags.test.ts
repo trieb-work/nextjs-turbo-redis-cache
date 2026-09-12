@@ -183,6 +183,37 @@ describe('RedisCacheComponentsHandler.updateTags vs Next.js default handler', ()
     });
   });
 
+  it('legacy plain number in Redis hard-expires once the timestamp is in the past', async () => {
+    const handler = await createHandler('legacy-past:');
+    const createdAt = Date.now() - 10_000;
+
+    await handler.set(
+      'page',
+      Promise.resolve(cachedEntry(['posts'], createdAt)),
+    );
+
+    // Older package versions stored Date.now() directly (not Next.js).
+    (handler as any).revalidatedTagsMap.set('posts', Date.now() - 5_000);
+
+    expect(await handler.get('page', [])).toBeUndefined();
+  });
+
+  it('legacy plain number ahead of local clock is clamped and hard-expires immediately', async () => {
+    vi.setSystemTime(new Date(1_000_000));
+    const handler = await createHandler('legacy-skew:');
+    const createdAt = 900_000;
+
+    await handler.set(
+      'page',
+      Promise.resolve(cachedEntry(['posts'], createdAt)),
+    );
+
+    // Another instance with a faster clock wrote this value to Redis.
+    (handler as any).revalidatedTagsMap.set('posts', 1_005_000);
+
+    expect(await handler.get('page', [])).toBeUndefined();
+  });
+
   it.each([
     ['seconds', 60],
     ['minutes', 60 * 60],

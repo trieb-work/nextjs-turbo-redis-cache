@@ -23,7 +23,9 @@ export type ResolveCacheEntryTtlOptions = {
  * - When no finite `expire` is provided, fall back to `estimateExpireAge(revalidate)`
  *   for legacy Pages Router / pre-cacheLife callers that only pass `revalidate`.
  * - When neither `expire` nor `revalidate` is available, return `undefined` (no TTL;
- *   rely on tag-based invalidation).
+ *   rely on tag-based invalidation). This is intentional — not a missing
+ *   `defaultStaleAge` fallback. `revalidate: false` is a separate branch above
+ *   and is covered by unit + Pages Router integration tests (`/static-forever`).
  */
 export function resolveCacheEntryTtlSeconds(
   ctx: ResolveCacheEntryTtlContext,

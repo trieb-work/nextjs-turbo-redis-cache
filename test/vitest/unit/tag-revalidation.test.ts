@@ -5,6 +5,7 @@ import {
   areTagsStale,
   maxExpiredTimestamp,
   normalizeTagManifest,
+  type TagManifestEntry,
 } from '../../../src/utils/tagRevalidation';
 
 // Expire seconds from next/dist/server/config-shared.js cacheLife presets
@@ -116,5 +117,38 @@ describe('normalizeTagManifest', () => {
 
   it('maps a legacy numeric timestamp to expired', () => {
     expect(normalizeTagManifest(1_234)).toEqual({ expired: 1_234 });
+  });
+});
+
+describe('legacy plain numbers (rolling upgrade, not Next.js)', () => {
+  const lookup = (entry: TagManifestEntry | undefined) => (tag: string) =>
+    tag === 't' ? entry : undefined;
+
+  it('past plain number hard-expires entries older than the revalidation', () => {
+    const revalidatedAt = 500;
+    const manifest = normalizeTagManifest(revalidatedAt);
+
+    expect(areTagsExpired(['t'], 100, 1_000, lookup(manifest))).toBe(true);
+    expect(areTagsStale(['t'], 100, lookup(manifest))).toBe(false);
+  });
+
+  it('clamps future plain numbers to now (cross-instance clock skew)', () => {
+    // Instance A (clock ahead) wrote Date.now() = 1_005_000 into Redis.
+    // This reader's clock is still at 1_000_000 — clamp treats it as now.
+    const manifest = normalizeTagManifest(1_005_000, 1_000_000);
+
+    expect(manifest).toEqual({ expired: 1_000_000 });
+    expect(areTagsExpired(['t'], 900_000, 1_000_000, lookup(manifest))).toBe(
+      true,
+    );
+  });
+
+  it('intentional SWR uses stale + future expired, not a plain number', () => {
+    const now = 1_000_000;
+    const swr = applyTagUpdate({}, { expire: 2 }, now);
+
+    expect(swr).toEqual({ stale: now, expired: now + 2_000 });
+    expect(areTagsStale(['t'], 900_000, lookup(swr))).toBe(true);
+    expect(areTagsExpired(['t'], 900_000, now + 500, lookup(swr))).toBe(false);
   });
 });

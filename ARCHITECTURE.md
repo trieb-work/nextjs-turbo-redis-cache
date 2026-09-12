@@ -399,6 +399,16 @@ flowchart TD
 
 5. **Preset expire seconds** (from Next.js `config-shared.js`): `seconds` 60, `minutes` 3600, `hours` 86400, `days` 604800, `weeks` 2592000, `max` 31536000, `default` 4294967294 (`0xfffffffe`).
 
+### Reviewer notes (automated review false positives)
+
+**Legacy plain numbers in `__cacheComponents_revalidated_tags__`**
+
+Next.js always calls `updateTags(tags, durations?)` with `{ stale, expired }` semantics. It does not write plain numbers into the cache handler. Plain numbers in Redis are a rolling-upgrade artifact from older package versions that stored `Date.now()` directly. A _future-looking_ plain number is not an SWR `expired` window (those always include `stale`); it only arises from cross-instance clock skew. `normalizeTagManifest()` clamps legacy plain numbers to `Math.min(stored, now)` on read so slower instances do not delay invalidation.
+
+**`resolveCacheEntryTtlSeconds()` returning `undefined`**
+
+Returning `undefined` when both `cacheControl.expire` and `revalidate` are absent is deliberate: Redis keys are written without `EX` and invalidation relies on tags. `revalidate: false` is handled separately and maps to `defaultStaleAge` (see `cache-ttl.test.ts` and Pages Router `/static-forever` integration). Next.js supplies `revalidate: false` for fully static pages in practice.
+
 ---
 
 ## RedisStringsHandler vs CacheComponentsHandler
