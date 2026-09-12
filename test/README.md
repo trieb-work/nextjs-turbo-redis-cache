@@ -121,10 +121,10 @@ Browser-based tests that validate Cache Components behavior from the user's pers
 
 The Vitest cache-components integration tests verify the server-side plumbing (Redis state, HTTP responses). Playwright closes the gap by testing the full user-facing flow.
 
-| File                 | What it tests                                                                                                                                                                        |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `cache-lab.spec.ts`  | `use cache` / `use cache: remote` stability, tag invalidation (`updateTag`/`revalidateTag`), `revalidateTag` durations (deferred SWR), runtime cookie-based cache keys, SWR behavior |
-| `update-tag.spec.ts` | `updateTag` via Server Actions (button click → action → UI update)                                                                                                                   |
+| File                 | What it tests                                                                                                                                                                            |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cache-lab.spec.ts`  | `use cache` / `use cache: remote` stability, tag invalidation (`updateTag`/`revalidateTag`), `revalidateTag` durations (SWR stale window), runtime cookie-based cache keys, SWR behavior |
+| `update-tag.spec.ts` | `updateTag` via Server Actions (button click → action → UI update)                                                                                                                       |
 
 ```bash
 pnpm test:e2e

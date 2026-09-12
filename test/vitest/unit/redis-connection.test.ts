@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { shouldDeferRedisConnection } from '../../../src/utils/redisConnection';
+import {
+  PHASE_PRODUCTION_BUILD,
+  shouldDeferRedisConnection,
+} from '../../../src/utils/redisConnection';
 
 describe('shouldDeferRedisConnection', () => {
   const originalPhase = process.env.NEXT_PHASE;
@@ -20,14 +23,17 @@ describe('shouldDeferRedisConnection', () => {
     expect(shouldDeferRedisConnection()).toBe(false);
   });
 
-  it('returns true during next build when next/constants is available', async () => {
-    try {
-      const { PHASE_PRODUCTION_BUILD } = await import('next/constants');
-      process.env.NEXT_PHASE = PHASE_PRODUCTION_BUILD;
-      expect(shouldDeferRedisConnection()).toBe(true);
-    } catch {
-      // next may not be installed in all test environments
-      expect(true).toBe(true);
-    }
+  it('returns true when NEXT_PHASE is phase-production-build', () => {
+    process.env.NEXT_PHASE = 'phase-production-build';
+    expect(shouldDeferRedisConnection()).toBe(true);
+  });
+
+  it('returns false for other Next.js phases', () => {
+    process.env.NEXT_PHASE = 'phase-production-server';
+    expect(shouldDeferRedisConnection()).toBe(false);
+  });
+
+  it('uses the Next.js PHASE_PRODUCTION_BUILD string', () => {
+    expect(PHASE_PRODUCTION_BUILD).toBe('phase-production-build');
   });
 });

@@ -10,6 +10,13 @@ import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
 import { debug } from './utils/debug';
 import { resolveKeyPrefix } from './utils/prefix';
 import { shouldDeferRedisConnection } from './utils/redisConnection';
+import {
+  applyImmediateRevalidation,
+  effectiveRevalidationTimestamp,
+  isHardTagExpiration,
+  normalizeTagRevalidation,
+  type TagRevalidationState,
+} from './utils/tagRevalidation';
 
 export interface CacheComponentsEntry {
   value: ReadableStream<Uint8Array>;
@@ -87,7 +94,7 @@ function bufferToReadableStream(
 
 class RedisCacheComponentsHandler implements CacheComponentsHandler {
   private client: Client;
-  private revalidatedTagsMap: SyncedMap<number>;
+  private revalidatedTagsMap: SyncedMap<TagRevalidationState | number>;
   private sharedTagsMap: SyncedMap<string[]>;
   private inMemoryDeduplicationCache: SyncedMap<
     Promise<ReturnType<Client['get']>>
@@ -103,10 +110,6 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
   private redisGetDeduplication: boolean;
   private inMemoryCachingTime: number;
   private redisConnectionDeferred: boolean;
-  private deferredTagRevalidations = new Map<
-    string,
-    ReturnType<typeof setTimeout>
-  >();
 
   constructor({
     redisUrl = process.env.REDIS_URL
@@ -208,7 +211,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
       const filterKeys = (key: string): boolean =>
         key !== REVALIDATED_TAGS_KEY && key !== SHARED_TAGS_KEY;
 
-      this.revalidatedTagsMap = new SyncedMap<number>({
+      this.revalidatedTagsMap = new SyncedMap<TagRevalidationState | number>({
         client: this.client,
         keyPrefix: this.keyPrefix,
         redisKey: REVALIDATED_TAGS_KEY,
@@ -291,10 +294,14 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
   }
 
   private async computeMaxRevalidation(tags: string[]): Promise<number> {
+    const now = Date.now();
     let max = 0;
     for (const tag of tags) {
-      const ts = this.revalidatedTagsMap.get(tag);
-      if (ts && ts > max) {
+      const ts = effectiveRevalidationTimestamp(
+        normalizeTagRevalidation(this.revalidatedTagsMap.get(tag), now),
+        now,
+      );
+      if (ts > max) {
         max = ts;
       }
     }
@@ -481,20 +488,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
     }
   }
 
-  private async applyImmediateTagInvalidation(
-    tagsSet: Set<string>,
-  ): Promise<void> {
-    const now = Date.now();
-
-    for (const tag of tagsSet) {
-      const existing = this.deferredTagRevalidations.get(tag);
-      if (existing) {
-        clearTimeout(existing);
-        this.deferredTagRevalidations.delete(tag);
-      }
-      await this.revalidatedTagsMap.set(tag, now);
-    }
-
+  private async unlinkTaggedCacheEntries(tagsSet: Set<string>): Promise<void> {
     const keysToDelete: Set<string> = new Set();
 
     for (const [key, storedTags] of this.sharedTagsMap.entries()) {
@@ -535,30 +529,17 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
       }
 
       const tagsSet = new Set(tags || []);
-      const deferSeconds = durations?.expire;
-      const isDeferred =
-        deferSeconds !== undefined &&
-        Number.isFinite(deferSeconds) &&
-        deferSeconds > 0;
-
-      if (isDeferred) {
-        for (const tag of tagsSet) {
-          const existing = this.deferredTagRevalidations.get(tag);
-          if (existing) {
-            clearTimeout(existing);
-          }
-
-          const timeout = setTimeout(() => {
-            this.deferredTagRevalidations.delete(tag);
-            void this.applyImmediateTagInvalidation(new Set([tag]));
-          }, deferSeconds * 1000);
-
-          this.deferredTagRevalidations.set(tag, timeout);
-        }
-        return;
+      const now = Date.now();
+      for (const tag of tagsSet) {
+        await this.revalidatedTagsMap.set(tag, applyImmediateRevalidation(now));
       }
 
-      await this.applyImmediateTagInvalidation(tagsSet);
+      // expire > 0 (revalidateTag(tag, 'max') / { expire: N }): SWR — timestamp
+      // is already in Redis, keep entries so get() can serve stale. expire 0 /
+      // omitted: hard miss (updateTag / webhook).
+      if (isHardTagExpiration(durations?.expire)) {
+        await this.unlinkTaggedCacheEntries(tagsSet);
+      }
     } catch (error) {
       console.error(
         'RedisCacheComponentsHandler.updateTags() Error occurred while updating tags. The original error was:',

@@ -165,8 +165,6 @@ test.describe('Cache Lab (Cache Components)', () => {
     const beforeComputedAt = await computedAt.textContent();
     const beforeValue = await value.textContent();
 
-    await page.waitForTimeout(3000);
-
     await page
       .getByRole('button', {
         name: "revalidateTag('cache-lab:durations', { expire: 2 })",
@@ -179,19 +177,15 @@ test.describe('Cache Lab (Cache Components)', () => {
     await expect(computedAt).toBeVisible();
     const reloadDuration = Date.now() - reloadStart;
 
-    const afterReloadComputedAt = await computedAt.textContent();
-    const afterReloadValue = await value.textContent();
-
-    // Deferred invalidation + SWR: reload should be fast and may still show stale values.
+    // SWR: first reload must still serve the previous values and stay fast.
+    // Hard UNLINK would miss and block on the ~2.5s cache fill.
     expect(reloadDuration).toBeLessThan(2000);
-    if (
-      afterReloadComputedAt === beforeComputedAt &&
-      afterReloadValue === beforeValue
-    ) {
-      await page.waitForTimeout(5000);
-      await page.reload();
-      await expect(computedAt).toBeVisible();
-    }
+    expect(await computedAt.textContent()).toBe(beforeComputedAt);
+    expect(await value.textContent()).toBe(beforeValue);
+
+    await page.waitForTimeout(5000);
+    await page.reload();
+    await expect(computedAt).toBeVisible();
 
     expect(await computedAt.textContent()).not.toBe(beforeComputedAt);
     expect(await value.textContent()).not.toBe(beforeValue);

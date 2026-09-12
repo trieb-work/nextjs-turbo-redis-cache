@@ -2,9 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const hoisted = vi.hoisted(() => {
   const store = new Map<string, string>();
-  const sharedTags = new Map<string, string[]>();
-  const revalidatedTags = new Map<string, number>();
-  return { store, sharedTags, revalidatedTags };
+  const unlinkedKeys: string[] = [];
+  return { store, unlinkedKeys };
 });
 
 vi.mock('redis', () => {
@@ -33,7 +32,14 @@ vi.mock('redis', () => {
       hSet: vi.fn(async () => 1),
       hDel: vi.fn(async () => 1),
       publish: vi.fn(async () => 1),
-      unlink: vi.fn(async () => 1),
+      unlink: vi.fn(async (keys: string | string[]) => {
+        const list = Array.isArray(keys) ? keys : [keys];
+        for (const key of list) {
+          hoisted.unlinkedKeys.push(key);
+          hoisted.store.delete(key);
+        }
+        return list.length;
+      }),
       set: vi.fn(async (key: string, value: string) => {
         hoisted.store.set(key, value);
         return 'OK';
@@ -48,12 +54,27 @@ vi.mock('redis', () => {
   };
 });
 
+function cachedEntry(tags: string[], timestamp: number) {
+  return {
+    value: new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('cached'));
+        controller.close();
+      },
+    }),
+    tags,
+    stale: 1,
+    timestamp,
+    expire: 3600,
+    revalidate: 1,
+  };
+}
+
 describe('RedisCacheComponentsHandler.updateTags durations', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     hoisted.store.clear();
-    hoisted.sharedTags.clear();
-    hoisted.revalidatedTags.clear();
+    hoisted.unlinkedKeys.length = 0;
     vi.resetModules();
   });
 
@@ -61,52 +82,102 @@ describe('RedisCacheComponentsHandler.updateTags durations', () => {
     vi.useRealTimers();
   });
 
-  it('defers tag revalidation when durations.expire is provided', async () => {
+  async function createHandler(keyPrefix: string) {
     const { getRedisCacheComponentsHandler } = await import(
       '../../../src/CacheComponentsHandler'
     );
 
-    const handler = getRedisCacheComponentsHandler({
-      keyPrefix: 'durations-test:',
+    return getRedisCacheComponentsHandler({
+      keyPrefix,
       redisGetDeduplication: false,
     });
+  }
 
-    const revalidatedTagsMap = (handler as any).revalidatedTagsMap;
-    const originalSet = revalidatedTagsMap.set.bind(revalidatedTagsMap);
-    revalidatedTagsMap.set = vi.fn(async (tag: string, value: number) => {
-      hoisted.revalidatedTags.set(tag, value);
-      return originalSet(tag, value);
-    });
+  it('marks tags stale immediately for SWR expire without unlinking', async () => {
+    const handler = await createHandler('durations-test:');
+    const now = Date.now();
 
+    await handler.set(
+      'page',
+      Promise.resolve(cachedEntry(['cache-lab:swr'], now)),
+    );
+    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout');
     await handler.updateTags(['cache-lab:swr'], { expire: 2 });
 
-    expect(revalidatedTagsMap.set).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(1999);
-    expect(revalidatedTagsMap.set).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(1);
-    expect(revalidatedTagsMap.set).toHaveBeenCalledWith(
-      'cache-lab:swr',
-      expect.any(Number),
+    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 2000)).toBe(
+      false,
     );
+    timeoutSpy.mockRestore();
+
+    expect(await handler.getExpiration(['cache-lab:swr'])).toBe(now);
+    expect(hoisted.unlinkedKeys).toEqual([]);
+    expect(await handler.get('page', [])).toBeDefined();
   });
 
-  it('immediately revalidates tags when durations is omitted', async () => {
-    const { getRedisCacheComponentsHandler } = await import(
-      '../../../src/CacheComponentsHandler'
+  it('marks tags stale immediately for cacheLife max-style expire (~1y)', async () => {
+    const handler = await createHandler('max-profile:');
+    const now = Date.now();
+    const oneYear = 60 * 60 * 24 * 365;
+
+    await handler.set('page', Promise.resolve(cachedEntry(['posts'], now)));
+    await handler.updateTags(['posts'], { expire: oneYear });
+
+    expect(await handler.getExpiration(['posts'])).toBe(now);
+    expect(hoisted.unlinkedKeys).toEqual([]);
+    expect(await handler.get('page', [])).toBeDefined();
+  });
+
+  it('survives a simulated restart because the timestamp is already in the map', async () => {
+    const handler = await createHandler('restart:');
+    const startedAt = Date.now();
+
+    await handler.updateTags(['cache-lab:swr'], { expire: 2 });
+    const stored = (handler as any).revalidatedTagsMap.get('cache-lab:swr');
+
+    const { effectiveRevalidationTimestamp, normalizeTagRevalidation } =
+      await import('../../../src/utils/tagRevalidation');
+
+    expect(
+      effectiveRevalidationTimestamp(
+        normalizeTagRevalidation(stored, startedAt),
+        startedAt,
+      ),
+    ).toBe(startedAt);
+    expect(
+      effectiveRevalidationTimestamp(
+        normalizeTagRevalidation(stored, startedAt + 2_000),
+        startedAt + 2_000,
+      ),
+    ).toBe(startedAt);
+  });
+
+  it('hard-expires when durations is omitted', async () => {
+    const handler = await createHandler('immediate-test:');
+    const now = Date.now();
+
+    await handler.set(
+      'page',
+      Promise.resolve(cachedEntry(['cache-lab:tag'], now)),
     );
-
-    const handler = getRedisCacheComponentsHandler({
-      keyPrefix: 'immediate-test:',
-      redisGetDeduplication: false,
-    });
-
-    const revalidatedTagsMap = (handler as any).revalidatedTagsMap;
-    const setSpy = vi.spyOn(revalidatedTagsMap, 'set');
-
     await handler.updateTags(['cache-lab:tag']);
 
-    expect(setSpy).toHaveBeenCalledWith('cache-lab:tag', expect.any(Number));
+    expect(await handler.getExpiration(['cache-lab:tag'])).toBe(now);
+    expect(hoisted.unlinkedKeys).toContain('immediate-test:page');
+    expect(await handler.get('page', [])).toBeUndefined();
+  });
+
+  it('hard-expires when expire is 0', async () => {
+    const handler = await createHandler('expire-zero:');
+    const now = Date.now();
+
+    await handler.set(
+      'page',
+      Promise.resolve(cachedEntry(['cache-lab:tag'], now)),
+    );
+    await handler.updateTags(['cache-lab:tag'], { expire: 0 });
+
+    expect(await handler.getExpiration(['cache-lab:tag'])).toBe(now);
+    expect(hoisted.unlinkedKeys).toContain('expire-zero:page');
+    expect(await handler.get('page', [])).toBeUndefined();
   });
 });

@@ -9,7 +9,7 @@ function sleep(ms: number): Promise<void> {
 async function getSlowTaggedValue() {
   'use cache';
 
-  cacheLife({ stale: 2, revalidate: 8, expire: 60 });
+  cacheLife({ stale: 60, revalidate: 120, expire: 300 });
   cacheTag('cache-lab:durations');
 
   await sleep(2500);
@@ -62,12 +62,12 @@ export default function RevalidateDurationsPage() {
 
       <header className="mb-6">
         <h1 className="text-2xl font-semibold">
-          revalidateTag durations (deferred invalidation)
+          revalidateTag durations (SWR stale window)
         </h1>
         <p className="mt-2 text-sm text-slate-600">
           Calls <code>revalidateTag(tag, {'{ expire: 2 }'})</code>. The handler
-          should defer tag revalidation so stale content can still be served
-          briefly (SWR) before refresh completes.
+          should mark the tag stale immediately while keeping the Redis entry so
+          the next request can serve stale content (SWR) during refresh.
         </p>
       </header>
 
@@ -91,14 +91,13 @@ export default function RevalidateDurationsPage() {
       </form>
 
       <div className="mt-6 rounded-lg border bg-slate-50 p-5 text-sm text-slate-700">
-        <p className="font-medium">How to observe deferred invalidation</p>
+        <p className="font-medium">How to observe SWR invalidation</p>
         <ol className="mt-2 list-decimal space-y-1 pl-5">
           <li>Load once (expect ~2.5s).</li>
-          <li>Wait 3s so the entry becomes stale.</li>
           <li>Click the button, then reload immediately.</li>
           <li>
-            With deferred durations, the reload should still show the old values
-            (fast). After ~2s + refresh, values should change.
+            The reload should still show the old values (fast SWR). After
+            background refresh (~2.5s), values should change.
           </li>
         </ol>
       </div>
