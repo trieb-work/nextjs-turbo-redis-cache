@@ -5,6 +5,7 @@ import {
   areTagsStale,
   maxExpiredTimestamp,
   normalizeTagManifest,
+  persistableTagManifest,
   type TagManifestEntry,
 } from '../../../src/utils/tagRevalidation';
 
@@ -150,5 +151,19 @@ describe('legacy plain numbers (rolling upgrade, not Next.js)', () => {
     expect(swr).toEqual({ stale: now, expired: now + 2_000 });
     expect(areTagsStale(['t'], 900_000, lookup(swr))).toBe(true);
     expect(areTagsExpired(['t'], 900_000, now + 500, lookup(swr))).toBe(false);
+  });
+});
+
+describe('persistableTagManifest', () => {
+  const now = 1_000_000;
+
+  it('writes a plain number for immediate hard-expires (rolling-upgrade readers)', () => {
+    expect(persistableTagManifest({ expired: now }, now)).toBe(now);
+    expect(persistableTagManifest({ stale: now, expired: now }, now)).toBe(now);
+  });
+
+  it('keeps { stale, expired } objects for SWR windows', () => {
+    const swr = { stale: now, expired: now + 2_000 };
+    expect(persistableTagManifest(swr, now)).toEqual(swr);
   });
 });

@@ -16,6 +16,7 @@ import {
   areTagsStale,
   maxExpiredTimestamp,
   normalizeTagManifest,
+  persistableTagManifest,
   type TagManifestEntry,
 } from './utils/tagRevalidation';
 
@@ -219,6 +220,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         database,
         querySize: revalidateTagQuerySize,
         filterKeys,
+        customizedSync: { withoutOrphanCleanup: true },
         resyncIntervalMs:
           avgResyncIntervalMs +
           avgResyncIntervalMs / 10 +
@@ -318,73 +320,80 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         return undefined;
       }
 
-      const clientGet = this.redisGetDeduplication
-        ? this.deduplicatedRedisGet(cacheKey)
-        : this.redisGet;
+      const readSerialized = (useDedup: boolean) =>
+        redisErrorHandler(
+          'RedisCacheComponentsHandler.get(), operation: get' +
+            (useDedup ? ' deduplicated' : '') +
+            ' ' +
+            this.getTimeoutMs +
+            'ms ' +
+            redisKey,
+          (useDedup ? this.deduplicatedRedisGet(cacheKey) : this.redisGet)(
+            commandOptions({ signal: AbortSignal.timeout(this.getTimeoutMs) }),
+            redisKey,
+          ),
+        );
 
-      const serialized = await redisErrorHandler(
-        'RedisCacheComponentsHandler.get(), operation: get' +
-          (this.redisGetDeduplication ? ' deduplicated' : '') +
-          ' ' +
-          this.getTimeoutMs +
-          'ms ' +
-          redisKey,
-        clientGet(
-          commandOptions({ signal: AbortSignal.timeout(this.getTimeoutMs) }),
-          redisKey,
-        ),
-      );
+      let usedDedup = this.redisGetDeduplication;
+      let serialized = await readSerialized(usedDedup);
 
-      if (!serialized) {
-        return undefined;
-      }
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (!serialized) {
+          return undefined;
+        }
 
-      const stored: StoredCacheEntry = JSON.parse(serialized);
-      const now = Date.now();
-      const tags = stored.tags || [];
-
-      // expire is a duration in seconds, calculate absolute expiry time
-      const expiryTime = stored.timestamp + stored.expire * 1000;
-      if (
-        Number.isFinite(stored.expire) &&
-        stored.expire > 0 &&
-        now > expiryTime
-      ) {
-        await this.client.unlink(redisKey).catch(() => {});
-        await this.sharedTagsMap.delete(cacheKey).catch(() => {});
-        return undefined;
-      }
-
-      if (
-        areTagsExpired(tags, stored.timestamp, now, (tag) =>
+        const stored: StoredCacheEntry = JSON.parse(serialized);
+        const now = Date.now();
+        const tags = stored.tags || [];
+        const expiryTime = stored.timestamp + stored.expire * 1000;
+        const ttlExpired =
+          Number.isFinite(stored.expire) &&
+          stored.expire > 0 &&
+          now > expiryTime;
+        const tagsExpired = areTagsExpired(tags, stored.timestamp, now, (tag) =>
           this.tagManifestFor(tag, now),
-        )
-      ) {
-        await this.client.unlink(redisKey).catch(() => {});
-        await this.sharedTagsMap.delete(cacheKey).catch(() => {});
-        return undefined;
+        );
+
+        if (ttlExpired || tagsExpired) {
+          if (usedDedup) {
+            usedDedup = false;
+            serialized = await readSerialized(false);
+            continue;
+          }
+
+          const current = await this.redisGet(
+            commandOptions({ signal: AbortSignal.timeout(this.getTimeoutMs) }),
+            redisKey,
+          );
+          if (current === serialized) {
+            await this.client.unlink(redisKey).catch(() => {});
+            await this.sharedTagsMap.delete(cacheKey).catch(() => {});
+          }
+          return undefined;
+        }
+
+        const valueBuffer =
+          typeof stored.value === 'string'
+            ? new Uint8Array(Buffer.from(stored.value, 'base64'))
+            : stored.value;
+
+        const entry: CacheComponentsEntry = {
+          ...stored,
+          value: bufferToReadableStream(valueBuffer),
+        };
+
+        if (
+          areTagsStale(tags, stored.timestamp, (tag) =>
+            this.tagManifestFor(tag, now),
+          )
+        ) {
+          entry.revalidate = -1;
+        }
+
+        return entry;
       }
 
-      const valueBuffer =
-        typeof stored.value === 'string'
-          ? new Uint8Array(Buffer.from(stored.value, 'base64'))
-          : stored.value;
-
-      const entry: CacheComponentsEntry = {
-        ...stored,
-        value: bufferToReadableStream(valueBuffer),
-      };
-
-      if (
-        areTagsStale(tags, stored.timestamp, (tag) =>
-          this.tagManifestFor(tag, now),
-        )
-      ) {
-        // Next.js DefaultCacheHandler signals SWR by returning revalidate: -1.
-        entry.revalidate = -1;
-      }
-
-      return entry;
+      return undefined;
     } catch (error) {
       console.error(
         'RedisCacheComponentsHandler.get() Error occurred while getting cache entry. Returning undefined so site can continue to serve content while cache is disabled. The original error was:',
@@ -512,9 +521,21 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
       }
 
       const now = Date.now();
-      for (const tag of tags || []) {
+      const updated = new Set(tags || []);
+      for (const tag of updated) {
         const next = applyTagUpdate(this.tagManifestFor(tag), durations, now);
-        await this.revalidatedTagsMap.set(tag, next);
+        await this.revalidatedTagsMap.set(
+          tag,
+          persistableTagManifest(next, now),
+        );
+      }
+
+      if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
+        for (const [key, sharedTags] of this.sharedTagsMap.entries()) {
+          if (sharedTags.some((tag) => updated.has(tag))) {
+            await this.inMemoryDeduplicationCache.delete(key, true);
+          }
+        }
       }
     } catch (error) {
       console.error(

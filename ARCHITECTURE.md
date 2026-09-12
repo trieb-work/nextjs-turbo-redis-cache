@@ -409,6 +409,18 @@ Next.js always calls `updateTags(tags, durations?)` with `{ stale, expired }` se
 
 Returning `undefined` when both `cacheControl.expire` and `revalidate` are absent is deliberate: Redis keys are written without `EX` and invalidation relies on tags. `revalidate: false` is handled separately and maps to `defaultStaleAge` (see `cache-ttl.test.ts` and Pages Router `/static-forever` integration). Next.js supplies `revalidate: false` for fully static pages in practice.
 
+**Tag-manifest keys vs `SyncedMap` orphan cleanup**
+
+`cleanupKeysNotInRedis()` SCANs Redis string keys and HDELs hash fields whose names are missing from that set. That is correct for `sharedTagsMap` (cache key → tags). It is wrong for `revalidatedTagsMap` (tag name → `{ stale, expired }`): tag names are never top-level keys, so startup or the hourly resync would wipe every invalidation and publish the delete fleet-wide. Tag-manifest maps set `customizedSync.withoutOrphanCleanup`.
+
+**Dedup cache vs Redis UNLINK**
+
+`updateTags` no longer deletes Redis entries (Next.js `DefaultCacheHandler` does not either). A 10s in-memory GET cache can still hold the pre-invalidation payload. `get()` must not `UNLINK` a Redis value that differs from the payload it just judged expired — that would delete a replacement written by another instance. Expired reads bypass dedup, compare-and-delete only the same serialized value, and `updateTags` evicts matching dedup entries.
+
+**Rolling upgrades and `{ stale, expired }` objects**
+
+Older package versions stored a number and compared it numerically. Immediate hard-expires (`expired <= now`) are still persisted as that number so mixed fleets invalidate. SWR windows stay `{ stale, expired }` objects; instances that cannot parse them keep serving until TTL. Prefer a coordinated rollout (or a unique `keyPrefix`) when using `revalidateTag(tag, profile)` SWR.
+
 ---
 
 ## RedisStringsHandler vs CacheComponentsHandler
@@ -451,10 +463,8 @@ flowchart LR
     GET -.->|"ISR: check staleness"| C
     EXP["getExpiration()"] -->|"CC: timestamp now"| C
     REV["revalidateTag()\nupdateTags()"] --> C
-    REV -->|"expire 0: find keys via"| B
-    REV -->|"expire 0: UNLINK"| A
-    REV -->|"cleanup"| B
     REV -->|"evict"| D
+    GET -->|"expired + same value: UNLINK"| A
 ```
 
 Both handlers rely on `SyncedMap` for cross-instance consistency of the tag maps and use the same pattern of "find affected keys via `sharedTagsMap` → batch delete from Redis → clean up maps". Both also use `DeduplicatedRequestHandler` (enabled by default) to reduce Redis load by deduplicating concurrent `get()` calls for the same key and seeding the cache on `set()`.

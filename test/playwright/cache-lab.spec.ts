@@ -165,14 +165,20 @@ test.describe('Cache Lab (Cache Components)', () => {
     const beforeComputedAt = await computedAt.textContent();
     const beforeValue = await value.textContent();
 
+    const actionResponse = page.waitForResponse(
+      (res) =>
+        res.request().method() === 'POST' &&
+        res.url().includes('/cache-lab/revalidate-durations'),
+    );
     await page
       .getByRole('button', {
         name: "revalidateTag('cache-lab:durations', { expire: 2 })",
       })
       .click();
+    await actionResponse;
 
-    // Reload quickly; waiting for networkidle can let the ~2.5s background refresh
-    // finish first on slow CI runners.
+    // Reload as soon as the Server Action has landed. Do not wait for
+    // networkidle — that can let the ~2.5s background refresh finish first.
     await page.reload();
     await expect(computedAt).toBeVisible();
 

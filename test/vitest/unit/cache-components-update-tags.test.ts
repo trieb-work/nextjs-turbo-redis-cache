@@ -151,6 +151,9 @@ describe('RedisCacheComponentsHandler.updateTags vs Next.js default handler', ()
     await handler.updateTags(['posts']);
 
     expect(await handler.getExpiration(['posts'])).toBe(revalidatedAt);
+    expect((handler as any).revalidatedTagsMap.get('posts')).toBe(
+      revalidatedAt,
+    );
     expect(await handler.get('page', [])).toBeUndefined();
   });
 
@@ -167,6 +170,9 @@ describe('RedisCacheComponentsHandler.updateTags vs Next.js default handler', ()
     await handler.updateTags(['posts'], { expire: 0 });
 
     expect(await handler.getExpiration(['posts'])).toBe(revalidatedAt);
+    expect((handler as any).revalidatedTagsMap.get('posts')).toBe(
+      revalidatedAt,
+    );
     expect(await handler.get('page', [])).toBeUndefined();
   });
 
@@ -244,4 +250,50 @@ describe('RedisCacheComponentsHandler.updateTags vs Next.js default handler', ()
       expect(await handler.get('page', [])).toBeDefined();
     },
   );
+
+  it('does not UNLINK a Redis replacement after a stale deduped read', async () => {
+    const { getRedisCacheComponentsHandler } = await import(
+      '../../../src/CacheComponentsHandler'
+    );
+    const handler = getRedisCacheComponentsHandler({
+      keyPrefix: 'dedup-unlink:',
+      redisGetDeduplication: true,
+      inMemoryCachingTime: 10_000,
+    });
+
+    const createdAt = Date.now();
+    await handler.set(
+      'page',
+      Promise.resolve(cachedEntry(['posts'], createdAt)),
+    );
+    const redisKey = 'dedup-unlink:page';
+    const oldSerialized = hoisted.store.get(redisKey)!;
+
+    await vi.advanceTimersByTimeAsync(1);
+    await handler.updateTags(['posts']);
+
+    const freshAt = Date.now();
+    hoisted.store.set(
+      redisKey,
+      JSON.stringify({
+        value: Buffer.from('fresh').toString('base64'),
+        tags: ['posts'],
+        stale: 1,
+        timestamp: freshAt,
+        expire: 3600,
+        revalidate: 60,
+      }),
+    );
+    (handler as any).redisDeduplicationHandler.seedRequestReturn(
+      'page',
+      oldSerialized,
+    );
+
+    hoisted.unlinkedKeys.length = 0;
+    const served = await handler.get('page', []);
+
+    expect(hoisted.unlinkedKeys).toEqual([]);
+    expect(served).toBeDefined();
+    expect(hoisted.store.get(redisKey)).toBeTruthy();
+  });
 });

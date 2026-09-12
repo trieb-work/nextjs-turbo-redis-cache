@@ -86,6 +86,21 @@ export function applyTagUpdate(
 }
 
 /**
+ * Immediate hard-expires (`expired <= now`) are stored as a plain number so
+ * older package versions that JSON.parse + numeric-compare the hash field still
+ * see the invalidation during a rolling deploy. SWR windows stay objects.
+ */
+export function persistableTagManifest(
+  entry: TagManifestEntry,
+  now: number,
+): TagManifestEntry | number {
+  if (typeof entry.expired === 'number' && entry.expired <= now) {
+    return entry.expired;
+  }
+  return entry;
+}
+
+/**
  * Mirrors Next.js `areTagsExpired`: hard miss once `expired` has elapsed
  * and is newer than the entry timestamp.
  */
