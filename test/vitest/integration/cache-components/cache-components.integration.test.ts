@@ -145,25 +145,26 @@ describe('Next.js 16 Cache Components Integration', () => {
     });
 
     it('should invalidate cache when tag is revalidated (Stale while revalidate)', async () => {
-      // Get initial cached data
       const res1 = await fetch(`${BASE_URL}/api/cached-with-tag`);
+      expect(res1.status).toBe(200);
       const data1 = await res1.json();
 
-      // Revalidate the tag
-      await fetch(`${BASE_URL}/api/revalidate-tag`, {
+      const revalidateRes = await fetch(`${BASE_URL}/api/revalidate-tag`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tag: 'test-tag' }),
       });
+      expect(revalidateRes.status).toBe(200);
 
-      // The cache should be invalidated - verify by making multiple requests
-      // until we get fresh data (with retries for async revalidation)
+      // `/api/revalidate-tag` uses `{ expire: 1 }` (SWR). Fresh data can arrive
+      // after the window; background refresh may briefly return 500 on some versions.
       let freshDataReceived = false;
-      // Next.js tag revalidation can be async and may take longer under some runtimes.
-      // Use a more tolerant window to avoid flaky failures.
       for (let i = 0; i < 60; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await delay(500);
         const res = await fetch(`${BASE_URL}/api/cached-with-tag`);
+        if (!res.ok) {
+          continue;
+        }
         const data = await res.json();
 
         if (
@@ -176,7 +177,7 @@ describe('Next.js 16 Cache Components Integration', () => {
       }
 
       expect(freshDataReceived).toBe(true);
-    }, 20_000);
+    }, 35_000);
   });
 
   describe('cacheLife functionality', () => {

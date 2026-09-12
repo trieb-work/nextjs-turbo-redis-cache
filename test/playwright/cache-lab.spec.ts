@@ -172,14 +172,12 @@ test.describe('Cache Lab (Cache Components)', () => {
       .click();
     await page.waitForLoadState('networkidle');
 
-    const reloadStart = Date.now();
     await page.reload();
     await expect(computedAt).toBeVisible();
-    const reloadDuration = Date.now() - reloadStart;
 
-    // SWR: first reload must still serve the previous values and stay fast.
-    // Hard UNLINK would miss and block on the ~2.5s cache fill.
-    expect(reloadDuration).toBeLessThan(2000);
+    // SWR: first reload must still serve the previous values. Hard UNLINK would
+    // block on the ~2.5s cache fill and return new computedAt/value immediately.
+    // Wall-clock timing is not asserted — CI runners are too variable.
     expect(await computedAt.textContent()).toBe(beforeComputedAt);
     expect(await value.textContent()).toBe(beforeValue);
 
