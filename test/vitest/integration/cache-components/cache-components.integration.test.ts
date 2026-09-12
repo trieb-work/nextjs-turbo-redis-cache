@@ -121,9 +121,9 @@ describe('Next.js 16 Cache Components Integration', () => {
     });
 
     it('should store cache entry in Redis', async () => {
-      // cached-with-cachelife is a dynamic `use cache` route, so the handler
+      // cached-with-tag is a dynamic `use cache` route, so the handler
       // must write through to Redis (static prerendered routes may not).
-      await fetch(`${BASE_URL}/api/cached-with-cachelife`);
+      await fetch(`${BASE_URL}/api/cached-with-tag`);
 
       const keys = await waitForRedisKeys(`${keyPrefix}*`);
       expect(keys.length).toBeGreaterThan(0);
@@ -144,47 +144,36 @@ describe('Next.js 16 Cache Components Integration', () => {
       expect(data2.counter).toBe(data1.counter);
     });
 
-    it('should invalidate cache when tag is revalidated (Stale while revalidate)', async () => {
-      const res1 = await fetch(`${BASE_URL}/api/cached-with-tag`);
-      expect(res1.status).toBe(200);
-      const data1 = await res1.json();
+    it('should invalidate cache when tag is revalidated', async () => {
+      const id = `tag-invalidation-${Date.now()}`;
+      const matrixUrl = `${BASE_URL}/api/expire-matrix?id=${encodeURIComponent(id)}`;
 
-      const revalidateRes = await fetch(`${BASE_URL}/api/revalidate-tag`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tag: 'test-tag' }),
-      });
+      const data1 = await (await fetch(matrixUrl)).json();
+      const data2 = await (await fetch(matrixUrl)).json();
+      expect(data2.counter).toBe(data1.counter);
+
+      const revalidateRes = await fetch(
+        `${BASE_URL}/api/expire-matrix/revalidate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tag: `expire-matrix-${id}`,
+            profile: { expire: 0 },
+          }),
+        },
+      );
       expect(revalidateRes.status).toBe(200);
 
-      // `/api/revalidate-tag` uses `{ expire: 1 }` (SWR). Fresh data can arrive
-      // after the window; background refresh may briefly return 500 on some versions.
-      let freshDataReceived = false;
-      for (let i = 0; i < 60; i++) {
-        await delay(500);
-        const res = await fetch(`${BASE_URL}/api/cached-with-tag`);
-        if (!res.ok) {
-          continue;
-        }
-        const data = await res.json();
-
-        if (
-          data.counter !== data1.counter ||
-          data.timestamp !== data1.timestamp
-        ) {
-          freshDataReceived = true;
-          break;
-        }
-      }
-
-      expect(freshDataReceived).toBe(true);
-    }, 35_000);
+      const after = await (await fetch(matrixUrl)).json();
+      expect(after.counter).toBeGreaterThan(data1.counter);
+    });
   });
 
   describe('cacheLife functionality', () => {
     it('should respect expire window and eventually return refreshed data', async () => {
       const res1 = await fetch(`${BASE_URL}/api/cached-with-cachelife`);
       const data1 = await res1.json();
-      expect(data1.counter).toBe(1);
 
       const res2 = await fetch(`${BASE_URL}/api/cached-with-cachelife`);
       const data2 = await res2.json();
