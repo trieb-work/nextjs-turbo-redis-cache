@@ -145,6 +145,17 @@ describe('RedisStringsHandler Pages Router kinds', () => {
       expect(ex).toBe(expireAge(DEFAULT_STALE_AGE));
     });
 
+    it('set() prefers cacheControl.expire over revalidate for the Redis TTL', async () => {
+      const handler = createHandler();
+      await handler.set('/blog/post-swr', pagesData, {
+        ...baseCtx,
+        cacheControl: { revalidate: 60, expire: 3600 },
+      });
+
+      const { ex } = storedEntry('/blog/post-swr');
+      expect(ex).toBe(3600);
+    });
+
     it('set() derives the TTL from the legacy ctx.revalidate argument (Next.js 15.0.3)', async () => {
       const handler = createHandler();
       await handler.set('/blog/post-legacy', pagesData, {

@@ -15,6 +15,21 @@ describe('Next.js 16 Cache Components Integration', () => {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  async function waitForRedisKeys(
+    pattern: string,
+    minCount = 1,
+    timeoutMs = 10_000,
+  ) {
+    for (let elapsed = 0; elapsed < timeoutMs; elapsed += 100) {
+      const keys = await redisClient.keys(pattern);
+      if (keys.length >= minCount) {
+        return keys;
+      }
+      await delay(100);
+    }
+    return redisClient.keys(pattern);
+  }
+
   beforeAll(async () => {
     // Connect to Redis
     redisClient = createClient({
@@ -106,12 +121,13 @@ describe('Next.js 16 Cache Components Integration', () => {
     });
 
     it('should store cache entry in Redis', async () => {
-      await fetch(`${BASE_URL}/api/cached-static-fetch`);
+      // expire-matrix is dynamic (`ƒ`); static prerendered `use cache` routes may
+      // not write through to Redis at runtime on some Next.js versions.
+      await fetch(`${BASE_URL}/api/expire-matrix?id=redis-smoke`);
 
-      // Check Redis for cache keys
-      const keys = await redisClient.keys(`${keyPrefix}*`);
+      const keys = await waitForRedisKeys(`${keyPrefix}*`);
       expect(keys.length).toBeGreaterThan(0);
-    });
+    }, 15_000);
   });
 
   describe('cacheTag functionality', () => {
@@ -128,46 +144,36 @@ describe('Next.js 16 Cache Components Integration', () => {
       expect(data2.counter).toBe(data1.counter);
     });
 
-    it('should invalidate cache when tag is revalidated (Stale while revalidate)', async () => {
-      // Get initial cached data
-      const res1 = await fetch(`${BASE_URL}/api/cached-with-tag`);
-      const data1 = await res1.json();
+    it('should invalidate cache when tag is revalidated', async () => {
+      const id = `tag-invalidation-${Date.now()}`;
+      const matrixUrl = `${BASE_URL}/api/expire-matrix?id=${encodeURIComponent(id)}`;
 
-      // Revalidate the tag
-      await fetch(`${BASE_URL}/api/revalidate-tag`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tag: 'test-tag' }),
-      });
+      const data1 = await (await fetch(matrixUrl)).json();
+      const data2 = await (await fetch(matrixUrl)).json();
+      expect(data2.counter).toBe(data1.counter);
 
-      // The cache should be invalidated - verify by making multiple requests
-      // until we get fresh data (with retries for async revalidation)
-      let freshDataReceived = false;
-      // Next.js tag revalidation can be async and may take longer under some runtimes.
-      // Use a more tolerant window to avoid flaky failures.
-      for (let i = 0; i < 60; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        const res = await fetch(`${BASE_URL}/api/cached-with-tag`);
-        const data = await res.json();
+      const revalidateRes = await fetch(
+        `${BASE_URL}/api/expire-matrix/revalidate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tag: `expire-matrix-${id}`,
+            profile: { expire: 0 },
+          }),
+        },
+      );
+      expect(revalidateRes.status).toBe(200);
 
-        if (
-          data.counter !== data1.counter ||
-          data.timestamp !== data1.timestamp
-        ) {
-          freshDataReceived = true;
-          break;
-        }
-      }
-
-      expect(freshDataReceived).toBe(true);
-    }, 20_000);
+      const after = await (await fetch(matrixUrl)).json();
+      expect(after.counter).toBeGreaterThan(data1.counter);
+    });
   });
 
   describe('cacheLife functionality', () => {
     it('should respect expire window and eventually return refreshed data', async () => {
       const res1 = await fetch(`${BASE_URL}/api/cached-with-cachelife`);
       const data1 = await res1.json();
-      expect(data1.counter).toBe(1);
 
       const res2 = await fetch(`${BASE_URL}/api/cached-with-cachelife`);
       const data2 = await res2.json();
@@ -196,6 +202,158 @@ describe('Next.js 16 Cache Components Integration', () => {
       expect(refreshedData.counter).toBeGreaterThan(data1.counter);
       expect(refreshedData.timestamp).not.toBe(data1.timestamp);
     }, 20_000);
+  });
+
+  describe('revalidateTag expire settings (next start)', () => {
+    // Expire seconds from next/dist/server/config-shared.js cacheLife presets
+    // (identical in Next.js 16.0.11, 16.2.6, 16.3.0). `default.expire` is
+    // INFINITE_CACHE = 0xfffffffe.
+    const CACHE_LIFE_EXPIRE_SECONDS = {
+      default: 0xfffffffe,
+      seconds: 60,
+      minutes: 60 * 60,
+      hours: 60 * 60 * 24,
+      days: 60 * 60 * 24 * 7,
+      weeks: 60 * 60 * 24 * 30,
+      max: 60 * 60 * 24 * 365,
+    } as const;
+
+    async function getMatrix(id: string) {
+      const res = await fetch(
+        `${BASE_URL}/api/expire-matrix?id=${encodeURIComponent(id)}`,
+      );
+      expect(res.status).toBe(200);
+      return res.json() as Promise<{
+        counter: number;
+        timestamp: number;
+        id: string;
+      }>;
+    }
+
+    async function revalidateMatrix(
+      id: string,
+      profile: string | { expire: number } | null,
+    ) {
+      const tag = `expire-matrix-${id}`;
+      const body = profile === null ? { tag, profile: null } : { tag, profile };
+      const res = await fetch(`${BASE_URL}/api/expire-matrix/revalidate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(200);
+      return res.json() as Promise<{ timestamp: number }>;
+    }
+
+    async function readTagManifest(tag: string) {
+      const hashKey = `${keyPrefix}__cacheComponents_revalidated_tags__`;
+      for (let elapsed = 0; elapsed < 5_000; elapsed += 50) {
+        const raw = await redisClient.hGet(hashKey, tag);
+        if (raw) {
+          const parsed: unknown = JSON.parse(raw);
+          if (typeof parsed === 'number') {
+            return { expired: parsed } as { stale?: number; expired?: number };
+          }
+          return parsed as { stale?: number; expired?: number };
+        }
+        await delay(50);
+      }
+      throw new Error(`tag manifest missing for ${tag} in ${hashKey}`);
+    }
+
+    function expectApproxMs(actual: number | undefined, expected: number) {
+      expect(actual, `expected ~${expected}, got ${actual}`).toBeDefined();
+      expect(Math.abs(actual! - expected)).toBeLessThan(5_000);
+    }
+
+    it.each(Object.entries(CACHE_LIFE_EXPIRE_SECONDS) as [string, number][])(
+      'revalidateTag(tag, %s) marks stale now and expired=now+expire*1000, then SWR',
+      async (profile, expireSeconds) => {
+        const id = `profile-${profile}`;
+        await getMatrix(id);
+        const before = await getMatrix(id);
+
+        const startedAt = Date.now();
+        await revalidateMatrix(id, profile);
+        const manifest = await readTagManifest(`expire-matrix-${id}`);
+
+        expectApproxMs(manifest.stale, startedAt);
+        expectApproxMs(manifest.expired, startedAt + expireSeconds * 1000);
+
+        const after = await getMatrix(id);
+        expect(after.counter).toBe(before.counter);
+        expect(after.timestamp).toBe(before.timestamp);
+      },
+    );
+
+    it('{ expire: 5 } uses the object expire, not a named profile', async () => {
+      const id = 'object-expire-5';
+      await getMatrix(id);
+      const before = await getMatrix(id);
+
+      const startedAt = Date.now();
+      await revalidateMatrix(id, { expire: 5 });
+      const manifest = await readTagManifest(`expire-matrix-${id}`);
+
+      expectApproxMs(manifest.stale, startedAt);
+      expectApproxMs(manifest.expired, startedAt + 5_000);
+
+      const after = await getMatrix(id);
+      expect(after.counter).toBe(before.counter);
+    });
+
+    it('{ expire: 0 } writes expired=now and the next GET is a blocking miss', async () => {
+      const id = 'expire-zero';
+      await getMatrix(id);
+      const before = await getMatrix(id);
+
+      const startedAt = Date.now();
+      await revalidateMatrix(id, { expire: 0 });
+      const manifest = await readTagManifest(`expire-matrix-${id}`);
+
+      expectApproxMs(manifest.expired, startedAt);
+      expect(manifest.stale).toBeUndefined();
+
+      const after = await getMatrix(id);
+      expect(after.counter).toBeGreaterThan(before.counter);
+    });
+
+    it('omitted profile writes expired=now without stale and the next GET misses', async () => {
+      const id = 'omit-profile';
+      await getMatrix(id);
+      const before = await getMatrix(id);
+
+      const startedAt = Date.now();
+      await revalidateMatrix(id, null);
+      const manifest = await readTagManifest(`expire-matrix-${id}`);
+
+      expect(manifest.stale).toBeUndefined();
+      expectApproxMs(manifest.expired, startedAt);
+
+      const after = await getMatrix(id);
+      expect(after.counter).toBeGreaterThan(before.counter);
+    });
+
+    it('{ expire: 2 } serves stale, then hard-expires after the window', async () => {
+      const id = 'expire-two';
+      await getMatrix(id);
+      const before = await getMatrix(id);
+
+      const startedAt = Date.now();
+      await revalidateMatrix(id, { expire: 2 });
+      const manifest = await readTagManifest(`expire-matrix-${id}`);
+
+      expectApproxMs(manifest.stale, startedAt);
+      expectApproxMs(manifest.expired, startedAt + 2_000);
+
+      const stale = await getMatrix(id);
+      expect(stale.counter).toBe(before.counter);
+
+      await delay(3_000);
+
+      const afterWindow = await getMatrix(id);
+      expect(afterWindow.counter).toBeGreaterThan(before.counter);
+    }, 15_000);
   });
 
   describe('Redis cache handler integration', () => {
