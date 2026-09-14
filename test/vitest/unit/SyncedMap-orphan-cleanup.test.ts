@@ -34,18 +34,19 @@ class HashMockClient {
     return new HashMockClient();
   }
 
-  async hScan() {
-    return {
-      cursor: 0,
-      tuples: [...this.hash.entries()].map(([field, value]) => ({
-        field,
-        value,
-      })),
-    };
-  }
-
-  async scan() {
-    return { cursor: 0, keys: this.stringKeys };
+  async sendCommand(args: string[]) {
+    const [command] = args;
+    if (command === 'HSCAN') {
+      const tuples: string[] = [];
+      for (const [field, value] of this.hash) {
+        tuples.push(field, value);
+      }
+      return ['0', tuples];
+    }
+    if (command === 'SCAN') {
+      return ['0', this.stringKeys];
+    }
+    throw new Error(`Unexpected sendCommand: ${command}`);
   }
 
   async hSet(_key: string, field: string, value: string) {
