@@ -48,6 +48,18 @@ async function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function expectIsrRedisTtl(ttl: number) {
+  // Next.js 16.3+ passes cacheControl.expire (~1 year) for ISR pages.
+  // Redis TTL is keyed on expire, not 2 × revalidate.
+  if (NEXT_PAGES_TEST_APP.includes('16-3')) {
+    expect(ttl).toBeGreaterThan(2 * ISR_REVALIDATE_SECONDS);
+    return;
+  }
+  // VERCEL_ENV=production -> expire age is 2 * revalidate
+  expect(ttl).toBeGreaterThan(2 * ISR_REVALIDATE_SECONDS - 30);
+  expect(ttl).toBeLessThanOrEqual(2 * ISR_REVALIDATE_SECONDS);
+}
+
 async function runCommand(cmd: string, args: string[], cwd: string) {
   return new Promise((resolve, reject) => {
     let stderr = '';
@@ -233,9 +245,7 @@ describe('Pages Router Redis cache integration (two instances)', () => {
       const ttl = await redisClient.ttl(
         process.env.VERCEL_URL + '/isr/prebuilt',
       );
-      // VERCEL_ENV=production -> expire age is 2 * revalidate
-      expect(ttl).toBeGreaterThan(2 * ISR_REVALIDATE_SECONDS - 30);
-      expect(ttl).toBeLessThanOrEqual(2 * ISR_REVALIDATE_SECONDS);
+      expectIsrRedisTtl(ttl);
     });
 
     it('instance B serves the identical cached HTML from the shared Redis', async () => {
@@ -342,12 +352,12 @@ describe('Pages Router Redis cache integration (two instances)', () => {
         tags: ['_N_T_/isr/not-found'],
       });
 
-      // TTL is derived from the revalidate value returned with notFound
+      // TTL: Next.js 16.3+ keys on cacheControl.expire (SWR-safe); older
+      // versions use estimateExpireAge(revalidate).
       const ttl = await redisClient.ttl(
         process.env.VERCEL_URL + '/isr/not-found',
       );
-      expect(ttl).toBeGreaterThan(2 * ISR_REVALIDATE_SECONDS - 30);
-      expect(ttl).toBeLessThanOrEqual(2 * ISR_REVALIDATE_SECONDS);
+      expectIsrRedisTtl(ttl);
     });
 
     it('instance B serves the 404 from the shared cache', async () => {

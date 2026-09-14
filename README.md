@@ -90,6 +90,8 @@ const nextConfig = {
 
 Make sure to set either REDIS_URL or REDISHOST and REDISPORT environment variables.
 
+Redis connections are skipped during `next build` (`NEXT_PHASE=phase-production-build`), so a production build can succeed without Redis. The handler connects when Next.js first calls it at runtime (`next start`).
+
 ### Option B: create a wrapper file to change options
 
 create new file `customized-cache-handler.js` in your project root and add the following code:
@@ -131,6 +133,8 @@ module.exports = class CustomizedCacheHandler {
 }
 ```
 
+`defaultStaleAge` and `estimateExpireAge` are fallbacks for when Next.js does not pass `cacheControl.expire`. On Next.js 16.3+ ISR, Redis TTL is `expire` and these options do not change it.
+
 extend `next.config.js` with:
 
 ```
@@ -145,23 +149,23 @@ A working example of above can be found in the `test/nextjs-test-projects/next-a
 
 ## Available Options
 
-| Option                        | Description                                                                                                                                                                     | Default Value                                                                                                                                                                                                                |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| redisUrl                      | Redis connection url                                                                                                                                                            | `process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST ? redis://${process.env.REDISHOST}:${process.env.REDISPORT} : 'redis://localhost:6379'`                                                                |
-| database                      | Redis database number to use. Uses DB 0 for production, DB 1 otherwise                                                                                                          | `process.env.VERCEL_ENV === 'production' ? 0 : 1`                                                                                                                                                                            |
-| keyPrefix                     | Prefix added to all Redis keys                                                                                                                                                  | `RedisStringsHandler` default: `process.env.KEY_PREFIX \|\| process.env.VERCEL_URL \|\| 'UNDEFINED_URL_'`<br> Next handlers resolve: `options.keyPrefix \|\| KEY_PREFIX \|\| VERCEL_URL \|\| BUILD_ID \|\| 'UNDEFINED_URL_'` |
-| sharedTagsKey                 | Key used to store shared tags hash map in Redis                                                                                                                                 | `'__sharedTags__'`                                                                                                                                                                                                           |
-| getTimeoutMs                  | Timeout in milliseconds for time critical Redis operations. If Redis get is not fulfilled within this time, returns null to avoid blocking site rendering.                      | `process.env.REDIS_COMMAND_TIMEOUT_MS ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 500) : 500`                                                                                                                |
-| revalidateTagQuerySize        | Number of entries to query in one batch during full sync of shared tags hash map                                                                                                | `250`                                                                                                                                                                                                                        |
-| avgResyncIntervalMs           | Average interval in milliseconds between tag map full re-syncs                                                                                                                  | `3600000` (1 hour)                                                                                                                                                                                                           |
-| redisGetDeduplication         | Enable deduplication of Redis get requests via internal in-memory cache.                                                                                                        | `true`                                                                                                                                                                                                                       |
-| inMemoryCachingTime           | Time in milliseconds to cache Redis get results in memory. Set this to 0 to disable in-memory caching completely.                                                               | `10000`                                                                                                                                                                                                                      |
-| defaultStaleAge               | Default stale age in seconds for cached items                                                                                                                                   | `1209600` (14 days)                                                                                                                                                                                                          |
-| estimateExpireAge             | Function to calculate expire age (redis TTL value) from stale age                                                                                                               | Production: `staleAge * 2`<br> Other: `staleAge * 1.2`                                                                                                                                                                       |
-| socketOptions                 | Redis client socket options for TLS/SSL configuration (e.g., `{ tls: true, rejectUnauthorized: false }`)                                                                        | `{ connectTimeout: timeoutMs }`                                                                                                                                                                                              |
-| clientOptions                 | Additional Redis client options (e.g., username, password)                                                                                                                      | `undefined`                                                                                                                                                                                                                  |
-| killContainerOnErrorThreshold | Number of consecutive errors before the container is killed. Set to 0 to disable.                                                                                               | `Number.parseInt(process.env.KILL_CONTAINER_ON_ERROR_THRESHOLD) ?? 0 : 0`                                                                                                                                                    |
-| valueSerializer               | Pluggable wire-format codec for Redis string values (compression, encryption, custom encoding). See [Custom value serializer](#custom-value-serializer-compression-encryption). | `jsonCacheValueSerializer` (`JSON.stringify` with built-in `Buffer` and `Map` encoding)                                                                                                                                      |
+| Option                        | Description                                                                                                                                                                                                                                                                            | Default Value                                                                                                                                                                                                                |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| redisUrl                      | Redis connection url                                                                                                                                                                                                                                                                   | `process.env.REDIS_URL? process.env.REDIS_URL : process.env.REDISHOST ? redis://${process.env.REDISHOST}:${process.env.REDISPORT} : 'redis://localhost:6379'`                                                                |
+| database                      | Redis database number to use. Uses DB 0 for production, DB 1 otherwise                                                                                                                                                                                                                 | `process.env.VERCEL_ENV === 'production' ? 0 : 1`                                                                                                                                                                            |
+| keyPrefix                     | Prefix added to all Redis keys                                                                                                                                                                                                                                                         | `RedisStringsHandler` default: `process.env.KEY_PREFIX \|\| process.env.VERCEL_URL \|\| 'UNDEFINED_URL_'`<br> Next handlers resolve: `options.keyPrefix \|\| KEY_PREFIX \|\| VERCEL_URL \|\| BUILD_ID \|\| 'UNDEFINED_URL_'` |
+| sharedTagsKey                 | Key used to store shared tags hash map in Redis                                                                                                                                                                                                                                        | `'__sharedTags__'`                                                                                                                                                                                                           |
+| getTimeoutMs                  | Timeout in milliseconds for time critical Redis operations. If Redis get is not fulfilled within this time, returns null to avoid blocking site rendering.                                                                                                                             | `process.env.REDIS_COMMAND_TIMEOUT_MS ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 500) : 500`                                                                                                                |
+| revalidateTagQuerySize        | Number of entries to query in one batch during full sync of shared tags hash map                                                                                                                                                                                                       | `250`                                                                                                                                                                                                                        |
+| avgResyncIntervalMs           | Average interval in milliseconds between tag map full re-syncs                                                                                                                                                                                                                         | `3600000` (1 hour)                                                                                                                                                                                                           |
+| redisGetDeduplication         | Enable deduplication of Redis get requests via internal in-memory cache.                                                                                                                                                                                                               | `true`                                                                                                                                                                                                                       |
+| inMemoryCachingTime           | Time in milliseconds to cache Redis get results in memory. Set this to 0 to disable in-memory caching completely.                                                                                                                                                                      | `10000`                                                                                                                                                                                                                      |
+| defaultStaleAge               | Fallback stale age in seconds used only when Next.js does not pass a finite `cacheControl.expire` (e.g. `revalidate: false`, or older callers that only send `revalidate`). Next 16.3+ ISR typically sends `expire` (~1 year); that value is the Redis TTL and this option is ignored. | `1209600` (14 days)                                                                                                                                                                                                          |
+| estimateExpireAge             | Fallback to compute Redis TTL from a stale/`revalidate` age when `cacheControl.expire` is absent. Not applied when Next.js provides `expire`.                                                                                                                                          | Production: `staleAge * 2`<br> Other: `staleAge * 1.2`                                                                                                                                                                       |
+| socketOptions                 | Redis client socket options for TLS/SSL configuration (e.g., `{ tls: true, rejectUnauthorized: false }`)                                                                                                                                                                               | `{ connectTimeout: timeoutMs }`                                                                                                                                                                                              |
+| clientOptions                 | Additional Redis client options (e.g., username, password)                                                                                                                                                                                                                             | `undefined`                                                                                                                                                                                                                  |
+| killContainerOnErrorThreshold | Number of consecutive errors before the container is killed. Set to 0 to disable.                                                                                                                                                                                                      | `Number.parseInt(process.env.KILL_CONTAINER_ON_ERROR_THRESHOLD) ?? 0 : 0`                                                                                                                                                    |
+| valueSerializer               | Pluggable wire-format codec for Redis string values (compression, encryption, custom encoding). See [Custom value serializer](#custom-value-serializer-compression-encryption).                                                                                                        | `jsonCacheValueSerializer` (`JSON.stringify` with built-in `Buffer` and `Map` encoding)                                                                                                                                      |
 
 ## Custom value serializer (compression, encryption)
 
@@ -467,7 +471,50 @@ Install the package in your Next.js app:
 pnpm add @trieb.work/nextjs-turbo-redis-cache redis
 ```
 
-In your Next.js app, enable Cache Components and point `cacheHandlers.default` to a module that exports the handler instance:
+#### Hybrid setup (ISR + Cache Components)
+
+Next.js has **two different handler APIs**. They are not interchangeable:
+
+| Config key                | Next.js loads it as               | This package export                        | Methods                                                    |
+| ------------------------- | --------------------------------- | ------------------------------------------ | ---------------------------------------------------------- |
+| `cacheHandler` (singular) | `new Handler(options)`            | **default export** (`CachedHandler` class) | `get`, `set`, `revalidateTag`, `resetRequestCache`         |
+| `cacheHandlers` (plural)  | imported object (not constructed) | **`redisCacheHandler`**                    | `get`, `set`, `getExpiration`, `updateTags`, `refreshTags` |
+
+`redisCacheHandler` is not a constructor (`new redisCacheHandler()` throws). Pointing `cacheHandler` at `./cache-handler.js` (the Cache Components object) will fail at runtime. Pointing `cacheHandlers` at the default class export will not provide `getExpiration` / `updateTags`.
+
+For a self-hosted app that needs both ISR and `'use cache'` / `'use cache: remote'`:
+
+```ts
+// next.config.ts
+import type { NextConfig } from 'next';
+
+const nextConfig: NextConfig = {
+  cacheComponents: true,
+  cacheHandler: require.resolve('@trieb.work/nextjs-turbo-redis-cache'),
+  cacheHandlers: {
+    default: require.resolve('./cache-handler.js'),
+    remote: require.resolve('./cache-handler.js'),
+  },
+  cacheMaxMemorySize: 0,
+};
+
+export default nextConfig;
+```
+
+```js
+// cache-handler.js — Cache Components only (`cacheHandlers.default` / `.remote`)
+const { redisCacheHandler } = require('@trieb.work/nextjs-turbo-redis-cache');
+
+module.exports = redisCacheHandler;
+```
+
+`default` and `remote` may be the same `redisCacheHandler` module: `'use cache'` uses `default`, `'use cache: remote'` uses `remote`. `cacheMaxMemorySize: 0` disables Next's in-process memory cache so Redis is shared across instances.
+
+Do not wrap ISR and Cache Components in one file unless you implement **both** interfaces (class constructed with `new`, and a separate object export). This package ships them as two exports on purpose.
+
+#### Cache Components only
+
+If you only need Cache Components (no ISR `cacheHandler`), enable Cache Components and point `cacheHandlers` at `redisCacheHandler`. Include `remote` if you use `'use cache: remote'`.
 
 ```ts
 // next.config.ts
@@ -477,7 +524,9 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   cacheHandlers: {
     default: require.resolve('./cache-handler.js'),
+    remote: require.resolve('./cache-handler.js'),
   },
+  cacheMaxMemorySize: 0,
 };
 
 export default nextConfig;
@@ -508,6 +557,19 @@ Optional:
 - `VERCEL_URL`: used as a key prefix for multi-tenant isolation (also useful in tests). If unset, a default prefix is used.
 - `REDIS_COMMAND_TIMEOUT_MS`: timeout (ms) for Redis commands used by the handler.
 
+### Official caching semantics (Vercel / Next.js self-hosting docs)
+
+This package follows the semantics documented in the [Next.js self-hosting guide](https://nextjs.org/docs/app/guides/self-hosting#configuring-caching) and the official `cache-handler-redis` example:
+
+| Topic                             | Behavior                                                                                                                                                                                                                                                                                                     |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **ISR Redis TTL**                 | Key TTL on `cacheControl.expire`, not `revalidate`. Past `revalidate` an entry is only stale (SWR); evicting at that boundary would defeat background refresh. Legacy callers that only pass `revalidate` still get `estimateExpireAge(revalidate)`.                                                         |
+| **Tag sources (ISR)**             | `APP_PAGE` / `APP_ROUTE` tags come from `data.headers['x-next-cache-tags']` plus `ctx.tags`. `FETCH` tags come from `ctx.tags`.                                                                                                                                                                              |
+| **Buffer / Map serialization**    | `rscData` (`Buffer`) and `segmentData` (`Map`) require custom JSON encoding — use the built-in `jsonCacheValueSerializer` or wrap it. Plain `JSON.stringify` causes `segmentData.get is not a function` on RSC navigation.                                                                                   |
+| **`updateTags(tags, durations)`** | Persists Next.js tag-manifest fields in Redis (`stale` / `expired`). No `durations` or `{ expire: 0 }` hard-expires (`expired = now`). `expire > 0` (including `'max'` ~1 year) is the SWR window: `stale = now`, `expired = now + expire * 1000`, and `get()` returns `revalidate: -1` until that deadline. |
+| **`getExpiration` pattern**       | Returns max tag `expired` (may be in the future). Next.js uses this for implicit/soft tags. Explicit `cacheTag()`s are checked in `get()` via `areTagsExpired` / `areTagsStale`.                                                                                                                             |
+| **Build without Redis**           | During `next build` (`NEXT_PHASE`), Redis connections are skipped so CI/build pipelines without Redis still succeed.                                                                                                                                                                                         |
+
 ### Lazy initialization
 
 The `redisCacheHandler` export is **lazily initialized** — importing the package does **not** open a Redis connection. The connection is deferred until the first method call on the handler (when Next.js invokes it). This means:
@@ -536,6 +598,8 @@ Then open the Cache Lab pages:
 - `/cache-lab/tag-invalidation`
 - `/cache-lab/stale-while-revalidate`
 - `/cache-lab/runtime-data-suspense`
+- `/cache-lab/use-cache-remote`
+- `/cache-lab/revalidate-durations`
 
 To run the Playwright E2E tests against a running dev server:
 
@@ -545,13 +609,12 @@ PLAYWRIGHT_BASE_URL=http://localhost:3101 pnpm test:e2e
 
 ## Some words on nextjs caching internals
 
-Nextjs will use different caching objects for different pages and api routes. Currently supported are kind: APP_ROUTE and APP_PAGE.
+Next.js uses different cache entry kinds. This handler supports `APP_PAGE`, `APP_ROUTE`, `FETCH`, `PAGES`, and `REDIRECT` (plus Pages Router `notFound` stored as a null value).
 
-app/<segment>/route.ts files will request using the APP_ROUTE kind.
-app/<segment>/page.tsx files will request using the APP_PAGE kind.
-/favicon.ico file will request using the APP_ROUTE kind.
-
-Fetch requests (inside app route or page) will request using the FETCH kind.
+- `app/<segment>/page.tsx` → `APP_PAGE`
+- `app/<segment>/route.ts` (and `/favicon.ico`) → `APP_ROUTE`
+- `fetch()` inside App Router → `FETCH`
+- Pages Router `getStaticProps` → `PAGES` / `REDIRECT`
 
 For details on how these kinds are handled internally (tag maps, deduplication, value transformation), see [ARCHITECTURE.md](./ARCHITECTURE.md).
 

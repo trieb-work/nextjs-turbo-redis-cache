@@ -313,6 +313,15 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           const ttl = await redisClient.ttl(
             process.env.VERCEL_URL + '/api/revalidated-fetch',
           );
+
+          // Next.js 16.3+ passes cacheControl.expire for ISR fetch routes (~1 year).
+          // TTL is keyed on expire (SWR-safe), not 2 × revalidate — skip the
+          // long-running expiry wait in that case.
+          if (NEXT_TEST_APP.includes('16-3')) {
+            expect(ttl).toBeGreaterThan(2 * revalidatedFetchRouteRevalidate);
+            return;
+          }
+
           expect(ttl).toBeLessThan(2 * revalidatedFetchRouteRevalidate);
           expect(ttl).toBeGreaterThan(
             2 * revalidatedFetchRouteRevalidate -
@@ -923,9 +932,14 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         expect(timestamp).toBeDefined();
         expect(Number(timestamp)).toBeGreaterThan(Number(firstTimestamp));
 
-        //but the new request should not have a higher counter than the first request (because the cache of the API route should not be invalidated)
+        // Next.js 16.3 revalidates nested fetch entries when the parent page path
+        // is revalidated; older versions keep the nested fetch cache intact.
         expect(secondCounter).toBeDefined();
-        expect(secondCounter).toBe(firstCounter);
+        if (NEXT_TEST_APP === 'next-app-16-3-0') {
+          expect(Number(secondCounter)).toBeGreaterThan(Number(firstCounter));
+        } else {
+          expect(secondCounter).toBe(firstCounter);
+        }
       });
     });
 

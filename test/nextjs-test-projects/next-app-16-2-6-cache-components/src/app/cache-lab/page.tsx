@@ -70,6 +70,28 @@ export default function CacheLabIndexPage() {
             it into a cached component to show correct boundaries.
           </p>
         </Link>
+
+        <Link
+          className="rounded-lg border p-5 hover:bg-slate-50"
+          href="/cache-lab/use-cache-remote"
+        >
+          <h2 className="text-lg font-medium">use cache: remote</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Exercises <code>cacheHandlers.remote</code> with Redis-backed
+            streams and <code>updateTag</code>.
+          </p>
+        </Link>
+
+        <Link
+          className="rounded-lg border p-5 hover:bg-slate-50"
+          href="/cache-lab/revalidate-durations"
+        >
+          <h2 className="text-lg font-medium">revalidateTag durations</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Deferred tag invalidation via{' '}
+            <code>revalidateTag(tag, {'{ expire }'})</code> and SWR behavior.
+          </p>
+        </Link>
       </section>
 
       <section className="mt-12 rounded-lg border bg-slate-50 p-5">

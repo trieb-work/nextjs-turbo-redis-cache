@@ -1,10 +1,16 @@
 // SyncedMap.ts
 import { Client, redisErrorHandler } from './RedisStringsHandler';
 import { debugVerbose, debug } from './utils/debug';
+import { shouldDeferRedisConnection } from './utils/redisConnection';
 
 type CustomizedSync = {
   withoutRedisHashmap?: boolean;
   withoutSetSync?: boolean;
+  /**
+   * Skip SCAN-based orphan cleanup. Required for maps whose keys are not Redis
+   * string keys (tag manifests). Otherwise startup/resync HDELs every tag.
+   */
+  withoutOrphanCleanup?: boolean;
 };
 
 type SyncedMapOptions = {
@@ -67,6 +73,11 @@ export class SyncedMap<V> {
   }
 
   private async setup() {
+    if (shouldDeferRedisConnection()) {
+      this.setupLockResolve();
+      return;
+    }
+
     let setupPromises: Promise<void>[] = [];
     if (!this.customizedSync?.withoutRedisHashmap) {
       setupPromises.push(this.initialSync());
@@ -109,8 +120,11 @@ export class SyncedMap<V> {
         cursor = remoteItems.cursor;
       } while (cursor !== 0);
 
-      // Clean up keys not in Redis
-      await this.cleanupKeysNotInRedis();
+      // sharedTagsMap keys are cache keys (Redis strings). Tag-manifest maps
+      // use tag names as hash fields — those never appear in SCAN.
+      if (!this.customizedSync?.withoutOrphanCleanup) {
+        await this.cleanupKeysNotInRedis();
+      }
     } catch (error) {
       console.error('Error during initial sync:', error);
       throw error;

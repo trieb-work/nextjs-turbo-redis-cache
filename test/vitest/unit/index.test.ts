@@ -113,6 +113,23 @@ describe('RedisStringsHandler', () => {
       vi.useRealTimers();
     }
   });
+
+  it('skips Redis work in revalidateTag during next build', async () => {
+    vi.stubEnv('NEXT_PHASE', 'phase-production-build');
+    const { default: Handler } = await import(
+      '../../../src/RedisStringsHandler'
+    );
+    const handler = new Handler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'build:',
+      database: 0,
+      redisGetDeduplication: false,
+    });
+    const unlink = (handler as any).client.unlink as ReturnType<typeof vi.fn>;
+
+    await expect(handler.revalidateTag('posts')).resolves.toBeUndefined();
+    expect(unlink).not.toHaveBeenCalled();
+  });
 });
 
 describe('Public exports', () => {
