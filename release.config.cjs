@@ -1,31 +1,12 @@
 module.exports = {
   branches: [
-    { name: 'main' }, // Stable releases
-    { name: 'beta', prerelease: true }, // Beta releases
+    { name: 'main' },
+    { name: 'beta', prerelease: true },
   ],
   plugins: [
-    '@semantic-release/commit-analyzer', // Analyze commits to determine the release type
-    '@semantic-release/release-notes-generator', // Generate release notes
-    '@semantic-release/changelog', // Update changelog
-    [
-      '@semantic-release/npm',
-      {
-        npmPublish: false, // Publish to NPM
-        tag: 'beta', // Publish beta releases under the "beta" tag
-      },
-    ],
-    [
-      '@semantic-release/github',
-      {
-        labels: [],
-      },
-    ],
-    [
-      '@semantic-release/git',
-      {
-        assets: ['package.json', 'pnpm-lock.yaml', 'CHANGELOG.md'],
-        message: 'chore(release): ${nextRelease.version} [skip ci]',
-      },
-    ],
+    '@semantic-release/commit-analyzer',
+    '@semantic-release/release-notes-generator',
+    '@semantic-release/npm',
+    '@semantic-release/github',
   ],
 };
