@@ -89,36 +89,34 @@ export class SyncedMap<V> {
   }
 
   private async initialSync() {
-    let cursor = 0;
-    const hScanOptions = { COUNT: this.querySize };
+    // Redis cursors are opaque uint64 strings. redis@4's hScan() coerces them
+    // through Number(), which loses precision above 2^53-1 and can loop forever
+    // on large keyspaces (see issue #97). Bypass with sendCommand until redis ^5,
+    // where SCAN/HSCAN keep cursor as a string.
+    let cursor = '0';
 
     try {
       do {
-        const remoteItems = await redisErrorHandler(
-          'SyncedMap.initialSync(), operation: hScan ' +
-            this.syncChannel +
-            ' ' +
+        const [nextCursor, tuples] = (await redisErrorHandler(
+          'SyncedMap.initialSync(), operation: HSCAN ' +
             this.keyPrefix +
-            ' ' +
-            this.redisKey +
-            ' ' +
-            cursor +
-            ' ' +
-            this.querySize,
-          this.client.hScan(
+            this.redisKey,
+          this.client.sendCommand([
+            'HSCAN',
             this.keyPrefix + this.redisKey,
             cursor,
-            hScanOptions,
-          ),
-        );
-        for (const { field, value } of remoteItems.tuples) {
+            'COUNT',
+            String(this.querySize),
+          ]),
+        )) as [string, string[]];
+        for (let i = 0; i < tuples.length; i += 2) {
+          const field = tuples[i];
           if (this.filterKeys(field)) {
-            const parsedValue = JSON.parse(value);
-            this.map.set(field, parsedValue);
+            this.map.set(field, JSON.parse(tuples[i + 1]));
           }
         }
-        cursor = remoteItems.cursor;
-      } while (cursor !== 0);
+        cursor = nextCursor;
+      } while (cursor !== '0');
 
       // sharedTagsMap keys are cache keys (Redis strings). Tag-manifest maps
       // use tag names as hash fields — those never appear in SCAN.
@@ -132,19 +130,26 @@ export class SyncedMap<V> {
   }
 
   private async cleanupKeysNotInRedis() {
-    let cursor = 0;
-    const scanOptions = { COUNT: this.querySize, MATCH: `${this.keyPrefix}*` };
+    // Same uint64 cursor issue as initialSync(); sendCommand until redis ^5.
+    let cursor = '0';
     let remoteKeys: string[] = [];
     try {
       do {
-        const remoteKeysPortion = await redisErrorHandler(
-          'SyncedMap.cleanupKeysNotInRedis(), operation: scan ' +
+        const [nextCursor, keys] = (await redisErrorHandler(
+          'SyncedMap.cleanupKeysNotInRedis(), operation: SCAN ' +
             this.keyPrefix,
-          this.client.scan(cursor, scanOptions),
-        );
-        remoteKeys = remoteKeys.concat(remoteKeysPortion.keys);
-        cursor = remoteKeysPortion.cursor;
-      } while (cursor !== 0);
+          this.client.sendCommand([
+            'SCAN',
+            cursor,
+            'MATCH',
+            `${this.keyPrefix}*`,
+            'COUNT',
+            String(this.querySize),
+          ]),
+        )) as [string, string[]];
+        remoteKeys = remoteKeys.concat(keys);
+        cursor = nextCursor;
+      } while (cursor !== '0');
 
       const remoteKeysSet = new Set(
         remoteKeys.map((key) => key.substring(this.keyPrefix.length)),
