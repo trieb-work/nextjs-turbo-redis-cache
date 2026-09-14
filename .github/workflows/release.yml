@@ -26,10 +26,12 @@ jobs:
       - name: Install pnpm
         run: corepack enable
 
+      # Node 22 ships npm 10.x; OIDC trusted publishing needs npm >=11.5.1 at publish time.
+      # Keep CI on 22; only the release job needs the newer runtime for @semantic-release/npm.
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Install dependencies
