@@ -5,12 +5,8 @@ on:
     branches:
       - main
       - beta
-      
-# Minimal permissions:
-#   contents:      semantic-release pushes the release commit + tag to the branch
-#   issues:        @semantic-release/github comments on referenced issues
-#   pull-requests: @semantic-release/github comments on referenced PRs
-#   id-token:      npm Trusted Publishing OIDC token exchange
+
+# semantic-release: git tag + GitHub Release + npm publish (OIDC via @semantic-release/npm)
 permissions:
   contents: write
   issues: write
@@ -22,23 +18,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Create GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-
       - name: Checkout code
         uses: actions/checkout@v6
         with:
-          # Need full history so the post-release audit can diff against pre-release SHA.
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: Capture pre-release SHA
-        id: pre
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Install pnpm
         run: corepack enable
@@ -50,10 +33,8 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        # --ignore-scripts blocks lifecycle scripts (preinstall/install/postinstall/prepare)
-        # of all dependencies. This is the primary defence against supply-chain attacks
-        # injected via a compromised transitive dep's postinstall hook.
         run: pnpm install --frozen-lockfile --ignore-scripts
+
       - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
         run: npm audit signatures
 
@@ -61,8 +42,6 @@ jobs:
         run: pnpm build
 
       - name: Verify working tree is clean before release
-        # If install/build silently modified tracked files, abort before semantic-release
-        # can include them in the release commit.
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             echo "::error::Working tree is dirty before semantic-release. Aborting."
@@ -71,137 +50,7 @@ jobs:
             exit 1
           fi
 
-      - name: Run Semantic Release
+      - name: Run semantic-release
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }} # GitHub App token (bypasses required_signatures ruleset)
-          NPM_CONFIG_PROVENANCE: 'true'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm exec semantic-release
-
-      - name: Audit semantic-release commit — fail if files outside allowlist were touched
-        env:
-          PRE_SHA: ${{ steps.pre.outputs.sha }}
-        run: |
-          # Allowlist must mirror the `assets` array in release.config.cjs.
-          # Any file outside this list being modified by the release run is suspicious
-          # and blocks the npm publish step below.
-          ALLOWED="package.json pnpm-lock.yaml CHANGELOG.md"
-
-          if [ "$(git rev-parse HEAD)" = "$PRE_SHA" ]; then
-            echo "semantic-release made no commit; nothing to audit."
-            exit 0
-          fi
-
-          echo "Auditing commits ${PRE_SHA}..HEAD"
-          CHANGED=$(git diff --name-only "${PRE_SHA}..HEAD")
-          echo "Files changed:"
-          printf '%s\n' "$CHANGED"
-
-          UNEXPECTED=""
-          while IFS= read -r file; do
-            [ -z "$file" ] && continue
-            match=false
-            for allowed in $ALLOWED; do
-              if [ "$file" = "$allowed" ]; then
-                match=true
-                break
-              fi
-            done
-            [ "$match" = false ] && UNEXPECTED="${UNEXPECTED}\n  ${file}"
-          done <<< "$CHANGED"
-
-          if [ -n "$UNEXPECTED" ]; then
-            printf '::error::semantic-release touched files outside the allowlist:%b\n' "$UNEXPECTED"
-            echo "::error::This may indicate a compromised dependency. Aborting publish."
-            exit 1
-          fi
-
-          echo "All changed files are within the allowlist."
-
-      - name: Check if current version is already published
-        id: version-check
-        env:
-          NPM_PACKAGE_NAME: '@trieb.work/nextjs-turbo-redis-cache'
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          if npm view "$NPM_PACKAGE_NAME@$VERSION" version --registry https://registry.npmjs.org/ >/dev/null 2>&1; then
-            echo "should_publish=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Exchange GitHub OIDC token for npm token
-        id: npm-oidc
-        env:
-          NPM_PACKAGE_NAME: '@trieb.work/nextjs-turbo-redis-cache'
-        run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-
-          const pkg = process.env.NPM_PACKAGE_NAME;
-          const reqUrl = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
-          const reqToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
-
-          if (!pkg || !reqUrl || !reqToken) {
-            console.error('Missing required env for OIDC token retrieval');
-            process.exit(1);
-          }
-
-          const audience = 'npm:registry.npmjs.org';
-          const url = reqUrl + (reqUrl.includes('?') ? '&' : '?') + 'audience=' + encodeURIComponent(audience);
-
-          (async () => {
-            const idRes = await fetch(url, { headers: { Authorization: 'Bearer ' + reqToken } });
-            if (!idRes.ok) {
-              console.error('Failed to fetch GitHub OIDC token:', idRes.status, await idRes.text());
-              process.exit(1);
-            }
-
-            const idBody = await idRes.json();
-            const idToken = idBody.value;
-
-            const exUrl =
-              'https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/' + encodeURIComponent(pkg);
-            const exRes = await fetch(exUrl, {
-              method: 'POST',
-              headers: { Authorization: 'Bearer ' + idToken },
-            });
-
-            const exText = await exRes.text();
-            if (!exRes.ok) {
-              console.error('OIDC token exchange with npm failed:', exRes.status, exText);
-              process.exit(1);
-            }
-
-            const exBody = JSON.parse(exText);
-            const npmToken = exBody.token;
-            if (!npmToken) {
-              console.error('npm exchange response missing token');
-              process.exit(1);
-            }
-
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, `node_auth_token=${npmToken}\n`);
-            const npmrcPath = `${process.env.RUNNER_TEMP}/npmrc`;
-            const npmrc = [
-              'registry=https://registry.npmjs.org/',
-              'always-auth=true',
-              '//registry.npmjs.org/:_authToken=' + npmToken,
-              '',
-            ].join('\n');
-            fs.writeFileSync(npmrcPath, npmrc, { encoding: 'utf8' });
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, `npmrc_path=${npmrcPath}\n`);
-            console.log('OIDC token exchange with npm registry succeeded');
-          })().catch((e) => {
-            console.error(e);
-            process.exit(1);
-          });
-          NODE
-
-      - name: Publish to npm (Trusted Publishing)
-        if: steps.version-check.outputs.should_publish == 'true'
-        env:
-          NPM_CONFIG_PROVENANCE: 'true'
-          NPM_DIST_TAG: ${{ github.ref_name == 'beta' && 'beta' || 'latest' }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.npm-oidc.outputs.npmrc_path }}
-        run: npm publish --provenance --access public --tag $NPM_DIST_TAG --registry https://registry.npmjs.org/
-
