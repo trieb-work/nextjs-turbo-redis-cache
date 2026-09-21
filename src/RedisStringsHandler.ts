@@ -58,7 +58,7 @@ export type SetCacheValue =
       html: string;
       rscData: Buffer;
       segmentData: unknown;
-      postboned: unknown;
+      postponed: unknown;
     }
   | {
       kind: 'APP_ROUTE';
@@ -657,6 +657,23 @@ export default class RedisStringsHandler {
             // Return null to indicate no valid cache entry was found
             return null;
           }
+        }
+      }
+
+      // Match Next's FileSystemCache: fallback and postponed PPR entries do not
+      // expose a complete Flight payload via rscData on read.
+      const value = cacheEntry.value as SetCacheValue;
+      if (ctx.kind === 'APP_PAGE' && value?.kind === 'APP_PAGE') {
+        const legacy = value as SetCacheValue & { postboned?: unknown };
+        const postponedState = legacy.postponed ?? legacy.postboned;
+        if (
+          ctx.isFallback ||
+          (ctx.isRoutePPREnabled && postponedState != null)
+        ) {
+          return {
+            ...cacheEntry,
+            value: { ...value, rscData: undefined },
+          };
         }
       }
 

@@ -277,7 +277,7 @@ describe('RedisStringsHandler Pages Router kinds', () => {
             'x-next-cache-tags': '_N_T_/layout,_N_T_/app-page',
           },
           segmentData: undefined,
-          postboned: undefined,
+          postponed: undefined,
         },
         { ...baseCtx, cacheControl: { revalidate: 60, expire: undefined } },
       );
