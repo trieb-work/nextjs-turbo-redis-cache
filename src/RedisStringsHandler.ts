@@ -663,9 +663,13 @@ export default class RedisStringsHandler {
       // Match Next's FileSystemCache: fallback and postponed PPR entries do not
       // expose a complete Flight payload via rscData on read.
       const value = cacheEntry.value as SetCacheValue;
-      if (ctx.kind === 'APP_PAGE' && value?.kind === 'APP_PAGE') {
-        const legacy = value as SetCacheValue & { postboned?: unknown };
-        const postponedState = legacy.postponed ?? legacy.postboned;
+      if (
+        ctx.kind === 'APP_PAGE' &&
+        value != null &&
+        value.kind === 'APP_PAGE'
+      ) {
+        const postponedState =
+          value.postponed ?? (value as { postboned?: unknown }).postboned;
         if (
           ctx.isFallback ||
           (ctx.isRoutePPREnabled && postponedState != null)
