@@ -2,6 +2,7 @@
  * Regression contract for #102: RedisStringsHandler.get() must match Next.js
  * FileSystemCache read semantics for postponed / fallback APP_PAGE entries.
  */
+import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,11 +11,34 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import RedisStringsHandler from '../../../src/RedisStringsHandler';
 
-const nextPkgRoot = path.join(
+const NEXT_FIXTURE_APP = path.join(
   __dirname,
-  '../../nextjs-test-projects/next-app-16-3-0/node_modules/next',
+  '../../nextjs-test-projects/next-app-16-3-0',
 );
-const requireNext = createRequire(path.join(nextPkgRoot, 'package.json'));
+const nextPkgJson = path.join(
+  NEXT_FIXTURE_APP,
+  'node_modules/next/package.json',
+);
+
+function loadNextFixtureRequire() {
+  if (!fsSync.existsSync(nextPkgJson)) {
+    throw new Error(
+      `Next.js 16.3 contract fixture is not installed (${nextPkgJson}). ` +
+        'Run: cd test/nextjs-test-projects/next-app-16-3-0 && pnpm install',
+    );
+  }
+  const { version } = JSON.parse(fsSync.readFileSync(nextPkgJson, 'utf8')) as {
+    version: string;
+  };
+  if (!version.startsWith('16.3.')) {
+    throw new Error(
+      `Next.js contract tests require 16.3.x from the fixture app, got ${version} at ${nextPkgJson}`,
+    );
+  }
+  return createRequire(nextPkgJson);
+}
+
+const requireNext = loadNextFixtureRequire();
 const FileSystemCache = requireNext(
   'next/dist/server/lib/incremental-cache/file-system-cache',
 ).default as new (ctx: {
