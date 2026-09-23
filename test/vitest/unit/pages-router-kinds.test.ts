@@ -29,6 +29,13 @@ vi.mock('redis', () => {
         async (_opts: unknown, key: string) =>
           hoisted.store.get(key)?.value ?? null,
       ),
+      sendCommand: vi.fn(async (args: string[]) => {
+        const [command] = args;
+        if (command === 'HSCAN' || command === 'SCAN') {
+          return ['0', []];
+        }
+        throw new Error(`Unexpected sendCommand: ${command}`);
+      }),
       hScan: vi.fn(async () => ({ cursor: 0, tuples: [] })),
       scan: vi.fn(async () => ({ cursor: 0, keys: [] })),
       hSet: vi.fn(async () => 1),
@@ -277,7 +284,7 @@ describe('RedisStringsHandler Pages Router kinds', () => {
             'x-next-cache-tags': '_N_T_/layout,_N_T_/app-page',
           },
           segmentData: undefined,
-          postboned: undefined,
+          postponed: undefined,
         },
         { ...baseCtx, cacheControl: { revalidate: 60, expire: undefined } },
       );
