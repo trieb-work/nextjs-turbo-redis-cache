@@ -28,13 +28,30 @@ test/
 
 Fast tests with no external dependencies. Mocks are used where needed.
 
-| File                                      | What it tests                                                                                  |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `serializer.test.ts`                      | `CacheValueSerializer` interface, JSON round-trips, singleton stability                        |
-| `index.test.ts`                           | `RedisStringsHandler` constructor options, default behaviors                                   |
-| `utils/prefix.test.ts`                    | `resolveKeyPrefix` logic (BUILD_ID fallback, env var precedence)                               |
-| `reconnect-socket-already-opened.test.ts` | Regression: reconnect logic doesn't call `connect()` when socket is already open               |
-| `pages-router-kinds.test.ts`              | Pages Router cache kinds (`PAGES`, `REDIRECT`, `null`/notFound), implicit tags, TTL derivation |
+| File                                      | What it tests                                                                                                    |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `serializer.test.ts`                      | `CacheValueSerializer` interface, JSON round-trips, singleton stability                                          |
+| `index.test.ts`                           | `RedisStringsHandler` constructor options, default behaviors                                                     |
+| `utils/prefix.test.ts`                    | `resolveKeyPrefix` logic (BUILD_ID fallback, env var precedence)                                                 |
+| `reconnect-socket-already-opened.test.ts` | Regression: reconnect logic doesn't call `connect()` when socket is already open                                 |
+| `pages-router-kinds.test.ts`              | Pages Router cache kinds (`PAGES`, `REDIRECT`, `null`/notFound), implicit tags, TTL derivation                   |
+| `postponed-rsc-read.contract.test.ts`     | #102 regression: `APP_PAGE` `rscData` read normalization matches Next `FileSystemCache` (fallback/postponed PPR) |
+
+**Next.js fixture requirement.** The `FileSystemCache`-backed part of the
+`postponed-rsc-read` contract test compares against the real Next.js cache
+implementation from the `next-app-16-3-0` fixture. That fixture is managed
+separately and is **not** installed by the root `pnpm install`. The suite
+skips itself (and prints the setup command) when the fixture is absent, so the
+rest of the unit suite always runs; to enable it:
+
+```bash
+cd test/nextjs-test-projects/next-app-16-3-0 && pnpm install
+```
+
+The contract pins the Next 16.1-16.3 read behavior (where `FileSystemCache`
+omits `rscData` for fallback and postponed PPR reads). See the test file header
+for the version-coverage rationale. CI installs the fixture before
+`pnpm test:unit:coverage`.
 
 ```bash
 pnpm test:unit          # single run
