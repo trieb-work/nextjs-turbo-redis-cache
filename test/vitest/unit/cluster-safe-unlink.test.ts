@@ -98,4 +98,19 @@ describe('clusterSafeUnlink', () => {
       },
     });
   });
+
+  it('calls onGroupSuccess after a slot group was deleted', async () => {
+    const onGroupSuccess = vi.fn();
+
+    await clusterSafeUnlink(
+      { unlink: vi.fn(async () => 2) },
+      ['cache:{tenant}:a', 'cache:{tenant}:b'],
+      { onGroupSuccess },
+    );
+
+    expect(onGroupSuccess).toHaveBeenCalledWith([
+      'cache:{tenant}:a',
+      'cache:{tenant}:b',
+    ]);
+  });
 });

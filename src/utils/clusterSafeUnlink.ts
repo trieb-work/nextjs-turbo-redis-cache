@@ -31,6 +31,7 @@ export type ClusterSafeUnlinkResult = {
 
 export type ClusterSafeUnlinkOptions = {
   concurrency?: number;
+  onGroupSuccess?: (keys: string[]) => void | Promise<void>;
 };
 
 export class ClusterSafeUnlinkError extends Error {
@@ -117,6 +118,7 @@ export async function clusterSafeUnlink(
         result.deleted += deleted;
         result.commandCount++;
         result.successfulKeys.push(...groupKeys);
+        await options.onGroupSuccess?.(groupKeys);
       } catch (error) {
         result.commandCount++;
         result.failures.push({ slot, keys: groupKeys, error });

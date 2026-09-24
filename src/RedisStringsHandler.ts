@@ -804,6 +804,7 @@ export default class RedisStringsHandler {
 
       // Setting the tags for the cache entry in the sharedTagsMap (locally stored hashmap synced via redis)
       let setTagsOperation: Promise<void> | undefined;
+      let deleteTagsAfterSet = false;
       const currentTags = this.sharedTagsMap.get(key);
       if (ctx.tags && ctx.tags.length > 0) {
         const currentIsSameAsNew =
@@ -818,7 +819,7 @@ export default class RedisStringsHandler {
           );
         }
       } else if (currentTags && currentTags.length > 0) {
-        setTagsOperation = this.sharedTagsMap.delete(key);
+        deleteTagsAfterSet = true;
       }
 
       debug(
@@ -828,7 +829,12 @@ export default class RedisStringsHandler {
         ctx.tags as string[],
       );
 
-      await Promise.all([setOperation, setTagsOperation]);
+      if (deleteTagsAfterSet) {
+        await setOperation;
+        await this.sharedTagsMap.delete(key);
+      } else {
+        await Promise.all([setOperation, setTagsOperation]);
+      }
     } catch (error) {
       console.error(
         'RedisStringsHandler.set() Error occurred while setting cache entry. The original error was:',
@@ -945,6 +951,16 @@ export default class RedisStringsHandler {
           ' key(s)',
         clusterSafeUnlink(this.client, fullRedisKeys, {
           concurrency: this.revalidateTagDeleteConcurrency,
+          onGroupSuccess: (deletedFullRedisKeys) => {
+            if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
+              for (const fullRedisKey of deletedFullRedisKeys) {
+                const redisKey = redisKeyByFullRedisKey.get(fullRedisKey);
+                if (redisKey) {
+                  this.inMemoryDeduplicationCache.delete(redisKey);
+                }
+              }
+            }
+          },
         }).then((result) => {
           for (const fullRedisKey of result.successfulKeys) {
             const redisKey = redisKeyByFullRedisKey.get(fullRedisKey);

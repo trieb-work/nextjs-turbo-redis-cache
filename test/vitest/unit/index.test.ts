@@ -195,7 +195,7 @@ describe('RedisStringsHandler', () => {
 
     await handler.revalidateTag('tag-1');
 
-    expect(events).toEqual(['dedup-delete', 'unlink']);
+    expect(events).toEqual(['dedup-delete', 'unlink', 'dedup-delete']);
   });
 
   it('removes stale tag metadata when setting an untagged replacement', async () => {
@@ -233,6 +233,51 @@ describe('RedisStringsHandler', () => {
     );
 
     expect(deleteTags).toHaveBeenCalledWith('item:a');
+  });
+
+  it('keeps stale tag metadata when an untagged replacement write fails', async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'untagged:',
+      database: 0,
+      redisGetDeduplication: false,
+    });
+    const set = (handler as any).client.set as ReturnType<typeof vi.fn>;
+    set.mockRejectedValueOnce(new Error('write failed'));
+    const deleteTags = vi.fn(async () => undefined);
+    (handler as any).sharedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      get: vi.fn(() => ['old-tag']),
+      delete: deleteTags,
+    };
+
+    await expect(
+      handler.set(
+        'item:a',
+        {
+          kind: 'FETCH',
+          data: {
+            headers: {},
+            body: '',
+            status: 200,
+            url: 'https://example.test/cache',
+          },
+          revalidate: 60,
+        },
+        {
+          isRoutePPREnabled: false,
+          isFallback: false,
+          tags: [],
+          cacheControl: { revalidate: 60, expire: 120 },
+        },
+      ),
+    ).rejects.toThrow('write failed');
+
+    expect(deleteTags).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
   });
 
   it('keeps tag metadata for keys whose Redis delete failed', async () => {
