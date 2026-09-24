@@ -198,6 +198,42 @@ describe('RedisStringsHandler', () => {
     expect(events).toEqual(['dedup-delete', 'unlink', 'dedup-delete']);
   });
 
+  it('propagates local read-cache deletion failures after unlink succeeds', async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'cluster-safe:',
+      database: 0,
+      redisGetDeduplication: true,
+      inMemoryCachingTime: 1_000,
+    });
+
+    (handler as any).client.unlink.mockResolvedValue(1);
+    (handler as any).sharedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      entries: function* () {
+        yield ['item:a', ['tag-1']];
+      },
+      delete: vi.fn(async () => undefined),
+    };
+    (handler as any).revalidatedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+    };
+    (handler as any).inMemoryDeduplicationCache = {
+      delete: vi
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('dedup delete failed')),
+    };
+
+    await expect(handler.revalidateTag('tag-1')).rejects.toMatchObject({
+      name: 'ClusterSafeUnlinkError',
+    });
+    consoleErrorSpy.mockRestore();
+  });
+
   it('removes stale tag metadata when setting an untagged replacement', async () => {
     const handler = new RedisStringsHandler({
       redisUrl: 'redis://localhost:6379',
@@ -233,6 +269,63 @@ describe('RedisStringsHandler', () => {
     );
 
     expect(deleteTags).toHaveBeenCalledWith('item:a');
+  });
+
+  it('keeps a concurrent tagged replacement discoverable by its new tag', async () => {
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'concurrent:',
+      database: 0,
+      redisGetDeduplication: false,
+    });
+    const deleteTags = vi.fn(async () => undefined);
+    const sharedTags = new Map<string, string[]>([['item:a', ['old-tag']]]);
+    let firstGet = true;
+    (handler as any).sharedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      get: vi.fn((key: string) => {
+        if (firstGet) {
+          firstGet = false;
+          return ['old-tag'];
+        }
+        return sharedTags.get(key);
+      }),
+      delete: deleteTags,
+      entries: () => sharedTags.entries(),
+    };
+
+    const set = (handler as any).client.set as ReturnType<typeof vi.fn>;
+    set.mockImplementation(async () => {
+      sharedTags.set('item:a', ['new-tag']);
+      return 'OK';
+    });
+
+    await handler.set(
+      'item:a',
+      {
+        kind: 'FETCH',
+        data: {
+          headers: {},
+          body: '',
+          status: 200,
+          url: 'https://example.test/cache',
+        },
+        revalidate: 60,
+      },
+      {
+        isRoutePPREnabled: false,
+        isFallback: false,
+        tags: [],
+        cacheControl: { revalidate: 60, expire: 120 },
+      },
+    );
+
+    expect(deleteTags).not.toHaveBeenCalled();
+
+    const unlink = (handler as any).client.unlink as ReturnType<typeof vi.fn>;
+    await handler.revalidateTag('new-tag');
+
+    expect(unlink).toHaveBeenCalledWith('concurrent:item:a');
   });
 
   it('keeps stale tag metadata when an untagged replacement write fails', async () => {

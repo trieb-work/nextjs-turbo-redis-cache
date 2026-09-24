@@ -831,7 +831,17 @@ export default class RedisStringsHandler {
 
       if (deleteTagsAfterSet) {
         await setOperation;
-        await this.sharedTagsMap.delete(key);
+        const latestTags = this.sharedTagsMap.get(key);
+        const tagsAreStillUnchanged =
+          latestTags !== undefined &&
+          currentTags !== undefined &&
+          latestTags.length === currentTags.length &&
+          latestTags.every((tag) => currentTags.includes(tag)) &&
+          currentTags.every((tag) => latestTags.includes(tag));
+
+        if (tagsAreStillUnchanged) {
+          await this.sharedTagsMap.delete(key);
+        }
       } else {
         await Promise.all([setOperation, setTagsOperation]);
       }
@@ -938,9 +948,9 @@ export default class RedisStringsHandler {
       // slot-grouped deletes, some Redis keys can be gone while other slots are
       // still pending; clearing first prevents stale local reads in that window.
       if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
-        for (const key of redisKeys) {
-          this.inMemoryDeduplicationCache.delete(key);
-        }
+        await Promise.all(
+          redisKeys.map((key) => this.inMemoryDeduplicationCache.delete(key)),
+        );
       }
 
       const deleteKeysOperation = redisErrorHandler(
@@ -951,14 +961,16 @@ export default class RedisStringsHandler {
           ' key(s)',
         clusterSafeUnlink(this.client, fullRedisKeys, {
           concurrency: this.revalidateTagDeleteConcurrency,
-          onGroupSuccess: (deletedFullRedisKeys) => {
+          onGroupSuccess: async (deletedFullRedisKeys) => {
             if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
-              for (const fullRedisKey of deletedFullRedisKeys) {
-                const redisKey = redisKeyByFullRedisKey.get(fullRedisKey);
-                if (redisKey) {
-                  this.inMemoryDeduplicationCache.delete(redisKey);
-                }
-              }
+              await Promise.all(
+                deletedFullRedisKeys.map((fullRedisKey) => {
+                  const redisKey = redisKeyByFullRedisKey.get(fullRedisKey);
+                  return redisKey
+                    ? this.inMemoryDeduplicationCache.delete(redisKey)
+                    : undefined;
+                }),
+              );
             }
           },
         }).then((result) => {
