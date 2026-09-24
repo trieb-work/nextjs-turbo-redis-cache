@@ -965,10 +965,12 @@ export default class RedisStringsHandler {
             }
           }
 
-          // delete entries from shared tags map after their Redis values were
-          // removed. On partial Redis failures, failed keys keep their tag
-          // metadata so a later revalidateTag can retry them.
-          await this.sharedTagsMap.delete(Array.from(successfulRedisKeys));
+          // Do not delete sharedTagsMap entries here. A fresh set() can write a
+          // replacement value and tag association immediately after UNLINK; an
+          // unconditional HDEL would remove that fresh association. Stale tag
+          // metadata is harmless for correctness and is removed by SyncedMap's
+          // periodic orphan cleanup, which compares the tag hash against live
+          // Redis keys.
         }
       }
 

@@ -159,10 +159,7 @@ describe('RedisStringsHandler', () => {
       ['cluster-safe:item:a'],
       ['cluster-safe:item:b'],
     ]);
-    expect((handler as any).sharedTagsMap.delete).toHaveBeenCalledWith([
-      'item:a',
-      'item:b',
-    ]);
+    expect((handler as any).sharedTagsMap.delete).not.toHaveBeenCalled();
   });
 
   it('keeps tag metadata for keys whose Redis delete failed', async () => {
@@ -200,8 +197,7 @@ describe('RedisStringsHandler', () => {
       name: 'ClusterSafeUnlinkError',
     });
 
-    expect(deleteFromSharedTags).toHaveBeenCalledWith(['item:a']);
-    expect(deleteFromSharedTags).not.toHaveBeenCalledWith(['item:b']);
+    expect(deleteFromSharedTags).not.toHaveBeenCalled();
     consoleErrorSpy.mockRestore();
   });
 });
