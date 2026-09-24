@@ -5,6 +5,10 @@ import { debug } from './utils/debug';
 import { CacheValueSerializer, jsonCacheValueSerializer } from './serializer';
 import { resolveCacheEntryTtlSeconds } from './utils/cacheTtl';
 import { shouldDeferRedisConnection } from './utils/redisConnection';
+import {
+  clusterSafeUnlink,
+  ClusterSafeUnlinkError,
+} from './utils/clusterSafeUnlink';
 
 export type CommandOptions = ReturnType<typeof commandOptions>;
 export type Client = ReturnType<typeof createClient>;
@@ -185,6 +189,12 @@ export type CreateRedisStringsHandlerOptions = {
    * @default 0 (0 means no error threshold)
    */
   killContainerOnErrorThreshold?: number;
+  /** Maximum number of Redis hash slot groups deleted concurrently during tag invalidation.
+   *  Keeps Valkey/Redis cluster invalidation cluster-safe without creating unbounded
+   *  command bursts for high-cardinality tags.
+   * @default 16
+   */
+  revalidateTagDeleteConcurrency?: number;
   /** Additional Redis client socket options
    * @example { tls: true, rejectUnauthorized: false }
    */
@@ -265,6 +275,7 @@ export default class RedisStringsHandler {
   private killContainerOnErrorThreshold: number;
   private valueSerializer: CacheValueSerializer;
   private redisConnectionDeferred: boolean;
+  private revalidateTagDeleteConcurrency: number;
 
   constructor({
     redisUrl = process.env.REDIS_URL
@@ -291,6 +302,7 @@ export default class RedisStringsHandler {
       .KILL_CONTAINER_ON_ERROR_THRESHOLD
       ? (Number.parseInt(process.env.KILL_CONTAINER_ON_ERROR_THRESHOLD) ?? 0)
       : 0,
+    revalidateTagDeleteConcurrency = 16,
     socketOptions,
     clientOptions,
     valueSerializer = jsonCacheValueSerializer,
@@ -302,6 +314,10 @@ export default class RedisStringsHandler {
       this.defaultStaleAge = defaultStaleAge;
       this.estimateExpireAge = estimateExpireAge;
       this.killContainerOnErrorThreshold = killContainerOnErrorThreshold;
+      this.revalidateTagDeleteConcurrency = Math.max(
+        1,
+        Math.floor(revalidateTagDeleteConcurrency),
+      );
       this.getTimeoutMs = getTimeoutMs;
       this.valueSerializer = valueSerializer;
       this.redisConnectionDeferred = shouldDeferRedisConnection();
@@ -895,29 +911,67 @@ export default class RedisStringsHandler {
         return;
       }
 
-      // prepare deletion of all keys in redis that are related to this tag
+      // prepare deletion of all keys in redis that are related to this tag.
+      // Redis cluster mode rejects one UNLINK with keys from different hash
+      // slots (CROSSSLOT). Group by slot so each command stays cluster-safe,
+      // and cap parallelism so high-cardinality tags do not create an
+      // unbounded command burst.
       const redisKeys = Array.from(keysToDelete);
       const fullRedisKeys = redisKeys.map((key) => this.keyPrefix + key);
+      const redisKeyByFullRedisKey = new Map(
+        fullRedisKeys.map((fullRedisKey, index) => [
+          fullRedisKey,
+          redisKeys[index]!,
+        ]),
+      );
+      const successfulRedisKeys = new Set<string>();
       const deleteKeysOperation = redisErrorHandler(
-        'RedisStringsHandler.revalidateTag(), operation: unlink ' +
+        'RedisStringsHandler.revalidateTag(), operation: cluster-safe unlink ' +
           this.keyPrefix +
           ' ' +
-          fullRedisKeys,
-        this.client.unlink(fullRedisKeys),
-      );
+          fullRedisKeys.length +
+          ' key(s)',
+        clusterSafeUnlink(this.client, fullRedisKeys, {
+          concurrency: this.revalidateTagDeleteConcurrency,
+        }).then((result) => {
+          for (const fullRedisKey of result.successfulKeys) {
+            const redisKey = redisKeyByFullRedisKey.get(fullRedisKey);
+            if (redisKey) {
+              successfulRedisKeys.add(redisKey);
+            }
+          }
+          return result;
+        }),
+      ).catch((error) => {
+        if (error instanceof ClusterSafeUnlinkError) {
+          for (const fullRedisKey of error.result.successfulKeys) {
+            const redisKey = redisKeyByFullRedisKey.get(fullRedisKey);
+            if (redisKey) {
+              successfulRedisKeys.add(redisKey);
+            }
+          }
+        }
+        throw error;
+      });
 
-      // also delete entries from in-memory deduplication cache if they get revalidated
-      if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
-        for (const key of keysToDelete) {
-          this.inMemoryDeduplicationCache.delete(key);
+      try {
+        await deleteKeysOperation;
+      } finally {
+        if (successfulRedisKeys.size > 0) {
+          // also delete entries from in-memory deduplication cache if they get revalidated
+          if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
+            for (const key of successfulRedisKeys) {
+              this.inMemoryDeduplicationCache.delete(key);
+            }
+          }
+
+          // delete entries from shared tags map after their Redis values were
+          // removed. On partial Redis failures, failed keys keep their tag
+          // metadata so a later revalidateTag can retry them.
+          await this.sharedTagsMap.delete(Array.from(successfulRedisKeys));
         }
       }
 
-      // prepare deletion of entries from shared tags map if they get revalidated so that the map will not grow indefinitely
-      const deleteTagsOperation = this.sharedTagsMap.delete(redisKeys);
-
-      // execute keys and tag maps deletion
-      await Promise.all([deleteKeysOperation, deleteTagsOperation]);
       debug(
         'red',
         'RedisStringsHandler.revalidateTag() finished delete operations',

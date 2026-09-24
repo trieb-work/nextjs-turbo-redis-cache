@@ -130,6 +130,80 @@ describe('RedisStringsHandler', () => {
     await expect(handler.revalidateTag('posts')).resolves.toBeUndefined();
     expect(unlink).not.toHaveBeenCalled();
   });
+
+  it('does not send different hash slots in one UNLINK during tag invalidation', async () => {
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'cluster-safe:',
+      database: 0,
+      redisGetDeduplication: false,
+    });
+
+    const unlink = (handler as any).client.unlink as ReturnType<typeof vi.fn>;
+    (handler as any).sharedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      entries: function* () {
+        yield ['item:a', ['tag-1']];
+        yield ['item:b', ['tag-1']];
+      },
+      delete: vi.fn(async () => undefined),
+    };
+    (handler as any).revalidatedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+    };
+
+    await handler.revalidateTag('tag-1');
+
+    expect(unlink).toHaveBeenCalledTimes(2);
+    expect(unlink.mock.calls).toEqual([
+      ['cluster-safe:item:a'],
+      ['cluster-safe:item:b'],
+    ]);
+    expect((handler as any).sharedTagsMap.delete).toHaveBeenCalledWith([
+      'item:a',
+      'item:b',
+    ]);
+  });
+
+  it('keeps tag metadata for keys whose Redis delete failed', async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'partial:',
+      database: 0,
+      redisGetDeduplication: false,
+    });
+
+    const unlink = (handler as any).client.unlink as ReturnType<typeof vi.fn>;
+    unlink.mockImplementation(async (key: string | string[]) => {
+      if (key === 'partial:item:b') {
+        throw new Error('delete failed');
+      }
+      return 1;
+    });
+    const deleteFromSharedTags = vi.fn(async () => undefined);
+    (handler as any).sharedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      entries: function* () {
+        yield ['item:a', ['tag-1']];
+        yield ['item:b', ['tag-1']];
+      },
+      delete: deleteFromSharedTags,
+    };
+    (handler as any).revalidatedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+    };
+
+    await expect(handler.revalidateTag('tag-1')).rejects.toMatchObject({
+      name: 'ClusterSafeUnlinkError',
+    });
+
+    expect(deleteFromSharedTags).toHaveBeenCalledWith(['item:a']);
+    expect(deleteFromSharedTags).not.toHaveBeenCalledWith(['item:b']);
+    consoleErrorSpy.mockRestore();
+  });
 });
 
 describe('Public exports', () => {
