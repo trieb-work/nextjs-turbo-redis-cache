@@ -162,6 +162,79 @@ describe('RedisStringsHandler', () => {
     expect((handler as any).sharedTagsMap.delete).not.toHaveBeenCalled();
   });
 
+  it('clears local read cache before unlinking tagged Redis keys', async () => {
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'cluster-safe:',
+      database: 0,
+      redisGetDeduplication: true,
+      inMemoryCachingTime: 1_000,
+    });
+
+    const events: string[] = [];
+    const unlink = (handler as any).client.unlink as ReturnType<typeof vi.fn>;
+    unlink.mockImplementation(async () => {
+      events.push('unlink');
+      return 1;
+    });
+    (handler as any).sharedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      entries: function* () {
+        yield ['item:a', ['tag-1']];
+      },
+      delete: vi.fn(async () => undefined),
+    };
+    (handler as any).revalidatedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+    };
+    (handler as any).inMemoryDeduplicationCache = {
+      delete: vi.fn(() => {
+        events.push('dedup-delete');
+      }),
+    };
+
+    await handler.revalidateTag('tag-1');
+
+    expect(events).toEqual(['dedup-delete', 'unlink']);
+  });
+
+  it('removes stale tag metadata when setting an untagged replacement', async () => {
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'untagged:',
+      database: 0,
+      redisGetDeduplication: false,
+    });
+    const deleteTags = vi.fn(async () => undefined);
+    (handler as any).sharedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      get: vi.fn(() => ['old-tag']),
+      delete: deleteTags,
+    };
+
+    await handler.set(
+      'item:a',
+      {
+        kind: 'FETCH',
+        data: {
+          headers: {},
+          body: '',
+          status: 200,
+          url: 'https://example.test/cache',
+        },
+        revalidate: 60,
+      },
+      {
+        isRoutePPREnabled: false,
+        isFallback: false,
+        tags: [],
+        cacheControl: { revalidate: 60, expire: 120 },
+      },
+    );
+
+    expect(deleteTags).toHaveBeenCalledWith('item:a');
+  });
+
   it('keeps tag metadata for keys whose Redis delete failed', async () => {
     const consoleErrorSpy = vi
       .spyOn(console, 'error')

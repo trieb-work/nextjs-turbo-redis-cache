@@ -804,8 +804,8 @@ export default class RedisStringsHandler {
 
       // Setting the tags for the cache entry in the sharedTagsMap (locally stored hashmap synced via redis)
       let setTagsOperation: Promise<void> | undefined;
+      const currentTags = this.sharedTagsMap.get(key);
       if (ctx.tags && ctx.tags.length > 0) {
-        const currentTags = this.sharedTagsMap.get(key);
         const currentIsSameAsNew =
           currentTags?.length === ctx.tags.length &&
           currentTags.every((v) => ctx.tags!.includes(v)) &&
@@ -817,6 +817,8 @@ export default class RedisStringsHandler {
             structuredClone(ctx.tags) as string[],
           );
         }
+      } else if (currentTags && currentTags.length > 0) {
+        setTagsOperation = this.sharedTagsMap.delete(key);
       }
 
       debug(
@@ -925,6 +927,16 @@ export default class RedisStringsHandler {
         ]),
       );
       const successfulRedisKeys = new Set<string>();
+
+      // Clear local read-through cache before deleting Redis values. With
+      // slot-grouped deletes, some Redis keys can be gone while other slots are
+      // still pending; clearing first prevents stale local reads in that window.
+      if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
+        for (const key of redisKeys) {
+          this.inMemoryDeduplicationCache.delete(key);
+        }
+      }
+
       const deleteKeysOperation = redisErrorHandler(
         'RedisStringsHandler.revalidateTag(), operation: cluster-safe unlink ' +
           this.keyPrefix +
@@ -958,13 +970,6 @@ export default class RedisStringsHandler {
         await deleteKeysOperation;
       } finally {
         if (successfulRedisKeys.size > 0) {
-          // also delete entries from in-memory deduplication cache if they get revalidated
-          if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
-            for (const key of successfulRedisKeys) {
-              this.inMemoryDeduplicationCache.delete(key);
-            }
-          }
-
           // Do not delete sharedTagsMap entries here. A fresh set() can write a
           // replacement value and tag association immediately after UNLINK; an
           // unconditional HDEL would remove that fresh association. Stale tag
