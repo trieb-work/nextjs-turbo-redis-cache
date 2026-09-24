@@ -18,7 +18,7 @@
     "test:unit:watch": "vitest --config vite.config.ts test/vitest/unit",
     "test:unit:coverage": "vitest --run --coverage --config vite.config.ts test/vitest/unit",
     "test:integration": "vitest --run --config vite.config.ts test/vitest/integration/nextjs-cache-handler.integration.test.ts",
-    "test:integration:cluster": "RUN_VALKEY_CLUSTER_TESTS=true vitest --run --config vite.config.ts test/vitest/integration/valkey-cluster-crossslot.integration.test.ts",
+    "test:integration:cluster": "vitest --run --config vitest.valkey-cluster.config.ts",
     "test:integration:build-id-prefix": "vitest --run --config vite.config.ts test/vitest/integration/build-id-prefix.integration.test.ts",
     "test:integration:pages": "vitest --run --config vite.config.ts test/vitest/integration/pages-router.integration.test.ts",
     "test:integration:cache-components": "vitest --run --config vitest.cache-components.config.ts",

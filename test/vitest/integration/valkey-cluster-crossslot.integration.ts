@@ -4,7 +4,6 @@ import { createClient, type RedisClientType } from 'redis';
 import RedisStringsHandler from '../../../src/RedisStringsHandler';
 import { redisClusterKeySlot } from '../../../src/utils/clusterSafeUnlink';
 
-const RUN_CLUSTER_TESTS = process.env.RUN_VALKEY_CLUSTER_TESTS === 'true';
 const CONTAINER_NAME = `valkey-crossslot-${process.pid}`;
 const REDIS_PORT = Number(process.env.VALKEY_CLUSTER_TEST_PORT || 6397);
 const REDIS_URL = `redis://127.0.0.1:${REDIS_PORT}`;
@@ -122,83 +121,80 @@ async function closeHandler(handler: RedisStringsHandler): Promise<void> {
   await h.client?.quit?.();
 }
 
-describe.skipIf(!RUN_CLUSTER_TESTS)(
-  'RedisStringsHandler Valkey cluster tag invalidation',
-  () => {
-    let redis: RedisClientType;
-    let handler: RedisStringsHandler;
+describe('RedisStringsHandler Valkey cluster tag invalidation', () => {
+  let redis: RedisClientType;
+  let handler: RedisStringsHandler;
 
-    beforeAll(async () => {
-      await createDisposableValkeyCluster();
-      redis = createClient({ url: REDIS_URL });
-      await redis.connect();
-      await redis.flushAll();
-      handler = new RedisStringsHandler({
-        redisUrl: REDIS_URL,
-        database: 0,
-        keyPrefix: 'issue-101:',
-        redisGetDeduplication: false,
-        inMemoryCachingTime: 0,
-      });
-    }, 60_000);
-
-    afterAll(async () => {
-      if (handler) {
-        await closeHandler(handler);
-      }
-      if (redis) {
-        await redis.quit();
-      }
-      await run('docker', ['stop', CONTAINER_NAME], { allowFailure: true });
+  beforeAll(async () => {
+    await createDisposableValkeyCluster();
+    redis = createClient({ url: REDIS_URL });
+    await redis.connect();
+    await redis.flushAll();
+    handler = new RedisStringsHandler({
+      redisUrl: REDIS_URL,
+      database: 0,
+      keyPrefix: 'issue-101:',
+      redisGetDeduplication: false,
+      inMemoryCachingTime: 0,
     });
+  }, 60_000);
 
-    it('reproduces Valkey CROSSSLOT for the reported multi-key UNLINK shape', async () => {
-      await redis.set('cache:item:a', 'A');
-      await redis.set('cache:item:b', 'B');
+  afterAll(async () => {
+    if (handler) {
+      await closeHandler(handler);
+    }
+    if (redis) {
+      await redis.quit();
+    }
+    await run('docker', ['stop', CONTAINER_NAME], { allowFailure: true });
+  });
 
-      await expect(
-        redis.unlink(['cache:item:a', 'cache:item:b']),
-      ).rejects.toThrow(/CROSSSLOT/);
-      await expect(redis.exists('cache:item:a')).resolves.toBe(1);
-      await expect(redis.exists('cache:item:b')).resolves.toBe(1);
-    });
+  it('reproduces Valkey CROSSSLOT for the reported multi-key UNLINK shape', async () => {
+    await redis.set('cache:item:a', 'A');
+    await redis.set('cache:item:b', 'B');
 
-    it('invalidates two same-tag entries from different hash slots', async () => {
-      const firstKey = 'cache:item:a';
-      const secondKey = 'cache:item:b';
-      const firstRedisKey = `issue-101:${firstKey}`;
-      const secondRedisKey = `issue-101:${secondKey}`;
+    await expect(
+      redis.unlink(['cache:item:a', 'cache:item:b']),
+    ).rejects.toThrow(/CROSSSLOT/);
+    await expect(redis.exists('cache:item:a')).resolves.toBe(1);
+    await expect(redis.exists('cache:item:b')).resolves.toBe(1);
+  });
 
-      expect(redisClusterKeySlot(firstRedisKey)).not.toBe(
-        redisClusterKeySlot(secondRedisKey),
-      );
+  it('invalidates two same-tag entries from different hash slots', async () => {
+    const firstKey = 'cache:item:a';
+    const secondKey = 'cache:item:b';
+    const firstRedisKey = `issue-101:${firstKey}`;
+    const secondRedisKey = `issue-101:${secondKey}`;
 
-      const cacheValue = {
-        kind: 'FETCH' as const,
-        data: {
-          headers: {},
-          body: '',
-          status: 200,
-          url: 'https://example.test/cache',
-        },
-        revalidate: 60,
-      };
-      const ctx = {
-        isRoutePPREnabled: false,
-        isFallback: false,
-        tags: ['issue-101-tag'],
-        cacheControl: { revalidate: 60, expire: 120 },
-      };
+    expect(redisClusterKeySlot(firstRedisKey)).not.toBe(
+      redisClusterKeySlot(secondRedisKey),
+    );
 
-      await handler.set(firstKey, cacheValue, ctx);
-      await handler.set(secondKey, cacheValue, ctx);
-      await expect(redis.exists(firstRedisKey)).resolves.toBe(1);
-      await expect(redis.exists(secondRedisKey)).resolves.toBe(1);
+    const cacheValue = {
+      kind: 'FETCH' as const,
+      data: {
+        headers: {},
+        body: '',
+        status: 200,
+        url: 'https://example.test/cache',
+      },
+      revalidate: 60,
+    };
+    const ctx = {
+      isRoutePPREnabled: false,
+      isFallback: false,
+      tags: ['issue-101-tag'],
+      cacheControl: { revalidate: 60, expire: 120 },
+    };
 
-      await handler.revalidateTag('issue-101-tag');
+    await handler.set(firstKey, cacheValue, ctx);
+    await handler.set(secondKey, cacheValue, ctx);
+    await expect(redis.exists(firstRedisKey)).resolves.toBe(1);
+    await expect(redis.exists(secondRedisKey)).resolves.toBe(1);
 
-      await expect(redis.exists(firstRedisKey)).resolves.toBe(0);
-      await expect(redis.exists(secondRedisKey)).resolves.toBe(0);
-    }, 30_000);
-  },
-);
+    await handler.revalidateTag('issue-101-tag');
+
+    await expect(redis.exists(firstRedisKey)).resolves.toBe(0);
+    await expect(redis.exists(secondRedisKey)).resolves.toBe(0);
+  }, 30_000);
+});
