@@ -29,8 +29,13 @@ vi.mock('redis', () => {
         async (_opts: unknown, key: string) =>
           hoisted.store.get(key)?.value ?? null,
       ),
-      hScan: vi.fn(async () => ({ cursor: 0, tuples: [] })),
-      scan: vi.fn(async () => ({ cursor: 0, keys: [] })),
+      sendCommand: vi.fn(async (args: string[]) => {
+        const [command] = args;
+        if (command === 'HSCAN' || command === 'SCAN') {
+          return ['0', []];
+        }
+        throw new Error(`Unexpected sendCommand: ${command}`);
+      }),
       hSet: vi.fn(async () => 1),
       hDel: vi.fn(async () => 1),
       publish: vi.fn(async () => 1),

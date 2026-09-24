@@ -65,12 +65,12 @@ class MockClient {
     return new MockClient();
   }
 
-  hScan() {
-    return { cursor: 0, tuples: [] };
-  }
-
-  scan() {
-    return { cursor: 0, keys: [] };
+  async sendCommand(args: string[]) {
+    const [command] = args;
+    if (command === 'HSCAN' || command === 'SCAN') {
+      return ['0', []];
+    }
+    throw new Error(`Unexpected sendCommand: ${command}`);
   }
 }
 
