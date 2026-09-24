@@ -234,6 +234,77 @@ describe('RedisStringsHandler', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it('treats revalidated page tags as stale for non-fetch cache entries', async () => {
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'test:',
+      database: 0,
+      redisGetDeduplication: false,
+    });
+
+    const cacheEntry = {
+      value: { kind: 'APP_PAGE' },
+      lastModified: 100,
+      tags: ['_N_T_/pages/stale-page'],
+    };
+    (handler as any).client.get.mockResolvedValue(JSON.stringify(cacheEntry));
+    (handler as any).sharedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      delete: vi.fn(async () => undefined),
+    };
+    (handler as any).revalidatedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      get: vi.fn(() => 101),
+      delete: vi.fn(async () => undefined),
+    };
+
+    const res = await handler.get('/pages/stale-page', {
+      kind: 'APP_PAGE',
+      isRoutePPREnabled: false,
+      isFallback: false,
+    });
+
+    expect(res).toBeNull();
+    expect((handler as any).client.unlink).toHaveBeenCalledWith(
+      'test:/pages/stale-page',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect((handler as any).sharedTagsMap.delete).not.toHaveBeenCalled();
+    expect((handler as any).revalidatedTagsMap.delete).toHaveBeenCalledWith(
+      '_N_T_/pages/stale-page',
+    );
+  });
+
+  it('returns non-fetch cache entries when tag revalidation is older than the entry', async () => {
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'test:',
+      database: 0,
+      redisGetDeduplication: false,
+    });
+
+    const cacheEntry = {
+      value: { kind: 'APP_PAGE' },
+      lastModified: 101,
+      tags: ['_N_T_/pages/fresh-page'],
+    };
+    (handler as any).client.get.mockResolvedValue(JSON.stringify(cacheEntry));
+    (handler as any).revalidatedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      get: vi.fn(() => 100),
+      delete: vi.fn(async () => undefined),
+    };
+
+    const res = await handler.get('/pages/fresh-page', {
+      kind: 'APP_PAGE',
+      isRoutePPREnabled: false,
+      isFallback: false,
+    });
+
+    expect(res).toEqual(cacheEntry);
+    expect((handler as any).client.unlink).not.toHaveBeenCalled();
+  });
+
   it('removes stale tag metadata when setting an untagged replacement', async () => {
     const handler = new RedisStringsHandler({
       redisUrl: 'redis://localhost:6379',

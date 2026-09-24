@@ -618,22 +618,22 @@ export default class RedisStringsHandler {
         );
       }
 
-      if (ctx.kind === 'FETCH') {
-        const combinedTags = new Set([
-          ...(ctx?.softTags || []),
-          ...(ctx?.tags || []),
-        ]);
+      const tagsToCheckForRevalidation =
+        ctx.kind === 'FETCH'
+          ? new Set([
+              ...(cacheEntry.tags || []),
+              ...(ctx?.softTags || []),
+              ...(ctx?.tags || []),
+            ])
+          : new Set(cacheEntry.tags || []);
 
-        if (combinedTags.size === 0) {
-          return cacheEntry;
-        }
-
+      if (tagsToCheckForRevalidation.size > 0) {
         // INFO: implicit tags (revalidate of nested fetch in api route/page on revalidatePath call of the page/api route). See revalidateTag() for more information
         //
-        // This code checks if any of the cache tags associated with this entry (normally the internal tag of the parent page/api route containing the fetch request)
+        // This code checks if any of the cache tags associated with this entry
         // have been revalidated since the entry was last modified. If any tag was revalidated more recently than the entry's
         // lastModified timestamp, then the cached content is considered stale (therefore return null) and should be removed.
-        for (const tag of combinedTags) {
+        for (const tag of tagsToCheckForRevalidation) {
           // Get the last revalidation time for this tag from our revalidatedTagsMap
           const revalidationTime = this.revalidatedTagsMap.get(tag);
 
@@ -656,8 +656,6 @@ export default class RedisStringsHandler {
                 );
               })
               .finally(async () => {
-                // Clean up our tag tracking maps after the Redis key is removed
-                await this.sharedTagsMap.delete(key);
                 await this.revalidatedTagsMap.delete(tag);
               });
 
