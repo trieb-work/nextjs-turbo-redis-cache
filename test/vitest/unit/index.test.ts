@@ -234,6 +234,49 @@ describe('RedisStringsHandler', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it('still unlinks Redis keys when the pre-delete local cache clear fails', async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'cluster-safe:',
+      database: 0,
+      redisGetDeduplication: true,
+      inMemoryCachingTime: 1_000,
+    });
+
+    const unlink = (handler as any).client.unlink as ReturnType<typeof vi.fn>;
+    unlink.mockResolvedValue(1);
+    (handler as any).sharedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      entries: function* () {
+        yield ['item:a', ['tag-1']];
+      },
+      delete: vi.fn(async () => undefined),
+    };
+    (handler as any).revalidatedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+    };
+    (handler as any).inMemoryDeduplicationCache = {
+      delete: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('publish failed before unlink'))
+        .mockResolvedValueOnce(undefined),
+    };
+
+    await expect(handler.revalidateTag('tag-1')).resolves.toBeUndefined();
+
+    expect(unlink).toHaveBeenCalledWith('cluster-safe:item:a');
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'failed to clear local read-through cache before deletion',
+      ),
+      expect.any(Error),
+    );
+    consoleErrorSpy.mockRestore();
+  });
+
   it('treats revalidated page tags as stale for non-fetch cache entries', async () => {
     const handler = new RedisStringsHandler({
       redisUrl: 'redis://localhost:6379',

@@ -956,10 +956,22 @@ export default class RedisStringsHandler {
       // Clear local read-through cache before deleting Redis values. With
       // slot-grouped deletes, some Redis keys can be gone while other slots are
       // still pending; clearing first prevents stale local reads in that window.
+      // This is a best-effort race-avoidance step: a failure here (e.g. the
+      // local cache's pub/sub notification could not be published) must not
+      // prevent the Redis UNLINKs below from running, since skipping the
+      // actual invalidation would be far worse than a brief stale-read window
+      // that resolves itself once the in-memory cache entry expires.
       if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
-        await Promise.all(
-          redisKeys.map((key) => this.inMemoryDeduplicationCache.delete(key)),
-        );
+        try {
+          await Promise.all(
+            redisKeys.map((key) => this.inMemoryDeduplicationCache.delete(key)),
+          );
+        } catch (err) {
+          console.error(
+            'RedisStringsHandler.revalidateTag() failed to clear local read-through cache before deletion. Continuing with Redis deletion regardless. Error was:',
+            err,
+          );
+        }
       }
 
       const deleteKeysOperation = redisErrorHandler(
