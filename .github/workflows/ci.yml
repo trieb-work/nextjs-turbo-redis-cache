@@ -109,6 +109,28 @@ jobs:
           SKIP_BUILD: true
           NEXT_TEST_APP: ${{ matrix.next-test-app }}
 
+  integration-cluster:
+    runs-on: ubuntu-latest
+    needs: lint-and-unit
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --ignore-scripts
+
+      - name: Run Valkey cluster integration test
+        run: pnpm test:integration:cluster
+
   integration-pages:
     runs-on: ubuntu-latest
     needs: lint-and-unit
