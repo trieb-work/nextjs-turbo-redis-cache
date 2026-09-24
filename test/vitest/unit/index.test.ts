@@ -270,6 +270,41 @@ describe('RedisStringsHandler', () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect((handler as any).sharedTagsMap.delete).not.toHaveBeenCalled();
+    // A page/route read must not retire the shared revalidation marker: a
+    // nested FETCH entry tagged with the same implicit tag may not have been
+    // read yet and still depends on it to detect its own staleness.
+    expect((handler as any).revalidatedTagsMap.delete).not.toHaveBeenCalled();
+  });
+
+  it('clears the revalidation marker only after a FETCH entry observes it', async () => {
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'test:',
+      database: 0,
+      redisGetDeduplication: false,
+    });
+
+    const cacheEntry = {
+      value: { kind: 'FETCH', data: {} },
+      lastModified: 100,
+      tags: ['_N_T_/pages/stale-page'],
+    };
+    (handler as any).client.get.mockResolvedValue(JSON.stringify(cacheEntry));
+    (handler as any).revalidatedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      get: vi.fn(() => 101),
+      delete: vi.fn(async () => undefined),
+    };
+
+    const res = await handler.get('fetch-key', {
+      kind: 'FETCH',
+    } as any);
+
+    expect(res).toBeNull();
+    expect((handler as any).client.unlink).toHaveBeenCalledWith(
+      'test:fetch-key',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect((handler as any).revalidatedTagsMap.delete).toHaveBeenCalledWith(
       '_N_T_/pages/stale-page',
     );

@@ -656,7 +656,18 @@ export default class RedisStringsHandler {
                 );
               })
               .finally(async () => {
-                await this.revalidatedTagsMap.delete(tag);
+                // Only FETCH reads clear the shared revalidation marker. A page/route
+                // entry and one or more nested FETCH entries can all be tagged with
+                // the same implicit tag; if a page/route read deleted the marker
+                // here, a not-yet-read FETCH entry sharing that tag would lose the
+                // only signal it has that it is stale (its own Redis key can still
+                // exist when the direct sharedTagsMap-based delete in
+                // revalidateTag() raced with this entry's set()). Only FETCH reads
+                // are the intended (and only) consumer of this marker, so only they
+                // retire it once observed.
+                if (ctx.kind === 'FETCH') {
+                  await this.revalidatedTagsMap.delete(tag);
+                }
               });
 
             debug(
