@@ -39,6 +39,9 @@ jobs:
       - name: Build project
         run: pnpm build
 
+      - name: Install Next.js 16.3 fixture for contract unit tests
+        run: cd test/nextjs-test-projects/next-app-16-3-0 && pnpm install --ignore-scripts
+
       - name: Run unit tests
         run: pnpm test:unit:coverage
 
