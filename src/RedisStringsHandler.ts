@@ -9,10 +9,19 @@ import { shouldDeferRedisConnection } from './utils/redisConnection';
 export type CommandOptions = ReturnType<typeof commandOptions>;
 export type Client = ReturnType<typeof createClient>;
 
+export type CacheControl = {
+  revalidate: number | false;
+  expire: number | undefined;
+};
+
 export type CacheEntry = {
   value: unknown;
   lastModified: number;
   tags: string[];
+  /** The lifetime from `ctx.cacheControl` in set(). Next.js 16.4+ reads it
+   * from get() so that every instance that shares Redis uses the lifetime of
+   * the instance that rendered the entry. Older versions ignore it. */
+  cacheControl?: CacheControl;
 };
 
 /** Discriminated union of the `ctx` argument Next.js passes to
@@ -219,6 +228,15 @@ export type CreateRedisStringsHandlerOptions = {
 // Identifier prefix used by Next.js to mark automatically generated cache tags
 // These tags are created internally by Next.js for route-based invalidation
 const NEXT_CACHE_IMPLICIT_TAG_ID = '_N_T_';
+
+// Next.js 16.4+ keys route entries as /route-cache/<kind>/<sha256(sourceRoute)>/$/<path>
+// (next/dist/server/lib/route-cache-key.js). Older versions use /<path> as the key,
+// and that path can itself start with /route-cache/, so match the full shape.
+const ROUTE_CACHE_KEY = /^\/route-cache\/[A-Z_]+\/[0-9a-f]{64}\/\$(\/.*)$/;
+
+function getRoutePath(key: string): string {
+  return ROUTE_CACHE_KEY.exec(key)?.[1] ?? key;
+}
 
 // Redis key used to store a map of tags and their last revalidation timestamps
 // This helps track when specific tags were last invalidated
@@ -723,7 +741,7 @@ export default class RedisStringsHandler {
       tags?: string[];
       // Different versions of Next.js use different arguments for the same functionality
       revalidate?: number | false; // Version 15.0.3
-      cacheControl?: { revalidate: number | false; expire: number | undefined }; // Version 15.0.3+
+      cacheControl?: CacheControl; // Version 15.0.3+
     },
   ) {
     try {
@@ -756,7 +774,7 @@ export default class RedisStringsHandler {
       // (_N_T_/<path>) so that revalidatePath()/revalidateTag('_N_T_/<path>')
       // invalidates them the same way as App Router entries.
       if (data === null || data.kind === 'PAGES' || data.kind === 'REDIRECT') {
-        const implicitTag = NEXT_CACHE_IMPLICIT_TAG_ID + key;
+        const implicitTag = NEXT_CACHE_IMPLICIT_TAG_ID + getRoutePath(key);
         if (!ctx.tags?.includes(implicitTag)) {
           ctx.tags = [...(ctx.tags || []), implicitTag];
         }
@@ -767,6 +785,7 @@ export default class RedisStringsHandler {
         lastModified: Date.now(),
         tags: ctx?.tags || [],
         value: data,
+        cacheControl: ctx.cacheControl,
       };
       const serializedCacheEntry =
         await this.valueSerializer.serialize(cacheEntry);

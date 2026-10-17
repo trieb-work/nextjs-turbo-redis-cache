@@ -417,12 +417,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
 
       const entry = await pendingEntry;
 
-      const [storeStream] = entry.value.tee();
-
-      // Don't mutate entry.value as Next.js may still be using it internally
-      // entry.value = forwardStream;
-
-      const buffer = await streamToBuffer(storeStream);
+      const buffer = await streamToBuffer(entry.value);
 
       const stored: StoredCacheEntry = {
         value: Buffer.from(buffer).toString('base64'),
