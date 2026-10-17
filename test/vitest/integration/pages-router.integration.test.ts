@@ -5,7 +5,10 @@ import { createClient, RedisClientType } from 'redis';
 import { join } from 'path';
 import { readFileSync } from 'fs';
 import { CacheEntry } from '../../../src/RedisStringsHandler';
-import { createRouteCacheLookup } from './route-cache-lookup';
+import {
+  createRouteCacheLookup,
+  nextVersionAtLeast,
+} from './route-cache-lookup';
 
 // Select which Pages Router test app to use. Can be overridden via NEXT_PAGES_TEST_APP env var
 const NEXT_PAGES_TEST_APP =
@@ -45,10 +48,11 @@ let instanceB: ChildProcessWithoutNullStreams;
 let redisClient: RedisClientType;
 let buildId: string;
 
-const { findRouteKeys, findRouteSharedTags } = createRouteCacheLookup(
-  NEXT_APP_DIR,
-  () => ({ redis: redisClient, prefix: process.env.VERCEL_URL! }),
-);
+const { findRouteKeys, getRouteKey, findRouteSharedTags } =
+  createRouteCacheLookup(NEXT_APP_DIR, () => ({
+    redis: redisClient,
+    prefix: process.env.VERCEL_URL!,
+  }));
 
 async function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -57,7 +61,7 @@ async function delay(ms: number) {
 function expectIsrRedisTtl(ttl: number) {
   // Next.js 16.3+ passes cacheControl.expire (~1 year) for ISR pages.
   // Redis TTL is keyed on expire, not 2 × revalidate.
-  if (NEXT_PAGES_TEST_APP.includes('16-3')) {
+  if (nextVersionAtLeast(NEXT_APP_DIR, 16, 3)) {
     expect(ttl).toBeGreaterThan(2 * ISR_REVALIDATE_SECONDS);
     return;
   }
@@ -219,7 +223,7 @@ describe('Pages Router Redis cache integration (two instances)', () => {
       await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
       const value = (await redisClient.get(
-        process.env.VERCEL_URL + '/isr/prebuilt',
+        await getRouteKey('/isr/prebuilt'),
       )) as string;
       expect(value).toBeDefined();
       const cacheEntry: CacheEntry = JSON.parse(value);
@@ -240,17 +244,13 @@ describe('Pages Router Redis cache integration (two instances)', () => {
 
       // The implicit path tag is registered in the shared tags hashmap so
       // that revalidatePath()/revalidateTag() can invalidate the page
-      const hashmap = (await redisClient.hGet(
-        process.env.VERCEL_URL + '__sharedTags__',
-        '/isr/prebuilt',
-      )) as string;
-      expect(JSON.parse(hashmap)).toEqual(['_N_T_/isr/prebuilt']);
+      expect(await findRouteSharedTags('/isr/prebuilt')).toEqual([
+        '_N_T_/isr/prebuilt',
+      ]);
     });
 
     it('the TTL is derived from the getStaticProps revalidate value', async () => {
-      const ttl = await redisClient.ttl(
-        process.env.VERCEL_URL + '/isr/prebuilt',
-      );
+      const ttl = await redisClient.ttl(await getRouteKey('/isr/prebuilt'));
       expectIsrRedisTtl(ttl);
     });
 
@@ -354,7 +354,7 @@ describe('Pages Router Redis cache integration (two instances)', () => {
       await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
       const value = (await redisClient.get(
-        process.env.VERCEL_URL + '/isr/fallback-test',
+        await getRouteKey('/isr/fallback-test'),
       )) as string;
       expect(value).toBeDefined();
       const cacheEntry: CacheEntry = JSON.parse(value);
@@ -375,7 +375,7 @@ describe('Pages Router Redis cache integration (two instances)', () => {
       await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
       const value = (await redisClient.get(
-        process.env.VERCEL_URL + '/isr/not-found',
+        await getRouteKey('/isr/not-found'),
       )) as string;
       expect(value).toBeDefined();
       const cacheEntry: CacheEntry = JSON.parse(value);
@@ -387,9 +387,7 @@ describe('Pages Router Redis cache integration (two instances)', () => {
 
       // TTL: Next.js 16.3+ keys on cacheControl.expire (SWR-safe); older
       // versions use estimateExpireAge(revalidate).
-      const ttl = await redisClient.ttl(
-        process.env.VERCEL_URL + '/isr/not-found',
-      );
+      const ttl = await redisClient.ttl(await getRouteKey('/isr/not-found'));
       expectIsrRedisTtl(ttl);
     });
 
@@ -410,7 +408,7 @@ describe('Pages Router Redis cache integration (two instances)', () => {
       await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
       const value = (await redisClient.get(
-        process.env.VERCEL_URL + '/isr/redirect',
+        await getRouteKey('/isr/redirect'),
       )) as string;
       expect(value).toBeDefined();
       const cacheEntry: CacheEntry = JSON.parse(value);
@@ -446,15 +444,13 @@ describe('Pages Router Redis cache integration (two instances)', () => {
       await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
       const value = (await redisClient.get(
-        process.env.VERCEL_URL + '/static-forever',
+        await getRouteKey('/static-forever'),
       )) as string;
       expect(value).toBeDefined();
       const cacheEntry: CacheEntry = JSON.parse(value);
       expect((cacheEntry.value as { kind: string }).kind).toBe('PAGES');
 
-      const ttl = await redisClient.ttl(
-        process.env.VERCEL_URL + '/static-forever',
-      );
+      const ttl = await redisClient.ttl(await getRouteKey('/static-forever'));
       // VERCEL_ENV=production -> expire age is 2 * defaultStaleAge (14 days)
       expect(ttl).toBeGreaterThan(2 * DEFAULT_STALE_AGE - 30);
       expect(ttl).toBeLessThanOrEqual(2 * DEFAULT_STALE_AGE);

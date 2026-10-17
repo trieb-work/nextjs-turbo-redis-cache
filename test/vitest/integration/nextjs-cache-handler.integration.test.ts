@@ -4,6 +4,10 @@ import fetch from 'node-fetch';
 import { createClient, RedisClientType } from 'redis';
 import { join } from 'path';
 import { CacheEntry } from '../../../src/RedisStringsHandler';
+import {
+  createRouteCacheLookup,
+  nextVersionAtLeast,
+} from './route-cache-lookup';
 import { revalidate as revalidatedFetchRouteRevalidate } from '../../nextjs-test-projects/next-app-15-4-11/src/app/api/revalidated-fetch/route';
 
 // Select which Next.js test app to use. Can be overridden via NEXT_TEST_APP env var
@@ -26,6 +30,12 @@ const REDIS_BACKGROUND_SYNC_DELAY = 250; //ms delay to prevent flaky tests in sl
 
 let nextProcess: ChildProcessWithoutNullStreams;
 let redisClient: RedisClientType;
+
+const { findRouteKeys, getRouteKey, findRouteSharedTags } =
+  createRouteCacheLookup(NEXT_APP_DIR, () => ({
+    redis: redisClient,
+    prefix: process.env.VERCEL_URL!,
+  }));
 
 async function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -190,7 +200,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
 
         // check the content of redis key
         const value = (await redisClient.get(
-          process.env.VERCEL_URL + '/api/cached-static-fetch',
+          await getRouteKey('/api/cached-static-fetch'),
         )) as string;
         expect(value).toBeDefined();
         const cacheEntry: CacheEntry = JSON.parse(value);
@@ -236,16 +246,11 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
         // check Redis keys
-        const keys = await redisClient.keys(
-          process.env.VERCEL_URL + '/api/cached-static-fetch',
-        );
-        expect(keys.length).toBe(0);
+        expect(await findRouteKeys('/api/cached-static-fetch')).toEqual([]);
 
-        const hashmap = await redisClient.hGet(
-          process.env.VERCEL_URL + SHARED_TAGS_KEY,
-          '/api/cached-static-fetch',
-        );
-        expect(hashmap).toBeNull();
+        expect(
+          await findRouteSharedTags('/api/cached-static-fetch'),
+        ).toBeUndefined();
       });
 
       it('A new request after the revalidation should increment the counter (because the route was re-evaluated)', async () => {
@@ -257,16 +262,9 @@ describe('Next.js Turbo Redis Cache Integration', () => {
       it('After the new request was made the redis key and hashmap should be set again', async () => {
         await delay(REDIS_BACKGROUND_SYNC_DELAY);
         // check Redis keys
-        const keys = await redisClient.keys(
-          process.env.VERCEL_URL + '/api/cached-static-fetch',
-        );
-        expect(keys.length).toBe(1);
+        expect(await findRouteKeys('/api/cached-static-fetch')).toHaveLength(1);
 
-        const hashmap = (await redisClient.hGet(
-          process.env.VERCEL_URL + SHARED_TAGS_KEY,
-          '/api/cached-static-fetch',
-        )) as string;
-        expect(JSON.parse(hashmap)).toEqual([
+        expect(await findRouteSharedTags('/api/cached-static-fetch')).toEqual([
           '_N_T_/layout',
           '_N_T_/api/layout',
           '_N_T_/api/cached-static-fetch/layout',
@@ -311,13 +309,13 @@ describe('Next.js Turbo Redis Cache Integration', () => {
 
         it('After expiration, the redis key should be removed from redis and the hashmap', async () => {
           const ttl = await redisClient.ttl(
-            process.env.VERCEL_URL + '/api/revalidated-fetch',
+            await getRouteKey('/api/revalidated-fetch'),
           );
 
           // Next.js 16.3+ passes cacheControl.expire for ISR fetch routes (~1 year).
           // TTL is keyed on expire (SWR-safe), not 2 × revalidate — skip the
           // long-running expiry wait in that case.
-          if (NEXT_TEST_APP.includes('16-3')) {
+          if (nextVersionAtLeast(NEXT_APP_DIR, 16, 3)) {
             expect(ttl).toBeGreaterThan(2 * revalidatedFetchRouteRevalidate);
             return;
           }
@@ -333,19 +331,14 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           await delay(ttl * 1000 + 500);
 
           // check Redis keys
-          const keys = await redisClient.keys(
-            process.env.VERCEL_URL + '/api/revalidated-fetch',
-          );
-          expect(keys.length).toBe(0);
+          expect(await findRouteKeys('/api/revalidated-fetch')).toEqual([]);
 
           await delay(1000);
 
           // The key should also be removed from the hashmap
-          const hashmap = await redisClient.hGet(
-            process.env.VERCEL_URL + SHARED_TAGS_KEY,
-            '/api/revalidated-fetch',
-          );
-          expect(hashmap).toBeNull();
+          expect(
+            await findRouteSharedTags('/api/revalidated-fetch'),
+          ).toBeUndefined();
         }, 15_000);
       }
     });
@@ -358,16 +351,9 @@ describe('Next.js Turbo Redis Cache Integration', () => {
 
         async function assertCachedStaticFetchCleared() {
           await delay(REDIS_BACKGROUND_SYNC_DELAY);
-          const keys = await redisClient.keys(
-            process.env.VERCEL_URL + cachedStaticPath,
-          );
-          expect(keys.length).toBe(0);
+          expect(await findRouteKeys(cachedStaticPath)).toEqual([]);
 
-          const hashmap = await redisClient.hGet(
-            process.env.VERCEL_URL + SHARED_TAGS_KEY,
-            cachedStaticPath,
-          );
-          expect(hashmap).toBeNull();
+          expect(await findRouteSharedTags(cachedStaticPath)).toBeUndefined();
         }
 
         it('revalidateTag(tag, "max") should invalidate cached-static-fetch by tag', async () => {
@@ -427,10 +413,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
 
       it('The redis key should not be set', async () => {
         // check the content of redis key
-        const value = await redisClient.get(
-          process.env.VERCEL_URL + '/api/uncached-fetch',
-        );
-        expect(value).toBeNull();
+        expect(await findRouteKeys('/api/uncached-fetch')).toEqual([]);
       });
     });
 
@@ -513,17 +496,17 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
             // check Redis keys
-            const keys = await redisClient.keys(
-              process.env.VERCEL_URL +
+            expect(
+              await findRouteKeys(
                 '/api/nested-fetch-in-api-route/revalidated-fetch',
-            );
-            expect(keys.length).toBe(0);
+              ),
+            ).toEqual([]);
 
-            const hashmap = await redisClient.hGet(
-              process.env.VERCEL_URL + SHARED_TAGS_KEY,
-              '/api/nested-fetch-in-api-route/revalidated-fetch',
-            );
-            expect(hashmap).toBeNull();
+            expect(
+              await findRouteSharedTags(
+                '/api/nested-fetch-in-api-route/revalidated-fetch',
+              ),
+            ).toBeUndefined();
           });
 
           it('A new request after the revalidation should increment the counter (because the route was re-evaluated)', async () => {
@@ -568,17 +551,17 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
             // check Redis keys
-            const keys = await redisClient.keys(
-              process.env.VERCEL_URL +
+            expect(
+              await findRouteKeys(
                 '/api/nested-fetch-in-api-route/revalidated-fetch',
-            );
-            expect(keys.length).toBe(0);
+              ),
+            ).toEqual([]);
 
-            const hashmap = await redisClient.hGet(
-              process.env.VERCEL_URL + SHARED_TAGS_KEY,
-              '/api/nested-fetch-in-api-route/revalidated-fetch',
-            );
-            expect(hashmap).toBeNull();
+            expect(
+              await findRouteSharedTags(
+                '/api/nested-fetch-in-api-route/revalidated-fetch',
+              ),
+            ).toBeUndefined();
           });
 
           it('Another new request after the revalidation should increment the counter (because the route was re-evaluated)', async () => {
@@ -650,7 +633,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           await delay(REDIS_BACKGROUND_SYNC_DELAY);
           // check Redis keys
           const ttl = await redisClient.ttl(
-            process.env.VERCEL_URL + '/pages/no-fetch/default-page',
+            await getRouteKey('/pages/no-fetch/default-page'),
           );
           // 14 days is default revalidate for pages -> expiration time is 2 * revalidate time -> -10 seconds for testing offset stability
           expect(ttl).toBeGreaterThan(2 * 14 * 24 * 60 * 60 - 30);
@@ -659,7 +642,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
 
         it('The data in the redis key should match the expected format', async () => {
           const data = (await redisClient.get(
-            process.env.VERCEL_URL + '/pages/no-fetch/default-page',
+            await getRouteKey('/pages/no-fetch/default-page'),
           )) as string;
           expect(data).toBeDefined();
           const cacheEntry: CacheEntry = JSON.parse(data);
@@ -725,16 +708,13 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
           // check Redis keys
-          const keys = await redisClient.keys(
-            process.env.VERCEL_URL + '/pages/no-fetch/default-page',
+          expect(await findRouteKeys('/pages/no-fetch/default-page')).toEqual(
+            [],
           );
-          expect(keys.length).toBe(0);
 
-          const hashmap = await redisClient.hGet(
-            process.env.VERCEL_URL + SHARED_TAGS_KEY,
-            '/pages/no-fetch/default-page',
-          );
-          expect(hashmap).toBeNull();
+          expect(
+            await findRouteSharedTags('/pages/no-fetch/default-page'),
+          ).toBeUndefined();
         });
 
         it('A new request after the revalidation should return a new timestamp (because the page was recreated)', async () => {
@@ -750,16 +730,13 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         it('After the new request was made the redis key and hashmap should be set again', async () => {
           // check Redis keys
           await delay(REDIS_BACKGROUND_SYNC_DELAY);
-          const keys = await redisClient.keys(
-            process.env.VERCEL_URL + '/pages/no-fetch/default-page',
-          );
-          expect(keys.length).toBe(1);
+          expect(
+            await findRouteKeys('/pages/no-fetch/default-page'),
+          ).toHaveLength(1);
 
-          const hashmap = (await redisClient.hGet(
-            process.env.VERCEL_URL + SHARED_TAGS_KEY,
-            '/pages/no-fetch/default-page',
-          )) as string;
-          expect(JSON.parse(hashmap)).toEqual([
+          expect(
+            await findRouteSharedTags('/pages/no-fetch/default-page'),
+          ).toEqual([
             '_N_T_/layout',
             '_N_T_/pages/layout',
             '_N_T_/pages/no-fetch/layout',
@@ -799,26 +776,23 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         );
 
         // test cache entry for 3 keys are set
-        const keys1 = await redisClient.keys(
-          process.env.VERCEL_URL +
+        expect(
+          await findRouteKeys(
             '/pages/revalidated-fetch/revalidate15--default-page',
-        );
-        expect(keys1.length).toBe(1);
+          ),
+        ).toHaveLength(1);
         const keys2 = await redisClient.keys(
           process.env.VERCEL_URL + nestedFetchCacheEntryKey,
         );
         expect(keys2.length).toBe(1);
-        const keys3 = await redisClient.keys(
-          process.env.VERCEL_URL + '/api/revalidated-fetch',
-        );
-        expect(keys3.length).toBe(1);
+        expect(await findRouteKeys('/api/revalidated-fetch')).toHaveLength(1);
 
         // test shared tag hashmap to be set for all keys
-        const hashmap1 = (await redisClient.hGet(
-          process.env.VERCEL_URL + SHARED_TAGS_KEY,
-          '/pages/revalidated-fetch/revalidate15--default-page',
-        )) as string;
-        expect(JSON.parse(hashmap1)).toEqual([
+        expect(
+          await findRouteSharedTags(
+            '/pages/revalidated-fetch/revalidate15--default-page',
+          ),
+        ).toEqual([
           '_N_T_/layout',
           '_N_T_/pages/layout',
           '_N_T_/pages/revalidated-fetch/layout',
@@ -834,11 +808,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         expect(JSON.parse(hashmap2)).toEqual([
           'revalidated-fetch-revalidate15-default-page',
         ]);
-        const hashmap3 = (await redisClient.hGet(
-          process.env.VERCEL_URL + SHARED_TAGS_KEY,
-          '/api/revalidated-fetch',
-        )) as string;
-        expect(JSON.parse(hashmap3)).toEqual([
+        expect(await findRouteSharedTags('/api/revalidated-fetch')).toEqual([
           '_N_T_/layout',
           '_N_T_/api/layout',
           '_N_T_/api/revalidated-fetch/layout',
@@ -868,17 +838,17 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
         // test no cache entry for 2 keys
-        const keys1 = await redisClient.keys(
-          process.env.VERCEL_URL +
+        expect(
+          await findRouteKeys(
             '/pages/revalidated-fetch/revalidate15--default-page',
-        );
-        expect(keys1.length).toBe(0);
+          ),
+        ).toEqual([]);
 
-        const hashmap1 = await redisClient.hGet(
-          process.env.VERCEL_URL + SHARED_TAGS_KEY,
-          '/pages/revalidated-fetch/revalidate15--default-page',
-        );
-        expect(hashmap1).toBeNull();
+        expect(
+          await findRouteSharedTags(
+            '/pages/revalidated-fetch/revalidate15--default-page',
+          ),
+        ).toBeUndefined();
 
         // sub-fetch-request is not removed directly but will be removed on next get request
         const nestedFetchCacheEntryKey = await findFetchCacheEntryKey(
@@ -904,15 +874,8 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         expect(ts).toBeLessThan(Number(Date.now()));
 
         // API route should still be cached
-        const keys3 = await redisClient.keys(
-          process.env.VERCEL_URL + '/api/revalidated-fetch',
-        );
-        expect(keys3.length).toBe(1);
-        const hashmap3 = (await redisClient.hGet(
-          process.env.VERCEL_URL + SHARED_TAGS_KEY,
-          '/api/revalidated-fetch',
-        )) as string;
-        expect(JSON.parse(hashmap3)).toEqual([
+        expect(await findRouteKeys('/api/revalidated-fetch')).toHaveLength(1);
+        expect(await findRouteSharedTags('/api/revalidated-fetch')).toEqual([
           '_N_T_/layout',
           '_N_T_/api/layout',
           '_N_T_/api/revalidated-fetch/layout',
@@ -932,10 +895,10 @@ describe('Next.js Turbo Redis Cache Integration', () => {
         expect(timestamp).toBeDefined();
         expect(Number(timestamp)).toBeGreaterThan(Number(firstTimestamp));
 
-        // Next.js 16.3 revalidates nested fetch entries when the parent page path
-        // is revalidated; older versions keep the nested fetch cache intact.
+        // Next.js 16.3+ revalidates nested fetch entries when the parent page
+        // path is revalidated; older versions keep the nested fetch cache intact.
         expect(secondCounter).toBeDefined();
-        if (NEXT_TEST_APP === 'next-app-16-3-0') {
+        if (nextVersionAtLeast(NEXT_APP_DIR, 16, 3)) {
           expect(Number(secondCounter)).toBeGreaterThan(Number(firstCounter));
         } else {
           expect(secondCounter).toBe(firstCounter);
