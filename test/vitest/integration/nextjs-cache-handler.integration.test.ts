@@ -343,9 +343,9 @@ describe('Next.js Turbo Redis Cache Integration', () => {
       }
     });
 
-    // Next 16-only caching API tests. These routes exist only in the Next 16 test app
-    // and exercise the new revalidateTag profiles and updateTag semantics.
-    if (NEXT_TEST_APP.includes('16.')) {
+    // Next 16-only caching API tests. The revalidateTag profile routes exist
+    // only in the Next 16 test apps.
+    if (nextVersionAtLeast(NEXT_APP_DIR, 16, 0)) {
       describe('Next 16 caching APIs', () => {
         const cachedStaticPath = '/api/cached-static-fetch';
 
