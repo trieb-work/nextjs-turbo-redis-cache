@@ -130,6 +130,19 @@ describe('RedisStringsHandler Pages Router kinds', () => {
       expect(storedEntry(key).entry.tags).toEqual(['_N_T_/blog/post-1']);
     });
 
+    it('set() keeps a Next.js 16.3 page path that only looks like a route-cache key', async () => {
+      const key = '/route-cache/docs/$/post';
+      const handler = createHandler();
+      await handler.set(key, pagesData, {
+        ...baseCtx,
+        cacheControl: { revalidate: 60, expire: undefined },
+      });
+
+      expect(storedEntry(key).entry.tags).toEqual([
+        '_N_T_/route-cache/docs/$/post',
+      ]);
+    });
+
     it('get() returns a PAGES entry without warnings', async () => {
       const handler = createHandler();
       await handler.set('/blog/post-1', pagesData, {

@@ -221,16 +221,12 @@ export type CreateRedisStringsHandlerOptions = {
 const NEXT_CACHE_IMPLICIT_TAG_ID = '_N_T_';
 
 // Next.js 16.4+ keys route entries as /route-cache/<kind>/<sha256(sourceRoute)>/$/<path>
-// (next/dist/server/lib/route-cache-key.js). Older versions use /<path> as the key.
-const ROUTE_CACHE_KEY_PREFIX = '/route-cache/';
-const ROUTE_CACHE_PATH_MARKER = '/$/';
+// (next/dist/server/lib/route-cache-key.js). Older versions use /<path> as the key,
+// and that path can itself start with /route-cache/, so match the full shape.
+const ROUTE_CACHE_KEY = /^\/route-cache\/[A-Z_]+\/[0-9a-f]{64}\/\$(\/.*)$/;
 
 function getRoutePath(key: string): string {
-  if (!key.startsWith(ROUTE_CACHE_KEY_PREFIX)) {
-    return key;
-  }
-  const marker = key.indexOf(ROUTE_CACHE_PATH_MARKER);
-  return marker === -1 ? key : key.slice(marker + 2);
+  return ROUTE_CACHE_KEY.exec(key)?.[1] ?? key;
 }
 
 // Redis key used to store a map of tags and their last revalidation timestamps
