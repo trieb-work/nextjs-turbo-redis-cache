@@ -237,6 +237,19 @@ const LOCAL_CACHE_DELETE_BATCH_SIZE = 500;
 // These tags are created internally by Next.js for route-based invalidation
 const NEXT_CACHE_IMPLICIT_TAG_ID = '_N_T_';
 
+// Next.js 16.4+ keys route entries as /route-cache/<kind>/<sha256(sourceRoute)>/$/<path>
+// (next/dist/server/lib/route-cache-key.js). Older versions use /<path> as the key.
+const ROUTE_CACHE_KEY_PREFIX = '/route-cache/';
+const ROUTE_CACHE_PATH_MARKER = '/$/';
+
+function getRoutePath(key: string): string {
+  if (!key.startsWith(ROUTE_CACHE_KEY_PREFIX)) {
+    return key;
+  }
+  const marker = key.indexOf(ROUTE_CACHE_PATH_MARKER);
+  return marker === -1 ? key : key.slice(marker + 2);
+}
+
 // Redis key used to store a map of tags and their last revalidation timestamps
 // This helps track when specific tags were last invalidated
 const REVALIDATED_TAGS_KEY = '__revalidated_tags__';
@@ -791,7 +804,7 @@ export default class RedisStringsHandler {
       // (_N_T_/<path>) so that revalidatePath()/revalidateTag('_N_T_/<path>')
       // invalidates them the same way as App Router entries.
       if (data === null || data.kind === 'PAGES' || data.kind === 'REDIRECT') {
-        const implicitTag = NEXT_CACHE_IMPLICIT_TAG_ID + key;
+        const implicitTag = NEXT_CACHE_IMPLICIT_TAG_ID + getRoutePath(key);
         if (!ctx.tags?.includes(implicitTag)) {
           ctx.tags = [...(ctx.tags || []), implicitTag];
         }

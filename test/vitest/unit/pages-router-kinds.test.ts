@@ -118,6 +118,18 @@ describe('RedisStringsHandler Pages Router kinds', () => {
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
+    it('set() takes the implicit path tag from a Next.js 16.4 route-cache key', async () => {
+      const key =
+        '/route-cache/PAGES/b6406f8ebe93bedb5824e46146a9228cd4a5a3fb152b9f1fcffe6046ef30c7a3/$/blog/post-1';
+      const handler = createHandler();
+      await handler.set(key, pagesData, {
+        ...baseCtx,
+        cacheControl: { revalidate: 60, expire: undefined },
+      });
+
+      expect(storedEntry(key).entry.tags).toEqual(['_N_T_/blog/post-1']);
+    });
+
     it('get() returns a PAGES entry without warnings', async () => {
       const handler = createHandler();
       await handler.set('/blog/post-1', pagesData, {
