@@ -11,10 +11,19 @@ import { clusterSafeUnlink } from './utils/clusterSafeUnlink';
 
 export type Client = ReturnType<typeof createClient>;
 
+export type CacheControl = {
+  revalidate: number | false;
+  expire: number | undefined;
+};
+
 export type CacheEntry = {
   value: unknown;
   lastModified: number;
   tags: string[];
+  /** The lifetime from `ctx.cacheControl` in set(). Next.js 16.4+ reads it
+   * from get() so that every instance that shares Redis uses the lifetime of
+   * the instance that rendered the entry. Older versions ignore it. */
+  cacheControl?: CacheControl;
 };
 
 /** Discriminated union of the `ctx` argument Next.js passes to
@@ -767,7 +776,7 @@ export default class RedisStringsHandler {
       tags?: string[];
       // Different versions of Next.js use different arguments for the same functionality
       revalidate?: number | false; // Version 15.0.3
-      cacheControl?: { revalidate: number | false; expire: number | undefined }; // Version 15.0.3+
+      cacheControl?: CacheControl; // Version 15.0.3+
     },
   ) {
     try {
@@ -811,6 +820,7 @@ export default class RedisStringsHandler {
         lastModified: Date.now(),
         tags: ctx?.tags || [],
         value: data,
+        cacheControl: ctx.cacheControl,
       };
       const serializedCacheEntry =
         await this.valueSerializer.serialize(cacheEntry);

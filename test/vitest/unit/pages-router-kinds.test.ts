@@ -111,6 +111,7 @@ describe('RedisStringsHandler Pages Router kinds', () => {
         value: pagesData,
         lastModified: expect.any(Number),
         tags: ['_N_T_/blog/post-1'],
+        cacheControl: { revalidate: 60 },
       });
       // TTL is derived from cacheControl.revalidate (getStaticProps revalidate)
       expect(ex).toBe(expireAge(60));
@@ -171,6 +172,7 @@ describe('RedisStringsHandler Pages Router kinds', () => {
         value: pagesData,
         lastModified: expect.any(Number),
         tags: ['_N_T_/blog/post-1'],
+        cacheControl: { revalidate: 60 },
       });
       expect(warnSpy).not.toHaveBeenCalled();
       expect(errorSpy).not.toHaveBeenCalled();
@@ -232,6 +234,7 @@ describe('RedisStringsHandler Pages Router kinds', () => {
         value: redirectData,
         lastModified: expect.any(Number),
         tags: ['_N_T_/old-location'],
+        cacheControl: { revalidate: 30 },
       });
       expect(ex).toBe(expireAge(30));
 
@@ -258,6 +261,7 @@ describe('RedisStringsHandler Pages Router kinds', () => {
         value: null,
         lastModified: expect.any(Number),
         tags: ['_N_T_/missing-page'],
+        cacheControl: { revalidate: 15 },
       });
       expect(ex).toBe(expireAge(15));
       expect(warnSpy).not.toHaveBeenCalled();
@@ -280,6 +284,7 @@ describe('RedisStringsHandler Pages Router kinds', () => {
         value: null,
         lastModified: expect.any(Number),
         tags: ['_N_T_/missing-page'],
+        cacheControl: { revalidate: 15 },
       });
       expect(warnSpy).not.toHaveBeenCalled();
       expect(errorSpy).not.toHaveBeenCalled();
