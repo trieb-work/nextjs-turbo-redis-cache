@@ -22,6 +22,8 @@ For a deep dive into the internal architecture (shared hash maps, SyncedMap, req
 This package is compatible with Next.js 15.0.3 and above, with the App Router, the Pages Router, or both together in a hybrid app. It is not compatible with Next.js 14.x. or 15-canary.
 Redis Server need to have Redis Server Version 2.8.0 or higher and have to be configured with `notify-keyspace-events` to be able to use the key-space notifications feature.
 
+The package supports the `redis` client package (node-redis) in version 4.7.0, 5.x and 6.x. Install the version you want next to this package. node-redis 6 needs Node.js 20 or higher.
+
 Pages Router support covers ISR pages (`getStaticProps` + `revalidate`, `getStaticPaths` with `fallback`), `notFound: true` and `redirect:` results, and on-demand revalidation via `res.revalidate(path)` — including across multiple server instances sharing one Redis (see the two-instance integration test). App Router and Pages Router entries are handled side by side by the same handler instance, so hybrid apps that use both routers work without any extra configuration.
 
 Tested versions are:

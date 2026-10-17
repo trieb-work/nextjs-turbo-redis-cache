@@ -1,4 +1,4 @@
-import { commandOptions, createClient } from 'redis';
+import { createClient } from 'redis';
 import type { RedisClientOptions } from 'redis';
 import {
   Client,
@@ -10,6 +10,7 @@ import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
 import { debug } from './utils/debug';
 import { resolveKeyPrefix } from './utils/prefix';
 import { shouldDeferRedisConnection } from './utils/redisConnection';
+import { AbortableGet, createAbortableGet } from './utils/abortableGet';
 import { compareAndUnlink } from './utils/compareAndUnlink';
 import {
   applyTagUpdate,
@@ -99,17 +100,15 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
   private client: Client;
   private revalidatedTagsMap: SyncedMap<TagManifestEntry | number>;
   private sharedTagsMap: SyncedMap<string[]>;
-  private inMemoryDeduplicationCache: SyncedMap<
-    Promise<ReturnType<Client['get']>>
-  >;
+  private inMemoryDeduplicationCache: SyncedMap<Promise<string | null>>;
   private keyPrefix: string;
   private getTimeoutMs: number;
-  private redisGet: Client['get'];
+  private redisGet: AbortableGet;
   private redisDeduplicationHandler: DeduplicatedRequestHandler<
-    Client['get'],
-    string | Buffer | null
+    AbortableGet,
+    string | null
   >;
-  private deduplicatedRedisGet: (key: string) => Client['get'];
+  private deduplicatedRedisGet: (key: string) => AbortableGet;
   private redisGetDeduplication: boolean;
   private inMemoryCachingTime: number;
   private redisConnectionDeferred: boolean;
@@ -254,7 +253,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         },
       });
 
-      const redisGet: Client['get'] = this.client.get.bind(this.client);
+      const redisGet = createAbortableGet(this.client);
       this.redisDeduplicationHandler = new DeduplicatedRequestHandler(
         redisGet,
         inMemoryCachingTime,
@@ -330,8 +329,8 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
             'ms ' +
             redisKey,
           (useDedup ? this.deduplicatedRedisGet(cacheKey) : this.redisGet)(
-            commandOptions({ signal: AbortSignal.timeout(this.getTimeoutMs) }),
             redisKey,
+            AbortSignal.timeout(this.getTimeoutMs),
           ),
         );
 
