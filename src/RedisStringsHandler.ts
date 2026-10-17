@@ -5,7 +5,11 @@ import { debug } from './utils/debug';
 import { CacheValueSerializer, jsonCacheValueSerializer } from './serializer';
 import { resolveCacheEntryTtlSeconds } from './utils/cacheTtl';
 import { shouldDeferRedisConnection } from './utils/redisConnection';
-import { AbortableGet, createAbortableGet } from './utils/abortableGet';
+import {
+  AbortableGet,
+  createAbortableGet,
+  RedisGetTimeoutError,
+} from './utils/abortableGet';
 
 export type Client = ReturnType<typeof createClient>;
 
@@ -108,12 +112,6 @@ export function redisErrorHandler<T extends Promise<unknown>>(
     );
     throw error;
   }) as T;
-}
-
-function isAbortError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const err = error as { name?: unknown; code?: unknown };
-  return err.name === 'AbortError' || err.code === 'ABORT_ERR';
 }
 
 if (process.env.DEBUG_CACHE_HANDLER) {
@@ -516,7 +514,7 @@ export default class RedisStringsHandler {
         this.keyPrefix + key,
         AbortSignal.timeout(this.getTimeoutMs),
       ).catch((error) => {
-        if (isAbortError(error)) {
+        if (error instanceof RedisGetTimeoutError) {
           return null;
         }
         throw error;
