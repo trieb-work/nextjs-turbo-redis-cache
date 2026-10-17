@@ -36,8 +36,8 @@ Tested versions are:
 - Nextjs 16.2.6 + redis client 4.7.0 (cacheComponents: false)
 - Nextjs 16.2.6 + redis client 4.7.0 (cacheComponents: true)
 - Nextjs 16.2.6 + redis client 4.7.0 (Pages Router)
-- Nextjs 16.3.0 + redis client 4.7.0 (cacheComponents: false)
-- Nextjs 16.3.0 + redis client 4.7.0 (cacheComponents: true)
+- Nextjs 16.3.0 + redis client 6.3.0 (cacheComponents: false)
+- Nextjs 16.3.0 + redis client 6.3.0 (cacheComponents: true)
 - Nextjs 16.3.0 + redis client 4.7.0 (Pages Router)
 
 _Cache Components_ (Next.js 16+) are fully supported. Automated test coverage includes `'use cache'`, `cacheTag`, and `cacheLife` flows in the Cache Components integration suite.
