@@ -118,29 +118,41 @@ describe('RedisStringsHandler Pages Router kinds', () => {
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
-    it('set() takes the implicit path tag from a Next.js 16.4 route-cache key', async () => {
-      const key =
-        '/route-cache/PAGES/b6406f8ebe93bedb5824e46146a9228cd4a5a3fb152b9f1fcffe6046ef30c7a3/$/blog/post-1';
+    // A Next.js 16.4 route-cache key is /route-cache/<kind>/<sha256(sourceRoute)>/$/<path>.
+    // Next.js 16.3 and older use the page path as the key.
+    const SOURCE_ROUTE_HASH =
+      'b6406f8ebe93bedb5824e46146a9228cd4a5a3fb152b9f1fcffe6046ef30c7a3';
+    it.each([
+      {
+        name: 'Next.js 16.4 route-cache key',
+        key: `/route-cache/PAGES/${SOURCE_ROUTE_HASH}/$/blog/post-1`,
+        tag: '_N_T_/blog/post-1',
+      },
+      {
+        // normalizePagePath stores '/' as '/index', as Next.js 16.3 did, and
+        // revalidatePath('/') revalidates both _N_T_/ and _N_T_/index
+        name: 'Next.js 16.4 route-cache key of the root page',
+        key: `/route-cache/PAGES/${SOURCE_ROUTE_HASH}/$/index`,
+        tag: '_N_T_/index',
+      },
+      {
+        name: 'Next.js 16.3 page path that looks like a route-cache key',
+        key: '/route-cache/docs/$/post',
+        tag: '_N_T_/route-cache/docs/$/post',
+      },
+      {
+        name: 'Next.js 16.3 page path under /route-cache/ without a /$/ marker',
+        key: `/route-cache/PAGES/${SOURCE_ROUTE_HASH}/blog`,
+        tag: `_N_T_/route-cache/PAGES/${SOURCE_ROUTE_HASH}/blog`,
+      },
+    ])('set() tags a $name with $tag', async ({ key, tag }) => {
       const handler = createHandler();
       await handler.set(key, pagesData, {
         ...baseCtx,
         cacheControl: { revalidate: 60, expire: undefined },
       });
 
-      expect(storedEntry(key).entry.tags).toEqual(['_N_T_/blog/post-1']);
-    });
-
-    it('set() keeps a Next.js 16.3 page path that only looks like a route-cache key', async () => {
-      const key = '/route-cache/docs/$/post';
-      const handler = createHandler();
-      await handler.set(key, pagesData, {
-        ...baseCtx,
-        cacheControl: { revalidate: 60, expire: undefined },
-      });
-
-      expect(storedEntry(key).entry.tags).toEqual([
-        '_N_T_/route-cache/docs/$/post',
-      ]);
+      expect(storedEntry(key).entry.tags).toEqual([tag]);
     });
 
     it('get() returns a PAGES entry without warnings', async () => {
