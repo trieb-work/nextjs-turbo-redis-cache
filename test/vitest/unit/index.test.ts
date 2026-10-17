@@ -92,6 +92,23 @@ describe('RedisStringsHandler', () => {
     return { res, elapsedMs: performance.now() - started };
   }
 
+  // @redis/client 5.x and 6.x remove the abort listener once the command
+  // is written to the socket, so a GET that waits for a stalled server
+  // ignores its signal. The stub never settles to model that.
+  async function useStalledRedis6Client() {
+    const stalledGet = vi.fn(() => new Promise<string | null>(() => undefined));
+    const { createClient } = await import('redis');
+    const createBaseClient = vi.mocked(createClient).getMockImplementation()!;
+    vi.mocked(createClient).mockImplementationOnce(
+      () =>
+        ({
+          ...createBaseClient(),
+          withAbortSignal: () => ({ get: stalledGet }),
+        }) as never,
+    );
+    return stalledGet;
+  }
+
   it('treats a GET the client aborts on timeout (redis 4 shape) as a cache miss without console.error', async () => {
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
@@ -118,20 +135,7 @@ describe('RedisStringsHandler', () => {
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
 
-    // @redis/client 5.x and 6.x remove the abort listener once the command
-    // is written to the socket, so a GET that waits for a stalled server
-    // ignores its signal. The stub never settles to model that.
-    const { createClient } = await import('redis');
-    const createBaseClient = vi.mocked(createClient).getMockImplementation()!;
-    vi.mocked(createClient).mockImplementationOnce(
-      () =>
-        ({
-          ...createBaseClient(),
-          withAbortSignal: () => ({
-            get: () => new Promise<string | null>(() => undefined),
-          }),
-        }) as never,
-    );
+    await useStalledRedis6Client();
 
     const handler = new RedisStringsHandler({
       redisUrl: 'redis://localhost:6379',
@@ -147,6 +151,35 @@ describe('RedisStringsHandler', () => {
     expect(consoleErrorSpy).not.toHaveBeenCalled();
     expect(elapsedMs).toBeGreaterThanOrEqual(getTimeoutMs - 5);
     expect(elapsedMs).toBeLessThan(1000);
+  });
+
+  it('treats a shared deduplicated GET as a cache miss for a caller whose own signal is still live', async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const stalledGet = await useStalledRedis6Client();
+
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'test:',
+      database: 0,
+      getTimeoutMs,
+      redisGetDeduplication: true,
+      inMemoryCachingTime: 1000,
+    });
+
+    const first = getMissingKey(handler);
+    // The second caller joins the first caller's pending GET. The first
+    // signal aborts while the second caller's signal has 20ms left.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const second = getMissingKey(handler);
+
+    const results = await Promise.all([first, second]);
+
+    expect(results.map(({ res }) => res)).toEqual([null, null]);
+    expect(results[1].elapsedMs).toBeLessThan(getTimeoutMs - 5);
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    expect(stalledGet).toHaveBeenCalledTimes(1);
   });
 
   it('does not leave the readiness timeout timer pending after an operation', async () => {
