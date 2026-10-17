@@ -69,6 +69,7 @@ jobs:
           - next-app-16-0-11
           - next-app-16-2-6
           - next-app-16-3-0
+          - next-app-16-4-2
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -120,6 +121,7 @@ jobs:
         pages-test-app:
           - next-pages-16-2-6
           - next-pages-16-3-0
+          - next-pages-16-4-2
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -215,6 +217,7 @@ jobs:
           - next-app-16-0-11-cache-components
           - next-app-16-2-6-cache-components
           - next-app-16-3-0-cache-components
+          - next-app-16-4-2-cache-components
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -266,6 +269,7 @@ jobs:
           - next-app-16-0-11-cache-components
           - next-app-16-2-6-cache-components
           - next-app-16-3-0-cache-components
+          - next-app-16-4-2-cache-components
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
