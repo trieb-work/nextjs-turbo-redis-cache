@@ -1,12 +1,16 @@
-import { commandOptions, createClient, RedisClientOptions } from 'redis';
+import { createClient, RedisClientOptions } from 'redis';
 import { SyncedMap } from './SyncedMap';
 import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
 import { debug } from './utils/debug';
 import { CacheValueSerializer, jsonCacheValueSerializer } from './serializer';
 import { resolveCacheEntryTtlSeconds } from './utils/cacheTtl';
 import { shouldDeferRedisConnection } from './utils/redisConnection';
+import {
+  AbortableGet,
+  createAbortableGet,
+  RedisGetTimeoutError,
+} from './utils/abortableGet';
 
-export type CommandOptions = ReturnType<typeof commandOptions>;
 export type Client = ReturnType<typeof createClient>;
 
 export type CacheEntry = {
@@ -108,12 +112,6 @@ export function redisErrorHandler<T extends Promise<unknown>>(
     );
     throw error;
   }) as T;
-}
-
-function isAbortError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const err = error as { name?: unknown; code?: unknown };
-  return err.name === 'AbortError' || err.code === 'ABORT_ERR';
 }
 
 if (process.env.DEBUG_CACHE_HANDLER) {
@@ -247,16 +245,14 @@ export default class RedisStringsHandler {
   private client: Client;
   private sharedTagsMap: SyncedMap<string[]>;
   private revalidatedTagsMap: SyncedMap<number>;
-  private inMemoryDeduplicationCache: SyncedMap<
-    Promise<ReturnType<Client['get']>>
-  >;
+  private inMemoryDeduplicationCache: SyncedMap<Promise<string | null>>;
   private getTimeoutMs: number;
-  private redisGet: Client['get'];
+  private redisGet: AbortableGet;
   private redisDeduplicationHandler: DeduplicatedRequestHandler<
-    Client['get'],
-    string | Buffer | null
+    AbortableGet,
+    string | null
   >;
-  private deduplicatedRedisGet: (key: string) => Client['get'];
+  private deduplicatedRedisGet: (key: string) => AbortableGet;
   private keyPrefix: string;
   private redisGetDeduplication: boolean;
   private inMemoryCachingTime: number;
@@ -411,7 +407,7 @@ export default class RedisStringsHandler {
         },
       });
 
-      const redisGet: Client['get'] = this.client.get.bind(this.client);
+      const redisGet = createAbortableGet(this.client);
       this.redisDeduplicationHandler = new DeduplicatedRequestHandler(
         redisGet,
         inMemoryCachingTime,
@@ -515,10 +511,10 @@ export default class RedisStringsHandler {
         : this.redisGet;
 
       const redisGetOperation = clientGet(
-        commandOptions({ signal: AbortSignal.timeout(this.getTimeoutMs) }),
         this.keyPrefix + key,
+        AbortSignal.timeout(this.getTimeoutMs),
       ).catch((error) => {
-        if (isAbortError(error)) {
+        if (error instanceof RedisGetTimeoutError) {
           return null;
         }
         throw error;
