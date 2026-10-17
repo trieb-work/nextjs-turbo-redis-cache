@@ -226,6 +226,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             '_N_T_/api/cached-static-fetch/route',
             '_N_T_/api/cached-static-fetch',
           ],
+          cacheControl: expect.objectContaining({ revalidate: false }),
         });
 
         expect((cacheEntry.value as any).kind).toBe('APP_ROUTE');

@@ -383,6 +383,9 @@ describe('Pages Router Redis cache integration (two instances)', () => {
         value: null,
         lastModified: expect.any(Number),
         tags: ['_N_T_/isr/not-found'],
+        cacheControl: expect.objectContaining({
+          revalidate: ISR_REVALIDATE_SECONDS,
+        }),
       });
 
       // TTL: Next.js 16.3+ keys on cacheControl.expire (SWR-safe); older
@@ -434,6 +437,59 @@ describe('Pages Router Redis cache integration (two instances)', () => {
       expect(res.status).toBe(307);
       expect(res.headers.get('location')).toContain('/static-forever');
     });
+  });
+
+  describe('shared entry lifetime (cacheControl)', () => {
+    // Not prerendered, so the prerender manifest has no lifetime for it. Only
+    // the instance that renders it knows the getStaticProps revalidate value.
+    const path = '/isr/shared-lifetime';
+    // Next.js 16.4+ applies the cacheControl that get() returns.
+    const nextReadsStoredCacheControl = nextVersionAtLeast(NEXT_APP_DIR, 16, 4);
+    let timestampA: number;
+    let cacheControlHeaderA: string | null;
+
+    it('instance A renders the page and stores its cacheControl in Redis', async () => {
+      const res = await fetch(INSTANCE_A_URL + path);
+      expect(res.status).toBe(200);
+      timestampA = extractTimestamp(await res.text());
+      cacheControlHeaderA = res.headers.get('cache-control');
+      expect(cacheControlHeaderA).toContain(
+        `s-maxage=${ISR_REVALIDATE_SECONDS}`,
+      );
+
+      await delay(REDIS_BACKGROUND_SYNC_DELAY);
+
+      const cacheEntry: CacheEntry = JSON.parse(
+        (await redisClient.get(await getRouteKey(path))) as string,
+      );
+      expect(cacheEntry.cacheControl).toMatchObject({
+        revalidate: ISR_REVALIDATE_SECONDS,
+      });
+    });
+
+    it.runIf(nextReadsStoredCacheControl)(
+      'instance B serves the entry with the lifetime of instance A',
+      async () => {
+        const res = await fetch(INSTANCE_B_URL + path);
+        expect(res.status).toBe(200);
+        expect(extractTimestamp(await res.text())).toBe(timestampA);
+        expect(res.headers.get('cache-control')).toBe(cacheControlHeaderA);
+      },
+    );
+
+    it.runIf(nextReadsStoredCacheControl)(
+      'instance B does not regenerate the entry before its revalidate time',
+      async () => {
+        // Without the stored lifetime, instance B treats an entry it did not
+        // render as stale after 1 second and regenerates it in the background.
+        await delay(2_000);
+        await fetch(INSTANCE_B_URL + path);
+        await delay(REDIS_BACKGROUND_SYNC_DELAY);
+
+        const res = await fetch(INSTANCE_B_URL + path);
+        expect(extractTimestamp(await res.text())).toBe(timestampA);
+      },
+    );
   });
 
   describe('revalidate: false (fully static page)', () => {
