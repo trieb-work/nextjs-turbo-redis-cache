@@ -5,6 +5,7 @@ import { createClient, RedisClientType } from 'redis';
 import { join } from 'path';
 import { readFileSync } from 'fs';
 import { CacheEntry } from '../../../src/RedisStringsHandler';
+import { createRouteCacheLookup } from './route-cache-lookup';
 
 // Select which Pages Router test app to use. Can be overridden via NEXT_PAGES_TEST_APP env var
 const NEXT_PAGES_TEST_APP =
@@ -43,6 +44,11 @@ let instanceA: ChildProcessWithoutNullStreams;
 let instanceB: ChildProcessWithoutNullStreams;
 let redisClient: RedisClientType;
 let buildId: string;
+
+const { findRouteKeys, findRouteSharedTags } = createRouteCacheLookup(
+  NEXT_APP_DIR,
+  () => ({ redis: redisClient, prefix: process.env.VERCEL_URL! }),
+);
 
 async function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -308,6 +314,33 @@ describe('Pages Router Redis cache integration (two instances)', () => {
         const data: any = await dataRes.json();
         expect(data.pageProps.timestamp).toBe(timestampB);
       }, 30_000);
+    });
+
+    describe('revalidatePath from an App Router route handler', () => {
+      it('removes the PAGES entry from Redis and the next request re-renders the page', async () => {
+        const before = extractTimestamp(
+          await (await fetch(INSTANCE_A_URL + '/isr/prebuilt')).text(),
+        );
+        await delay(REDIS_BACKGROUND_SYNC_DELAY);
+        expect(await findRouteKeys('/isr/prebuilt')).toHaveLength(1);
+
+        const revalidateRes = await fetch(
+          INSTANCE_A_URL + '/api/revalidate-path?path=/isr/prebuilt',
+        );
+        expect(await revalidateRes.json()).toEqual({
+          revalidated: true,
+          path: '/isr/prebuilt',
+        });
+        await delay(REDIS_BACKGROUND_SYNC_DELAY);
+
+        expect(await findRouteKeys('/isr/prebuilt')).toEqual([]);
+        expect(await findRouteSharedTags('/isr/prebuilt')).toBeUndefined();
+
+        const after = extractTimestamp(
+          await (await fetch(INSTANCE_A_URL + '/isr/prebuilt')).text(),
+        );
+        expect(after).toBeGreaterThan(before);
+      });
     });
   });
 
