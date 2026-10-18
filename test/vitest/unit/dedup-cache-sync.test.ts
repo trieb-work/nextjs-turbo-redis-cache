@@ -13,6 +13,8 @@ const hoisted = vi.hoisted(() => {
     // When set, GET reads the store at call time but resolves only after
     // this promise, like a slow Redis reply.
     holdGet: undefined as Promise<void> | undefined,
+    // When set, SET stores the value only after this promise.
+    holdSet: undefined as Promise<void> | undefined,
   };
   return { store, subscribers, published, control };
 });
@@ -48,6 +50,7 @@ vi.mock('redis', () => {
     }),
     set: vi.fn(async (key: string, value: string) => {
       if (hoisted.control.failSet) throw new Error('SET failed');
+      await hoisted.control.holdSet;
       hoisted.store.set(key, value);
       return 'OK';
     }),
@@ -123,6 +126,7 @@ describe('in-memory read cache across instances', () => {
     hoisted.published.length = 0;
     hoisted.control.failSet = false;
     hoisted.control.holdGet = undefined;
+    hoisted.control.holdSet = undefined;
   });
 
   afterEach(() => {
@@ -157,6 +161,25 @@ describe('in-memory read cache across instances', () => {
 
     expect(await readHtml(reader)).toBe('v2');
     expect(await readHtml(writer)).toBe('v2');
+  });
+
+  it('serves the new value on the writing instance while its Redis SET runs', async () => {
+    const writer = createInstance(10_000);
+    // A cache miss before the write, as when Next.js fetches the data.
+    expect(await readHtml(writer)).toBeNull();
+
+    let releaseSet!: () => void;
+    hoisted.control.holdSet = new Promise((resolve) => {
+      releaseSet = resolve;
+    });
+    const write = writer.set(KEY, page('v1'), setCtx);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(await readHtml(writer)).toBe('v1');
+
+    releaseSet();
+    await write;
+    expect(await readHtml(writer)).toBe('v1');
   });
 
   it('keeps the cached copy on other instances when the Redis SET fails', async () => {
