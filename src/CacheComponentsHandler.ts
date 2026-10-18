@@ -271,9 +271,9 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
 
   private async assertClientIsReady(): Promise<void> {
     if (this.redisConnectionDeferred) {
-      await Promise.all([
-        this.revalidatedTagsMap.waitUntilReady(),
-        this.sharedTagsMap.waitUntilReady(),
+      await SyncedMap.waitUntilAllReady([
+        this.revalidatedTagsMap,
+        this.sharedTagsMap,
       ]);
       return;
     }
@@ -287,9 +287,9 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         throw error;
       });
     }
-    await Promise.all([
-      this.revalidatedTagsMap.waitUntilReady(),
-      this.sharedTagsMap.waitUntilReady(),
+    await SyncedMap.waitUntilAllReady([
+      this.revalidatedTagsMap,
+      this.sharedTagsMap,
     ]);
   }
 
@@ -495,7 +495,14 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
   }
 
   async refreshTags(): Promise<void> {
-    await this.assertClientIsReady();
+    try {
+      await this.assertClientIsReady();
+    } catch (error) {
+      console.error(
+        'RedisCacheComponentsHandler.refreshTags() Redis is not ready. The original error was:',
+        error,
+      );
+    }
   }
 
   async getExpiration(tags: string[]): Promise<number> {
