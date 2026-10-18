@@ -806,15 +806,6 @@ export default class RedisStringsHandler {
       const serializedCacheEntry =
         await this.valueSerializer.serialize(cacheEntry);
 
-      // pre seed data into deduplicated get client. This will reduce redis load by not requesting
-      // the same value from redis which was just set.
-      if (this.redisGetDeduplication) {
-        this.redisDeduplicationHandler.seedRequestReturn(
-          key,
-          serializedCacheEntry,
-        );
-      }
-
       const expireAt = resolveCacheEntryTtlSeconds(ctx, data, {
         estimateExpireAge: this.estimateExpireAge,
         defaultStaleAge: this.defaultStaleAge,
@@ -830,6 +821,14 @@ export default class RedisStringsHandler {
           ...(expireAt ? { EX: expireAt } : {}),
         }),
       );
+
+      // When the new value is in redis, remove the old copy from the in-memory deduplication cache
+      // of every instance. Otherwise the other instances serve the old value for up to inMemoryCachingTime.
+      // This instance also receives the sync message, so seeding its own cache here would not last.
+      const invalidateDeduplicationCacheOperation =
+        this.redisGetDeduplication && this.inMemoryCachingTime > 0
+          ? setOperation.then(() => this.inMemoryDeduplicationCache.delete(key))
+          : undefined;
 
       debug(
         'blue',
@@ -871,7 +870,11 @@ export default class RedisStringsHandler {
       );
 
       await untilDeadline(
-        Promise.all([setOperation, setTagsOperation]),
+        Promise.all([
+          setOperation,
+          setTagsOperation,
+          invalidateDeduplicationCacheOperation,
+        ]),
         AbortSignal.timeout(this.writeTimeoutMs),
       );
     } catch (error) {
