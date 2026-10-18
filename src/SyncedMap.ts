@@ -59,6 +59,8 @@ export class SyncedMap<V> {
   private lastSetupError: unknown;
   private readyWaiters = new Set<ReadyWaiter>();
   private subscriberSetup?: Promise<void>;
+  private sync?: Promise<void>;
+  private resyncNeeded = false;
 
   constructor(options: SyncedMapOptions) {
     this.client = options.client;
@@ -77,18 +79,56 @@ export class SyncedMap<V> {
   }
 
   private async setup() {
-    if (!shouldDeferRedisConnection()) {
-      const setupSteps = [this.reconnectSubscriber()];
-      if (!this.customizedSync?.withoutRedisHashmap) {
-        setupSteps.push(
-          this.retryUntilSuccess('Initial sync', () => this.initialSync()),
-        );
-        this.setupPeriodicResync();
-      }
-      await Promise.all(setupSteps);
+    if (shouldDeferRedisConnection()) {
+      this.markReady();
+      return;
     }
+    if (!this.customizedSync?.withoutRedisHashmap) {
+      this.setupPeriodicResync();
+    }
+    await this.subscribeAndSync();
+  }
+
+  /**
+   * Sync messages published while no subscriber listens are lost. Subscribe
+   * first, then load the Redis hash, so the map misses no entry. Run again if
+   * the subscriber fails during the load.
+   */
+  private subscribeAndSync(): Promise<void> {
+    this.sync ??= (async () => {
+      do {
+        this.resyncNeeded = false;
+        await this.reconnectSubscriber();
+        if (!this.customizedSync?.withoutRedisHashmap) {
+          await this.retryUntilSuccess('Initial sync', () =>
+            this.initialSync(),
+          );
+        }
+      } while (this.resyncNeeded);
+      this.markReady();
+    })().finally(() => {
+      this.sync = undefined;
+    });
+    return this.sync;
+  }
+
+  private markReady() {
+    this.lastSetupError = undefined;
     this.isSetUp = true;
     for (const waiter of this.readyWaiters) waiter.ready();
+  }
+
+  /**
+   * Until the subscriber is back and the map is reloaded, the map can miss
+   * entries, so revalidateTag() could skip keys. Report not ready meanwhile.
+   */
+  private onSubscriberError(error: unknown) {
+    console.error('Subscriber client error:', error);
+    this.isSetUp = false;
+    this.recordSetupError(error);
+    // A subscriber setup in flight already creates a new client.
+    if (!this.subscriberSetup) this.resyncNeeded = true;
+    void this.subscribeAndSync();
   }
 
   /**
@@ -260,11 +300,7 @@ export class SyncedMap<V> {
       // a reconnection. Previously this was attached after the subscribe()
       // calls, which meant if subscribe threw during an outage the handler
       // was never attached and the subscriber was permanently dead.
-      subscriber.on('error', async (err) => {
-        console.error('Subscriber client error:', err);
-        this.recordSetupError(err);
-        await this.reconnectSubscriber();
-      });
+      subscriber.on('error', (err) => this.onSubscriberError(err));
 
       await subscriber.connect();
 

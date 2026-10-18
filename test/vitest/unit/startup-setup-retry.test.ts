@@ -28,6 +28,8 @@ const redisState = {
   hscanHold: undefined as Deferred | undefined,
   subscriberConnectHold: undefined as Deferred | undefined,
   duplicates: [] as MockClient[],
+  // Fields of the shared Redis hash, and the matching Redis string keys.
+  hash: new Map<string, string>(),
 };
 
 type MockClient = ReturnType<typeof createMockClient>;
@@ -82,6 +84,10 @@ function createMockClient() {
           redisState.hscanFailuresLeft--;
           throw socketClosed();
         }
+        return ['0', [...redisState.hash].flat()];
+      }
+      if (args[0] === 'SCAN') {
+        return ['0', [...redisState.hash.keys()].map((key) => 'retry:' + key)];
       }
       return ['0', []];
     },
@@ -143,6 +149,7 @@ describe('tag map setup after a failed start', () => {
     redisState.hscanHold = undefined;
     redisState.subscriberConnectHold = undefined;
     redisState.duplicates = [];
+    redisState.hash = new Map();
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -200,6 +207,37 @@ describe('tag map setup after a failed start', () => {
 
     await vi.waitFor(() => map.waitUntilReady(), { timeout: 3_000 });
     expect(redisState.duplicates).toHaveLength(1);
+  });
+
+  it('reloads entries that another pod stored while the subscriber reconnected', async () => {
+    const map = await createSyncedMap();
+    await vi.waitFor(() => map.waitUntilReady(), { timeout: 3_000 });
+
+    const connect = deferred();
+    redisState.subscriberConnectHold = connect;
+    redisState.duplicates[0].emit('error', socketClosed());
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Pod B stores a tagged entry. Its sync message reaches nobody.
+    redisState.hash.set('tagged-entry', JSON.stringify(['article:42']));
+    expect(await outcomeWithin(map.waitUntilReady(), 200)).toBe('rejected');
+
+    connect.resolve();
+    await vi.waitFor(() => map.waitUntilReady(), { timeout: 3_000 });
+    expect(map.get('tagged-entry')).toEqual(['article:42']);
+  });
+
+  it('loads entries stored while the subscriber was still connecting at startup', async () => {
+    const connect = deferred();
+    redisState.subscriberConnectHold = connect;
+    const map = await createSyncedMap();
+    await new Promise((r) => setTimeout(r, 20));
+
+    redisState.hash.set('tagged-entry', JSON.stringify(['article:42']));
+    connect.resolve();
+
+    await vi.waitFor(() => map.waitUntilReady(), { timeout: 3_000 });
+    expect(map.get('tagged-entry')).toEqual(['article:42']);
   });
 
   it('RedisStringsHandler.get() misses fast while setup retries, then reads Redis', async () => {
