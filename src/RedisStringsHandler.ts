@@ -772,7 +772,8 @@ export default class RedisStringsHandler {
         await this.valueSerializer.serialize(cacheEntry);
 
       // pre seed data into deduplicated get client. This will reduce redis load by not requesting
-      // the same value from redis which was just set.
+      // the same value from redis which was just set. It also replaces a cached miss, so that reads
+      // on this instance during the redis SET do not return the old result.
       if (this.redisGetDeduplication) {
         this.redisDeduplicationHandler.seedRequestReturn(
           key,
@@ -795,6 +796,14 @@ export default class RedisStringsHandler {
           ...(expireAt ? { EX: expireAt } : {}),
         }),
       );
+
+      // When the new value is in redis, remove the old copy from the in-memory deduplication cache
+      // of every instance. Otherwise the other instances serve the old value for up to inMemoryCachingTime.
+      // This also removes the seed on this instance, so its next read gets the new value from redis.
+      const invalidateDeduplicationCacheOperation =
+        this.redisGetDeduplication && this.inMemoryCachingTime > 0
+          ? setOperation.then(() => this.inMemoryDeduplicationCache.delete(key))
+          : undefined;
 
       debug(
         'blue',
@@ -831,7 +840,11 @@ export default class RedisStringsHandler {
         ctx.tags as string[],
       );
 
-      await Promise.all([setOperation, setTagsOperation]);
+      await Promise.all([
+        setOperation,
+        setTagsOperation,
+        invalidateDeduplicationCacheOperation,
+      ]);
     } catch (error) {
       console.error(
         'RedisStringsHandler.set() Error occurred while setting cache entry. The original error was:',
