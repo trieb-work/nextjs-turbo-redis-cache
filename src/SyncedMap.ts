@@ -404,32 +404,38 @@ export class SyncedMap<V> {
   /**
    * Waits for the initial sync and the subscriber of every map. Rejects as
    * soon as a setup attempt fails, so cache calls miss instead of hanging.
+   * A ready map can lose its subscriber during the wait, so the wait watches
+   * every map, not only the ones that were loading when it started.
    */
   public static async waitUntilAllReady(
     maps: SyncedMap<unknown>[],
     timeoutMs = READY_TIMEOUT_MS,
   ): Promise<void> {
-    const pending = maps.filter((map) => !map.isSetUp);
-    if (pending.length === 0) return;
-    const failed = pending.find((map) => map.lastSetupError !== undefined);
-    if (failed) throw failed.notReadyError();
+    const notReady = () => maps.filter((map) => !map.isSetUp);
+    const throwIfFailed = () => {
+      const failed = notReady().find((map) => map.lastSetupError !== undefined);
+      if (failed) throw failed.notReadyError();
+    };
+    if (notReady().length === 0) return;
+    throwIfFailed();
 
     let readyTimeout: ReturnType<typeof setTimeout> | undefined;
     let waiter: ReadyWaiter | undefined;
     try {
       await new Promise<void>((resolve, reject) => {
-        let notReady = pending.length;
         waiter = {
           ready: () => {
-            if (--notReady === 0) resolve();
+            if (notReady().length === 0) resolve();
           },
           fail: reject,
         };
-        for (const map of pending) map.readyWaiters.add(waiter);
+        for (const map of maps) map.readyWaiters.add(waiter);
         readyTimeout = setTimeout(() => {
           reject(
             new Error(
-              `SyncedMap ${pending.map((map) => map.redisKey).join(', ')} is not ready after ${timeoutMs}ms`,
+              `SyncedMap ${notReady()
+                .map((map) => map.redisKey)
+                .join(', ')} is not ready after ${timeoutMs}ms`,
             ),
           );
         }, timeoutMs);
@@ -438,8 +444,9 @@ export class SyncedMap<V> {
       // Timers capture the ambient async context (AsyncLocalStorage), so in a
       // Next.js server a leaked timer pins the request's object graph.
       clearTimeout(readyTimeout);
-      for (const map of pending) map.readyWaiters.delete(waiter!);
+      for (const map of maps) map.readyWaiters.delete(waiter!);
     }
+    throwIfFailed();
   }
 
   public waitUntilReady(timeoutMs?: number): Promise<void> {

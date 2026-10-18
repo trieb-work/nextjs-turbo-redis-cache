@@ -240,6 +240,24 @@ describe('tag map setup after a failed start', () => {
     expect(map.get('tagged-entry')).toEqual(['article:42']);
   });
 
+  it('a wait on several maps fails when a ready map loses its subscriber', async () => {
+    const { SyncedMap } = await import('../../../src/SyncedMap');
+    const sharedTags = await createSyncedMap();
+    await vi.waitFor(() => sharedTags.waitUntilReady(), { timeout: 3_000 });
+
+    const hscan = deferred();
+    redisState.hscanHold = hscan;
+    const revalidatedTags = await createSyncedMap();
+    const waiting = SyncedMap.waitUntilAllReady([sharedTags, revalidatedTags]);
+    await new Promise((r) => setTimeout(r, 20));
+
+    redisState.subscriberConnectHold = deferred();
+    redisState.duplicates[0].emit('error', socketClosed());
+    hscan.resolve();
+
+    expect(await outcomeWithin(waiting, 200)).toBe('rejected');
+  });
+
   it('RedisStringsHandler.get() misses fast while setup retries, then reads Redis', async () => {
     redisState.hscanFailuresLeft = Number.POSITIVE_INFINITY;
     const { default: RedisStringsHandler } = await import(
