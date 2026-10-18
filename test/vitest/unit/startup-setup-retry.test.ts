@@ -4,12 +4,33 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // HSCAN is in flight. The tag maps must keep retrying their setup, and cache
 // calls must not hang while they do.
 
+type Deferred = {
+  promise: Promise<void>;
+  resolve: () => void;
+  reject: (error: Error) => void;
+};
+
+function deferred(): Deferred {
+  let resolve!: () => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<void>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 const redisState = {
   hscanFailuresLeft: 0,
   configGetFailuresLeft: 0,
   hscanCalls: 0,
   getCalls: 0,
+  hscanHold: undefined as Deferred | undefined,
+  subscriberConnectHold: undefined as Deferred | undefined,
+  duplicates: [] as MockClient[],
 };
+
+type MockClient = ReturnType<typeof createMockClient>;
 
 function socketClosed() {
   return new Error('Socket closed unexpectedly');
@@ -25,15 +46,24 @@ function createMockClient() {
       listeners.get(event)!.add(cb);
       return client;
     },
+    emit(event: string, ...args: unknown[]) {
+      for (const cb of listeners.get(event) ?? []) cb(...args);
+    },
     removeAllListeners(event?: string) {
       if (event) listeners.delete(event);
       else listeners.clear();
       return client;
     },
-    async connect() {},
+    async connect() {
+      await redisState.subscriberConnectHold?.promise;
+    },
     async disconnect() {},
     async quit() {},
-    duplicate: () => createMockClient(),
+    duplicate: () => {
+      const duplicate = createMockClient();
+      redisState.duplicates.push(duplicate);
+      return duplicate;
+    },
     async configGet() {
       if (redisState.configGetFailuresLeft > 0) {
         redisState.configGetFailuresLeft--;
@@ -45,6 +75,9 @@ function createMockClient() {
     async sendCommand(args: string[]) {
       if (args[0] === 'HSCAN') {
         redisState.hscanCalls++;
+        const hold = redisState.hscanHold;
+        redisState.hscanHold = undefined;
+        await hold?.promise;
         if (redisState.hscanFailuresLeft > 0) {
           redisState.hscanFailuresLeft--;
           throw socketClosed();
@@ -107,6 +140,9 @@ describe('tag map setup after a failed start', () => {
     redisState.configGetFailuresLeft = 0;
     redisState.hscanCalls = 0;
     redisState.getCalls = 0;
+    redisState.hscanHold = undefined;
+    redisState.subscriberConnectHold = undefined;
+    redisState.duplicates = [];
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -118,7 +154,7 @@ describe('tag map setup after a failed start', () => {
     redisState.hscanFailuresLeft = 1;
     const map = await createSyncedMap();
 
-    expect(await outcomeWithin(map.waitUntilReady(), 3_000)).toBe('resolved');
+    await vi.waitFor(() => map.waitUntilReady(), { timeout: 3_000 });
     expect(redisState.hscanCalls).toBe(2);
   });
 
@@ -126,7 +162,7 @@ describe('tag map setup after a failed start', () => {
     redisState.configGetFailuresLeft = 1;
     const map = await createSyncedMap();
 
-    expect(await outcomeWithin(map.waitUntilReady(), 3_000)).toBe('resolved');
+    await vi.waitFor(() => map.waitUntilReady(), { timeout: 3_000 });
   });
 
   it('SyncedMap rejects waiters at once while setup retries', async () => {
@@ -135,6 +171,35 @@ describe('tag map setup after a failed start', () => {
     await new Promise((r) => setTimeout(r, 50));
 
     expect(await outcomeWithin(map.waitUntilReady(), 200)).toBe('rejected');
+  });
+
+  it('SyncedMap wakes a waiter that started before the first attempt failed', async () => {
+    const hscan = deferred();
+    redisState.hscanHold = hscan;
+    const map = await createSyncedMap();
+
+    const waiting = map.waitUntilReady();
+    await new Promise((r) => setTimeout(r, 20));
+    hscan.reject(socketClosed());
+
+    expect(await outcomeWithin(waiting, 200)).toBe('rejected');
+  });
+
+  it('subscriber errors during a pending setup attempt join it and keep its client', async () => {
+    const connect = deferred();
+    redisState.subscriberConnectHold = connect;
+    const map = await createSyncedMap();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(redisState.duplicates).toHaveLength(1);
+
+    const [subscriber] = redisState.duplicates;
+    subscriber.emit('error', socketClosed());
+    subscriber.emit('error', socketClosed());
+    await new Promise((r) => setTimeout(r, 20));
+    connect.resolve();
+
+    await vi.waitFor(() => map.waitUntilReady(), { timeout: 3_000 });
+    expect(redisState.duplicates).toHaveLength(1);
   });
 
   it('RedisStringsHandler.get() misses fast while setup retries, then reads Redis', async () => {
