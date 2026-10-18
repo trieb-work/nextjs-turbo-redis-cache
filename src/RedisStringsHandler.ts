@@ -451,9 +451,9 @@ export default class RedisStringsHandler {
         'assertClientIsReady called more than 10 times without being ready.',
       );
     }
-    await Promise.all([
-      this.sharedTagsMap.waitUntilReady(),
-      this.revalidatedTagsMap.waitUntilReady(),
+    await SyncedMap.waitUntilAllReady([
+      this.sharedTagsMap,
+      this.revalidatedTagsMap,
     ]);
     this.clientReadyCalls = 0;
     if (!this.client.isReady) {

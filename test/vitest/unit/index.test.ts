@@ -45,7 +45,7 @@ vi.mock('redis', () => {
 
 vi.mock('../../src/SyncedMap', () => {
   class SyncedMap {
-    waitUntilReady = vi.fn(async () => undefined);
+    static waitUntilAllReady = vi.fn(async () => undefined);
     get = vi.fn(() => undefined);
     set = vi.fn(async () => undefined);
     delete = vi.fn(async () => undefined);
