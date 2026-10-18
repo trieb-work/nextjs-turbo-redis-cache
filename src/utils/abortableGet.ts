@@ -1,23 +1,16 @@
 // A namespace import, not `import { commandOptions }`: node-redis v5 and v6
 // do not export commandOptions, and a named import of it fails at load time.
 import * as redis from 'redis';
+import { RedisTimeoutError, untilDeadline } from './deadline';
 
 /**
- * Reads one string key. Rejects with RedisGetTimeoutError no later than the
+ * Reads one string key. Rejects with RedisTimeoutError no later than the
  * moment `signal` aborts, whatever the client does with the signal.
  */
 export type AbortableGet = (
   key: string,
   signal: AbortSignal,
 ) => Promise<string | null>;
-
-/** The GET did not get a reply before its signal aborted. */
-export class RedisGetTimeoutError extends Error {
-  constructor() {
-    super('Redis GET aborted before a reply arrived');
-    this.name = 'RedisGetTimeoutError';
-  }
-}
 
 type WithAbortSignalClient = {
   withAbortSignal(signal: AbortSignal): {
@@ -57,30 +50,12 @@ function createClientGet(client: object): AbortableGet {
 export function createAbortableGet(client: object): AbortableGet {
   const clientGet = createClientGet(client);
 
-  // The signal still goes to the client so that node-redis can drop a
-  // command it has not written yet. But node-redis 5 and 6 stop listening
-  // once the command is on the socket, and node-redis 4 rejects with an
-  // error that has no stable name or code. So this wrapper applies the
-  // deadline itself and gives the timeout one error type for all client
-  // versions.
+  // The signal also goes to the client, so that node-redis can drop a
+  // command it has not written yet.
   return async (key, signal) => {
     if (signal.aborted) {
-      throw new RedisGetTimeoutError();
+      throw new RedisTimeoutError();
     }
-    let onAbort!: () => void;
-    const aborted = new Promise<never>((_, reject) => {
-      onAbort = () => reject(new RedisGetTimeoutError());
-    });
-    signal.addEventListener('abort', onAbort, { once: true });
-    try {
-      return await Promise.race([clientGet(key, signal), aborted]);
-    } catch (error) {
-      if (signal.aborted) {
-        throw new RedisGetTimeoutError();
-      }
-      throw error;
-    } finally {
-      signal.removeEventListener('abort', onAbort);
-    }
+    return untilDeadline(clientGet(key, signal), signal);
   };
 }

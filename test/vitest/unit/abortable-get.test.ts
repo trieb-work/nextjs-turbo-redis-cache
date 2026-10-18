@@ -1,10 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createClient } from 'redis';
 import redisPackage from 'redis/package.json';
-import {
-  createAbortableGet,
-  RedisGetTimeoutError,
-} from '../../../src/utils/abortableGet';
+import { createAbortableGet } from '../../../src/utils/abortableGet';
+import { RedisTimeoutError } from '../../../src/utils/deadline';
 
 // Uses the installed redis package without a mock. CI runs this file with
 // redis 4.7.0 and with redis 6.x, so each client major gets its own run.
@@ -34,14 +32,14 @@ describe(`createAbortableGet with redis ${redisPackage.version}`, () => {
     const pending = get('some-key', controller.signal);
     controller.abort();
 
-    await expect(pending).rejects.toBeInstanceOf(RedisGetTimeoutError);
+    await expect(pending).rejects.toBeInstanceOf(RedisTimeoutError);
   });
 
   it('rejects at once when the signal is already aborted', async () => {
     const get = createAbortableGet(createOfflineClient());
 
     await expect(get('some-key', AbortSignal.abort())).rejects.toBeInstanceOf(
-      RedisGetTimeoutError,
+      RedisTimeoutError,
     );
   });
 });
@@ -63,7 +61,7 @@ describe('createAbortableGet with a client that ignores the signal', () => {
 
     await expect(
       get('some-key', AbortSignal.timeout(timeoutMs)),
-    ).rejects.toBeInstanceOf(RedisGetTimeoutError);
+    ).rejects.toBeInstanceOf(RedisTimeoutError);
 
     const elapsedMs = performance.now() - started;
     expect(elapsedMs).toBeGreaterThanOrEqual(timeoutMs - 5);

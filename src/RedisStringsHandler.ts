@@ -5,11 +5,8 @@ import { debug } from './utils/debug';
 import { CacheValueSerializer, jsonCacheValueSerializer } from './serializer';
 import { resolveCacheEntryTtlSeconds } from './utils/cacheTtl';
 import { shouldDeferRedisConnection } from './utils/redisConnection';
-import {
-  AbortableGet,
-  createAbortableGet,
-  RedisGetTimeoutError,
-} from './utils/abortableGet';
+import { AbortableGet, createAbortableGet } from './utils/abortableGet';
+import { RedisTimeoutError, untilDeadline } from './utils/deadline';
 
 export type Client = ReturnType<typeof createClient>;
 
@@ -151,6 +148,12 @@ export type CreateRedisStringsHandlerOptions = {
    * @default 500
    */
   getTimeoutMs?: number;
+  /** Timeout in milliseconds for the Redis writes that a request waits for (set, revalidateTag).
+   *  If Redis does not confirm them within this time, the cache handler logs a warning and returns,
+   *  so the request is not blocked further. The write can still be applied later, or be lost.
+   * @default process.env.REDIS_WRITE_TIMEOUT_MS, else getTimeoutMs
+   */
+  writeTimeoutMs?: number;
   /** Number of entries to query in one batch during full sync of shared tags hash map
    * @default 250
    */
@@ -247,6 +250,7 @@ export default class RedisStringsHandler {
   private revalidatedTagsMap: SyncedMap<number>;
   private inMemoryDeduplicationCache: SyncedMap<Promise<string | null>>;
   private getTimeoutMs: number;
+  private writeTimeoutMs: number;
   private redisGet: AbortableGet;
   private redisDeduplicationHandler: DeduplicatedRequestHandler<
     AbortableGet,
@@ -276,6 +280,9 @@ export default class RedisStringsHandler {
     getTimeoutMs = process.env.REDIS_COMMAND_TIMEOUT_MS
       ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 500)
       : 500,
+    writeTimeoutMs = process.env.REDIS_WRITE_TIMEOUT_MS
+      ? Number.parseInt(process.env.REDIS_WRITE_TIMEOUT_MS) || getTimeoutMs
+      : getTimeoutMs,
     revalidateTagQuerySize = 250,
     avgResyncIntervalMs = 60 * 60 * 1_000,
     redisGetDeduplication = true,
@@ -299,6 +306,7 @@ export default class RedisStringsHandler {
       this.estimateExpireAge = estimateExpireAge;
       this.killContainerOnErrorThreshold = killContainerOnErrorThreshold;
       this.getTimeoutMs = getTimeoutMs;
+      this.writeTimeoutMs = writeTimeoutMs;
       this.valueSerializer = valueSerializer;
       this.redisConnectionDeferred = shouldDeferRedisConnection();
 
@@ -514,7 +522,7 @@ export default class RedisStringsHandler {
         this.keyPrefix + key,
         AbortSignal.timeout(this.getTimeoutMs),
       ).catch((error) => {
-        if (error instanceof RedisGetTimeoutError) {
+        if (error instanceof RedisTimeoutError) {
           return null;
         }
         throw error;
@@ -827,8 +835,20 @@ export default class RedisStringsHandler {
         ctx.tags as string[],
       );
 
-      await Promise.all([setOperation, setTagsOperation]);
+      await untilDeadline(
+        Promise.all([setOperation, setTagsOperation]),
+        AbortSignal.timeout(this.writeTimeoutMs),
+      );
     } catch (error) {
+      if (error instanceof RedisTimeoutError) {
+        console.warn(
+          'RedisStringsHandler.set() Redis did not confirm the write within',
+          this.writeTimeoutMs,
+          'ms. Returning without it, the entry may not be stored:',
+          this.keyPrefix + key,
+        );
+        return;
+      }
       console.error(
         'RedisStringsHandler.set() Error occurred while setting cache entry. The original error was:',
         error,
@@ -868,6 +888,10 @@ export default class RedisStringsHandler {
         return;
       }
 
+      // Start every write before waiting, so that one deadline bounds them
+      // all and a timeout does not skip the writes after it.
+      const writes: Promise<unknown>[] = [];
+
       // find all keys that are related to this tag
       const keysToDelete: Set<string> = new Set();
 
@@ -889,7 +913,7 @@ export default class RedisStringsHandler {
             'to',
             now,
           );
-          await this.revalidatedTagsMap.set(tag, now);
+          writes.push(this.revalidatedTagsMap.set(tag, now));
         }
       }
 
@@ -907,39 +931,49 @@ export default class RedisStringsHandler {
         'keys to delete',
       );
 
-      // exit early if no keys are related to this tag
-      if (keysToDelete.size === 0) {
-        return;
-      }
+      if (keysToDelete.size > 0) {
+        // prepare deletion of all keys in redis that are related to this tag
+        const redisKeys = Array.from(keysToDelete);
+        const fullRedisKeys = redisKeys.map((key) => this.keyPrefix + key);
+        writes.push(
+          redisErrorHandler(
+            'RedisStringsHandler.revalidateTag(), operation: unlink ' +
+              this.keyPrefix +
+              ' ' +
+              fullRedisKeys,
+            this.client.unlink(fullRedisKeys),
+          ),
+        );
 
-      // prepare deletion of all keys in redis that are related to this tag
-      const redisKeys = Array.from(keysToDelete);
-      const fullRedisKeys = redisKeys.map((key) => this.keyPrefix + key);
-      const deleteKeysOperation = redisErrorHandler(
-        'RedisStringsHandler.revalidateTag(), operation: unlink ' +
-          this.keyPrefix +
-          ' ' +
-          fullRedisKeys,
-        this.client.unlink(fullRedisKeys),
-      );
-
-      // also delete entries from in-memory deduplication cache if they get revalidated
-      if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
-        for (const key of keysToDelete) {
-          this.inMemoryDeduplicationCache.delete(key);
+        // also delete entries from in-memory deduplication cache if they get revalidated
+        if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
+          for (const key of keysToDelete) {
+            this.inMemoryDeduplicationCache.delete(key);
+          }
         }
+
+        // prepare deletion of entries from shared tags map if they get revalidated so that the map will not grow indefinitely
+        writes.push(this.sharedTagsMap.delete(redisKeys));
       }
 
-      // prepare deletion of entries from shared tags map if they get revalidated so that the map will not grow indefinitely
-      const deleteTagsOperation = this.sharedTagsMap.delete(redisKeys);
-
-      // execute keys and tag maps deletion
-      await Promise.all([deleteKeysOperation, deleteTagsOperation]);
+      await untilDeadline(
+        Promise.all(writes),
+        AbortSignal.timeout(this.writeTimeoutMs),
+      );
       debug(
         'red',
         'RedisStringsHandler.revalidateTag() finished delete operations',
       );
     } catch (error) {
+      if (error instanceof RedisTimeoutError) {
+        console.warn(
+          'RedisStringsHandler.revalidateTag() Redis did not confirm the writes within',
+          this.writeTimeoutMs,
+          'ms. Returning without them, other instances may serve stale entries for tags:',
+          tagOrTags,
+        );
+        return;
+      }
       console.error(
         'RedisStringsHandler.revalidateTag() Error occurred while revalidating tags. The original error was:',
         error,
