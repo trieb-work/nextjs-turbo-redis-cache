@@ -109,10 +109,9 @@ describe('RedisStringsHandler', () => {
         isFallback: false,
       });
 
-      // assertClientIsReady() races waitUntilReady() against a 30s timeout;
-      // the timer must not stay pending once the race is settled, because
-      // pending timers retain the ambient async context (and with it, in a
-      // Next.js server, the whole per-request object graph).
+      // No timer may stay pending after get(), because pending timers retain
+      // the ambient async context (and with it, in a Next.js server, the
+      // whole per-request object graph).
       expect(vi.getTimerCount()).toBe(timersBefore);
     } finally {
       vi.useRealTimers();
