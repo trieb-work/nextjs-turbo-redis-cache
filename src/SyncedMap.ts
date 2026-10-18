@@ -34,6 +34,11 @@ export type SyncMessage<V> = {
 const SYNC_CHANNEL_SUFFIX = ':sync-channel:';
 const READY_TIMEOUT_MS = 30_000;
 
+type ReadyWaiter = {
+  ready: () => void;
+  fail: (error: Error) => void;
+};
+
 const retryDelayMs = (attempt: number) =>
   Math.min(500 * Math.pow(2, Math.min(attempt, 5)), 10_000);
 
@@ -50,10 +55,9 @@ export class SyncedMap<V> {
   private resyncIntervalMs?: number;
   private customizedSync?: CustomizedSync;
 
-  private setupLock: Promise<void>;
-  private setupLockResolve!: () => void;
   private isSetUp = false;
   private lastSetupError: unknown;
+  private readyWaiters = new Set<ReadyWaiter>();
   private subscriberSetup?: Promise<void>;
 
   constructor(options: SyncedMapOptions) {
@@ -68,9 +72,6 @@ export class SyncedMap<V> {
     this.customizedSync = options.customizedSync;
 
     this.map = new Map<string, V>();
-    this.setupLock = new Promise<void>((resolve) => {
-      this.setupLockResolve = resolve;
-    });
 
     void this.setup();
   }
@@ -87,7 +88,7 @@ export class SyncedMap<V> {
       await Promise.all(setupSteps);
     }
     this.isSetUp = true;
-    this.setupLockResolve();
+    for (const waiter of this.readyWaiters) waiter.ready();
   }
 
   /**
@@ -102,7 +103,7 @@ export class SyncedMap<V> {
       try {
         return await operation();
       } catch (error) {
-        this.lastSetupError = error;
+        this.recordSetupError(error);
         const delay = retryDelayMs(attempt);
         console.error(
           `${label} attempt ${attempt + 1} failed, retrying in ${delay}ms`,
@@ -261,7 +262,7 @@ export class SyncedMap<V> {
       // was never attached and the subscriber was permanently dead.
       subscriber.on('error', async (err) => {
         console.error('Subscriber client error:', err);
-        this.lastSetupError = err;
+        this.recordSetupError(err);
         await this.reconnectSubscriber();
       });
 
@@ -353,36 +354,60 @@ export class SyncedMap<V> {
     return this.subscriberSetup;
   }
 
+  private recordSetupError(error: unknown) {
+    this.lastSetupError = error;
+    for (const waiter of this.readyWaiters) waiter.fail(this.notReadyError());
+  }
+
+  private notReadyError() {
+    return new Error(
+      `SyncedMap ${this.redisKey} is not ready, setup is retrying after: ${String(this.lastSetupError)}`,
+    );
+  }
+
   /**
-   * Waits for the initial sync and the subscriber. Rejects at once while
-   * setup retries after a failure, so cache calls miss instead of hanging.
+   * Waits for the initial sync and the subscriber of every map. Rejects as
+   * soon as a setup attempt fails, so cache calls miss instead of hanging.
    */
-  public async waitUntilReady(timeoutMs = READY_TIMEOUT_MS): Promise<void> {
-    if (this.isSetUp) return;
-    if (this.lastSetupError !== undefined) {
-      throw new Error(
-        `SyncedMap ${this.redisKey} is not ready, setup is retrying after: ${String(this.lastSetupError)}`,
-      );
-    }
+  public static async waitUntilAllReady(
+    maps: SyncedMap<unknown>[],
+    timeoutMs = READY_TIMEOUT_MS,
+  ): Promise<void> {
+    const pending = maps.filter((map) => !map.isSetUp);
+    if (pending.length === 0) return;
+    const failed = pending.find((map) => map.lastSetupError !== undefined);
+    if (failed) throw failed.notReadyError();
+
     let readyTimeout: ReturnType<typeof setTimeout> | undefined;
+    let waiter: ReadyWaiter | undefined;
     try {
-      await Promise.race([
-        this.setupLock,
-        new Promise((_, reject) => {
-          readyTimeout = setTimeout(() => {
-            reject(
-              new Error(
-                `SyncedMap ${this.redisKey} is not ready after ${timeoutMs}ms`,
-              ),
-            );
-          }, timeoutMs);
-        }),
-      ]);
+      await new Promise<void>((resolve, reject) => {
+        let notReady = pending.length;
+        waiter = {
+          ready: () => {
+            if (--notReady === 0) resolve();
+          },
+          fail: reject,
+        };
+        for (const map of pending) map.readyWaiters.add(waiter);
+        readyTimeout = setTimeout(() => {
+          reject(
+            new Error(
+              `SyncedMap ${pending.map((map) => map.redisKey).join(', ')} is not ready after ${timeoutMs}ms`,
+            ),
+          );
+        }, timeoutMs);
+      });
     } finally {
       // Timers capture the ambient async context (AsyncLocalStorage), so in a
       // Next.js server a leaked timer pins the request's object graph.
       clearTimeout(readyTimeout);
+      for (const map of pending) map.readyWaiters.delete(waiter!);
     }
+  }
+
+  public waitUntilReady(timeoutMs?: number): Promise<void> {
+    return SyncedMap.waitUntilAllReady([this], timeoutMs);
   }
 
   public get(key: string): V | undefined {
