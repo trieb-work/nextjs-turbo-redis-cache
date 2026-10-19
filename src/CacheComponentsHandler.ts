@@ -1,4 +1,4 @@
-import { commandOptions, createClient } from 'redis';
+import { createClient } from 'redis';
 import type { RedisClientOptions } from 'redis';
 import {
   Client,
@@ -10,7 +10,9 @@ import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
 import { debug } from './utils/debug';
 import { resolveKeyPrefix } from './utils/prefix';
 import { shouldDeferRedisConnection } from './utils/redisConnection';
+import { AbortableGet, createAbortableGet } from './utils/abortableGet';
 import { compareAndUnlink } from './utils/compareAndUnlink';
+import { RedisTimeoutError, untilDeadline } from './utils/deadline';
 import {
   applyTagUpdate,
   areTagsExpired,
@@ -99,20 +101,23 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
   private client: Client;
   private revalidatedTagsMap: SyncedMap<TagManifestEntry | number>;
   private sharedTagsMap: SyncedMap<string[]>;
-  private inMemoryDeduplicationCache: SyncedMap<
-    Promise<ReturnType<Client['get']>>
-  >;
+  private inMemoryDeduplicationCache: SyncedMap<Promise<string | null>>;
   private keyPrefix: string;
   private getTimeoutMs: number;
-  private redisGet: Client['get'];
+  private writeTimeoutMs: number;
+  private redisGet: AbortableGet;
   private redisDeduplicationHandler: DeduplicatedRequestHandler<
-    Client['get'],
-    string | Buffer | null
+    AbortableGet,
+    string | null
   >;
-  private deduplicatedRedisGet: (key: string) => Client['get'];
+  private deduplicatedRedisGet: (key: string) => AbortableGet;
   private redisGetDeduplication: boolean;
   private inMemoryCachingTime: number;
   private redisConnectionDeferred: boolean;
+  private pendingStaleRemovals = new Map<
+    string,
+    Set<{ superseded: boolean }>
+  >();
 
   constructor({
     redisUrl = process.env.REDIS_URL
@@ -125,6 +130,9 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
     getTimeoutMs = process.env.REDIS_COMMAND_TIMEOUT_MS
       ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 500)
       : 500,
+    writeTimeoutMs = process.env.REDIS_WRITE_TIMEOUT_MS
+      ? Number.parseInt(process.env.REDIS_WRITE_TIMEOUT_MS) || getTimeoutMs
+      : getTimeoutMs,
     revalidateTagQuerySize = 250,
     avgResyncIntervalMs = 60 * 60 * 1_000,
     redisGetDeduplication = true,
@@ -144,6 +152,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         env: process.env,
       });
       this.getTimeoutMs = getTimeoutMs;
+      this.writeTimeoutMs = writeTimeoutMs;
       this.redisGetDeduplication = redisGetDeduplication;
       this.inMemoryCachingTime = inMemoryCachingTime;
       this.redisConnectionDeferred = shouldDeferRedisConnection();
@@ -254,7 +263,7 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         },
       });
 
-      const redisGet: Client['get'] = this.client.get.bind(this.client);
+      const redisGet = createAbortableGet(this.client);
       this.redisDeduplicationHandler = new DeduplicatedRequestHandler(
         redisGet,
         inMemoryCachingTime,
@@ -330,8 +339,8 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
             'ms ' +
             redisKey,
           (useDedup ? this.deduplicatedRedisGet(cacheKey) : this.redisGet)(
-            commandOptions({ signal: AbortSignal.timeout(this.getTimeoutMs) }),
             redisKey,
+            AbortSignal.timeout(this.getTimeoutMs),
           ),
         );
 
@@ -362,13 +371,44 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
             continue;
           }
 
-          const dropped = await compareAndUnlink(
-            this.client,
-            redisKey,
-            serialized,
-          );
-          if (dropped) {
-            await this.sharedTagsMap.delete(cacheKey).catch(() => {});
+          // The tag cleanup is part of the raced operation, so it still runs
+          // when the unlink answers after the deadline. A set() that sends its
+          // SET after this EVAL supersedes the removal, so a late cleanup
+          // cannot delete the tag record of the replacement entry.
+          const pending = { superseded: false };
+          const removals = this.pendingStaleRemovals.get(cacheKey) ?? new Set();
+          removals.add(pending);
+          this.pendingStaleRemovals.set(cacheKey, removals);
+          const removal = compareAndUnlink(this.client, redisKey, serialized)
+            .then(async (dropped) => {
+              if (dropped && !pending.superseded) {
+                await this.sharedTagsMap.delete(cacheKey).catch(() => {});
+              }
+            })
+            .finally(() => {
+              removals.delete(pending);
+              if (
+                removals.size === 0 &&
+                this.pendingStaleRemovals.get(cacheKey) === removals
+              ) {
+                this.pendingStaleRemovals.delete(cacheKey);
+              }
+            });
+          try {
+            await untilDeadline(
+              removal,
+              AbortSignal.timeout(this.getTimeoutMs),
+            );
+          } catch (error) {
+            if (!(error instanceof RedisTimeoutError)) {
+              throw error;
+            }
+            console.warn(
+              'RedisCacheComponentsHandler.get() Redis did not confirm the removal of a stale entry within',
+              this.getTimeoutMs,
+              'ms. Returning a cache miss without it:',
+              redisKey,
+            );
           }
           return undefined;
         }
@@ -462,6 +502,10 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
 
       const redisKey = `${this.keyPrefix}${cacheKey}`;
 
+      for (const pending of this.pendingStaleRemovals.get(cacheKey) ?? []) {
+        pending.superseded = true;
+      }
+
       const setOperation = redisErrorHandler(
         'RedisCacheComponentsHandler.set(), operation: set ' + redisKey,
         this.client.set(redisKey, serialized, {
@@ -483,8 +527,20 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
         }
       }
 
-      await Promise.all([setOperation, tagsOperation]);
+      await untilDeadline(
+        Promise.all([setOperation, tagsOperation]),
+        AbortSignal.timeout(this.writeTimeoutMs),
+      );
     } catch (error) {
+      if (error instanceof RedisTimeoutError) {
+        console.warn(
+          'RedisCacheComponentsHandler.set() Redis did not confirm the write within',
+          this.writeTimeoutMs,
+          'ms. Returning without it, the entry may not be stored:',
+          cacheKey,
+        );
+        return;
+      }
       console.error(
         'RedisCacheComponentsHandler.set() Error occurred while setting cache entry. The original error was:',
         error,
@@ -523,22 +579,36 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
 
       const now = Date.now();
       const updated = new Set(tags || []);
+      const writes: Promise<void>[] = [];
       for (const tag of updated) {
         const next = applyTagUpdate(this.tagManifestFor(tag), durations, now);
-        await this.revalidatedTagsMap.set(
-          tag,
-          persistableTagManifest(next, now),
+        writes.push(
+          this.revalidatedTagsMap.set(tag, persistableTagManifest(next, now)),
         );
       }
 
       if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
         for (const [key, sharedTags] of this.sharedTagsMap.entries()) {
           if (sharedTags.some((tag) => updated.has(tag))) {
-            await this.inMemoryDeduplicationCache.delete(key, true);
+            writes.push(this.inMemoryDeduplicationCache.delete(key, true));
           }
         }
       }
+
+      await untilDeadline(
+        Promise.all(writes),
+        AbortSignal.timeout(this.writeTimeoutMs),
+      );
     } catch (error) {
+      if (error instanceof RedisTimeoutError) {
+        console.warn(
+          'RedisCacheComponentsHandler.updateTags() Redis did not confirm the writes within',
+          this.writeTimeoutMs,
+          'ms. Returning without them, other instances may serve stale entries for tags:',
+          tags,
+        );
+        return;
+      }
       console.error(
         'RedisCacheComponentsHandler.updateTags() Error occurred while updating tags. The original error was:',
         error,
