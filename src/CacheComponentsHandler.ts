@@ -367,18 +367,22 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
             continue;
           }
 
-          const deadline = AbortSignal.timeout(this.getTimeoutMs);
-          try {
-            const dropped = await untilDeadline(
-              compareAndUnlink(this.client, redisKey, serialized),
-              deadline,
-            );
+          // The tag cleanup is part of the raced operation, so it still runs
+          // when the unlink answers after the deadline.
+          const removal = compareAndUnlink(
+            this.client,
+            redisKey,
+            serialized,
+          ).then(async (dropped) => {
             if (dropped) {
-              await untilDeadline(
-                this.sharedTagsMap.delete(cacheKey).catch(() => {}),
-                deadline,
-              );
+              await this.sharedTagsMap.delete(cacheKey).catch(() => {});
             }
+          });
+          try {
+            await untilDeadline(
+              removal,
+              AbortSignal.timeout(this.getTimeoutMs),
+            );
           } catch (error) {
             if (!(error instanceof RedisTimeoutError)) {
               throw error;
