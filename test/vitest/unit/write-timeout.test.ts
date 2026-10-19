@@ -175,6 +175,25 @@ describe(`Redis writes with redis ${redisPackage.version} when Redis stops answe
     expect(consoleSpy.error).not.toHaveBeenCalled();
   });
 
+  it('Cache Components get() still removes the tag record when the unlink script answers after getTimeoutMs', async () => {
+    await components.set('entry-e', componentsEntry(['tag-e']));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await components.updateTags(['tag-e']);
+    spyOnConsole();
+    server.pause(['EVAL']);
+
+    expect(await components.get('entry-e', [])).toBeUndefined();
+    server.resume();
+
+    await vi.waitFor(() =>
+      expect(server.received).toContainEqual([
+        'HDEL',
+        'components:__cacheComponents_sharedTags__',
+        'entry-e',
+      ]),
+    );
+  });
+
   it('Cache Components get() of a stale entry is a miss after getTimeoutMs when Redis stalls after the unlink script', async () => {
     await components.set('entry-d', componentsEntry(['tag-d']));
     await new Promise((resolve) => setTimeout(resolve, 5));

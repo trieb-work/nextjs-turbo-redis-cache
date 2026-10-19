@@ -53,6 +53,7 @@ function parseCommands(buffer: Buffer): { commands: string[][]; rest: Buffer } {
  */
 export async function startPausableRedisServer() {
   const store = new Map<string, string>();
+  const received: string[][] = [];
   let pausedCommands: Set<string> | 'ALL' | undefined;
   const connections = new Set<{
     socket: Socket;
@@ -109,6 +110,7 @@ export async function startPausableRedisServer() {
       const parsed = parseCommands(Buffer.concat([pending, chunk]));
       pending = parsed.rest;
       for (const args of parsed.commands) {
+        received.push(args);
         if (connection.held.length > 0 || isPaused(args)) {
           connection.held.push(args);
         } else {
@@ -126,6 +128,7 @@ export async function startPausableRedisServer() {
   return {
     url: `redis://127.0.0.1:${port}`,
     store,
+    received,
     pause(commands: string[] | 'ALL' = 'ALL') {
       pausedCommands = commands === 'ALL' ? 'ALL' : new Set(commands);
     },
