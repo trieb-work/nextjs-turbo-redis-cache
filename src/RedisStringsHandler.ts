@@ -965,14 +965,16 @@ export default class RedisStringsHandler {
         'RedisStringsHandler.revalidateTag() finished delete operations',
       );
     } catch (error) {
+      // Unlike set(), a lost invalidation leaves stale entries on every
+      // instance, so the caller must see it fail.
       if (error instanceof RedisTimeoutError) {
-        console.warn(
+        console.error(
           'RedisStringsHandler.revalidateTag() Redis did not confirm the writes within',
           this.writeTimeoutMs,
-          'ms. Returning without them, other instances may serve stale entries for tags:',
+          'ms. Other instances may serve stale entries for tags:',
           tagOrTags,
         );
-        return;
+        throw error;
       }
       console.error(
         'RedisStringsHandler.revalidateTag() Error occurred while revalidating tags. The original error was:',

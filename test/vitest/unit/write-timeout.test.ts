@@ -115,7 +115,7 @@ describe(`Redis writes with redis ${redisPackage.version} when Redis stops answe
     expect(consoleSpy.error).not.toHaveBeenCalled();
   });
 
-  it('RedisStringsHandler.revalidateTag() returns after writeTimeoutMs and logs a warning', async () => {
+  it('RedisStringsHandler.revalidateTag() rejects after writeTimeoutMs, so the caller sees the failed invalidation', async () => {
     await strings.set('/page-b', pagesValue, { ...pagesCtx });
     const consoleSpy = spyOnConsole();
     server.pause();
@@ -124,10 +124,9 @@ describe(`Redis writes with redis ${redisPackage.version} when Redis stops answe
       strings.revalidateTag('_N_T_/page-b'),
     );
 
-    expect(outcome).toBe('resolved');
+    expect(outcome).toBe('rejected');
     expect(elapsedMs).toBeLessThan(1_000);
-    expect(consoleSpy.warn).toHaveBeenCalledOnce();
-    expect(consoleSpy.error).not.toHaveBeenCalled();
+    expect(consoleSpy.error).toHaveBeenCalledOnce();
   });
 
   it('Cache Components set() returns after writeTimeoutMs and logs a warning', async () => {
