@@ -114,6 +114,10 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
   private redisGetDeduplication: boolean;
   private inMemoryCachingTime: number;
   private redisConnectionDeferred: boolean;
+  private pendingStaleRemovals = new Map<
+    string,
+    Set<{ superseded: boolean }>
+  >();
 
   constructor({
     redisUrl = process.env.REDIS_URL
@@ -368,16 +372,28 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
           }
 
           // The tag cleanup is part of the raced operation, so it still runs
-          // when the unlink answers after the deadline.
-          const removal = compareAndUnlink(
-            this.client,
-            redisKey,
-            serialized,
-          ).then(async (dropped) => {
-            if (dropped) {
-              await this.sharedTagsMap.delete(cacheKey).catch(() => {});
-            }
-          });
+          // when the unlink answers after the deadline. A set() that sends its
+          // SET after this EVAL supersedes the removal, so a late cleanup
+          // cannot delete the tag record of the replacement entry.
+          const pending = { superseded: false };
+          const removals = this.pendingStaleRemovals.get(cacheKey) ?? new Set();
+          removals.add(pending);
+          this.pendingStaleRemovals.set(cacheKey, removals);
+          const removal = compareAndUnlink(this.client, redisKey, serialized)
+            .then(async (dropped) => {
+              if (dropped && !pending.superseded) {
+                await this.sharedTagsMap.delete(cacheKey).catch(() => {});
+              }
+            })
+            .finally(() => {
+              removals.delete(pending);
+              if (
+                removals.size === 0 &&
+                this.pendingStaleRemovals.get(cacheKey) === removals
+              ) {
+                this.pendingStaleRemovals.delete(cacheKey);
+              }
+            });
           try {
             await untilDeadline(
               removal,
@@ -485,6 +501,10 @@ class RedisCacheComponentsHandler implements CacheComponentsHandler {
           : undefined;
 
       const redisKey = `${this.keyPrefix}${cacheKey}`;
+
+      for (const pending of this.pendingStaleRemovals.get(cacheKey) ?? []) {
+        pending.superseded = true;
+      }
 
       const setOperation = redisErrorHandler(
         'RedisCacheComponentsHandler.set(), operation: set ' + redisKey,
