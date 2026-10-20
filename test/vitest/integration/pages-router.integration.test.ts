@@ -239,9 +239,13 @@ describe('Pages Router Redis cache integration (two instances)', () => {
         '/isr/prebuilt',
       )) as string;
       const parsedTags = JSON.parse(hashmap) as string[] | { tags?: string[] };
-      expect(Array.isArray(parsedTags) ? parsedTags : parsedTags.tags).toEqual([
-        '_N_T_/isr/prebuilt',
-      ]);
+      const tagNames = Array.isArray(parsedTags)
+        ? parsedTags
+        : (parsedTags.tags ?? []);
+      const visibleTags = tagNames.filter(
+        (tag) => !tag.startsWith('\u0000writeId:'),
+      );
+      expect(visibleTags).toEqual(['_N_T_/isr/prebuilt']);
     });
 
     it('the TTL is derived from the getStaticProps revalidate value', async () => {

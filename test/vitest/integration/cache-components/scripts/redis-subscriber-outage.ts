@@ -43,17 +43,16 @@ function record(name: string, pass: boolean, detail: string) {
 }
 
 function syncedTagNames(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value;
-  }
-  if (
-    value &&
-    typeof value === 'object' &&
-    Array.isArray((value as { tags?: unknown }).tags)
-  ) {
-    return (value as { tags: string[] }).tags;
-  }
-  return [];
+  const tags = Array.isArray(value)
+    ? value
+    : value &&
+        typeof value === 'object' &&
+        Array.isArray((value as { tags?: unknown }).tags)
+      ? (value as { tags: string[] }).tags
+      : [];
+  return tags.filter(
+    (tag) => typeof tag !== 'string' || !tag.startsWith('\u0000writeId:'),
+  );
 }
 
 // ---------------------------------------------------------------------------

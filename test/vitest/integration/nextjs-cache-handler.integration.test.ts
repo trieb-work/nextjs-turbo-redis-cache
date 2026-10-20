@@ -33,10 +33,12 @@ async function delay(ms: number) {
 
 function sharedTagNames(serializedTags: string): string[] {
   const parsed = JSON.parse(serializedTags) as string[] | { tags?: string[] };
-  if (Array.isArray(parsed)) {
-    return parsed;
+  const tags = Array.isArray(parsed) ? parsed : (parsed.tags ?? []);
+  const last = tags[tags.length - 1];
+  if (typeof last === 'string' && last.startsWith('\u0000writeId:')) {
+    return tags.slice(0, -1);
   }
-  return parsed.tags ?? [];
+  return tags;
 }
 
 function expectOptionalSharedTagsEntry(serializedTags: string | null) {

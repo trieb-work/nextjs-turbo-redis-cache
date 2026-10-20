@@ -618,9 +618,26 @@ describe('RedisStringsHandler', () => {
    * `delete()` do (`this.map.set(...)` runs before the Redis hSet/publish
    * call). That is what makes the race windows below reachable: a concurrent
    * `handler.set()` call's tag write takes effect immediately, not after some
-   * network round trip. Tags stay a string array; the write id is a sibling
-   * map, matching the on-wire split.
+   * network round trip. The write id is the last array element, so one
+   * `set()` installs tags and generation together.
    */
+  const WRITE_ID_MARKER_PREFIX = '\u0000writeId:';
+  const userTags = (value: string[] | undefined): string[] => {
+    if (!value) {
+      return [];
+    }
+    const last = value[value.length - 1];
+    if (last?.startsWith(WRITE_ID_MARKER_PREFIX)) {
+      return value.slice(0, -1);
+    }
+    return value;
+  };
+  const storedWriteId = (value: string[] | undefined): string => {
+    const last = value?.[value.length - 1];
+    return last?.startsWith(WRITE_ID_MARKER_PREFIX)
+      ? last.slice(WRITE_ID_MARKER_PREFIX.length)
+      : '';
+  };
   function createFakeSharedTagsMap(initial: Iterable<[string, string[]]>) {
     const store = new Map(initial);
     return {
@@ -635,23 +652,6 @@ describe('RedisStringsHandler', () => {
         return Promise.resolve();
       }),
       entries: () => store.entries(),
-      store,
-    };
-  }
-
-  function createFakeWriteIdMap(initial: Iterable<[string, string]>) {
-    const store = new Map(initial);
-    return {
-      waitUntilReady: vi.fn(async () => undefined),
-      get: (key: string) => store.get(key),
-      set: vi.fn((key: string, value: string) => {
-        store.set(key, value);
-        return Promise.resolve();
-      }),
-      delete: vi.fn((key: string) => {
-        store.delete(key);
-        return Promise.resolve();
-      }),
       store,
     };
   }
@@ -680,11 +680,9 @@ describe('RedisStringsHandler', () => {
       redisGetDeduplication: false,
     });
     const fakeSharedTagsMap = createFakeSharedTagsMap([
-      ['item:a', ['old-tag']],
+      ['item:a', ['old-tag', '\u0000writeId:initial']],
     ]);
-    const fakeWriteIds = createFakeWriteIdMap([['item:a', 'initial']]);
     (handler as any).sharedTagsMap = fakeSharedTagsMap;
-    (handler as any).sharedTagsWriteIdMap = fakeWriteIds;
 
     // Hold the untagged write's own Redis SET pending so the tag-association
     // snapshot it took before the SET is stale by the time it re-checks the
@@ -718,16 +716,24 @@ describe('RedisStringsHandler', () => {
       ...concurrentCtx,
       tags: ['new-tag'],
     });
-    expect(fakeSharedTagsMap.store.get('item:a')).toEqual(['new-tag']);
+    expect(userTags(fakeSharedTagsMap.store.get('item:a'))).toEqual([
+      'new-tag',
+    ]);
+    expect(
+      fakeSharedTagsMap.store
+        .get('item:a')
+        ?.every((item) => typeof item === 'string'),
+    ).toBe(true);
 
     resolveUntaggedSet('OK');
     await untaggedWrite;
 
     // The concurrent write's association must survive the untagged write's
-    // cleanup, and the shared hash must stay a plain tag array.
-    expect(fakeSharedTagsMap.store.get('item:a')).toEqual(['new-tag']);
+    // cleanup, and the shared hash must stay a plain string array.
+    expect(userTags(fakeSharedTagsMap.store.get('item:a'))).toEqual([
+      'new-tag',
+    ]);
     expect(fakeSharedTagsMap.delete).not.toHaveBeenCalled();
-    expect(fakeWriteIds.delete).not.toHaveBeenCalled();
 
     const unlink = (handler as any).client.unlink as ReturnType<typeof vi.fn>;
     await handler.revalidateTag('new-tag');
@@ -743,11 +749,9 @@ describe('RedisStringsHandler', () => {
       redisGetDeduplication: false,
     });
     const fakeSharedTagsMap = createFakeSharedTagsMap([
-      ['item:a', ['old-tag']],
+      ['item:a', ['old-tag', '\u0000writeId:initial']],
     ]);
-    const fakeWriteIds = createFakeWriteIdMap([['item:a', 'initial']]);
     (handler as any).sharedTagsMap = fakeSharedTagsMap;
-    (handler as any).sharedTagsWriteIdMap = fakeWriteIds;
 
     // Hold the untagged write's own Redis SET pending so the tag-association
     // snapshot it took before the SET is stale by the time it re-checks the
@@ -783,19 +787,26 @@ describe('RedisStringsHandler', () => {
       ...concurrentCtx,
       tags: ['old-tag'],
     });
-    const writeIdAfterConcurrentWrite = fakeWriteIds.store.get('item:a');
+    const writeIdAfterConcurrentWrite = storedWriteId(
+      fakeSharedTagsMap.store.get('item:a'),
+    );
     expect(writeIdAfterConcurrentWrite).not.toBe('initial');
-    expect(fakeSharedTagsMap.store.get('item:a')).toEqual(['old-tag']);
+    expect(userTags(fakeSharedTagsMap.store.get('item:a'))).toEqual([
+      'old-tag',
+    ]);
 
     resolveUntaggedSet('OK');
     await untaggedWrite;
 
     // The concurrent write's association must survive the untagged write's
     // cleanup, even though both writes used the exact same tag text.
-    expect(fakeSharedTagsMap.store.get('item:a')).toEqual(['old-tag']);
-    expect(fakeWriteIds.store.get('item:a')).toBe(writeIdAfterConcurrentWrite);
+    expect(userTags(fakeSharedTagsMap.store.get('item:a'))).toEqual([
+      'old-tag',
+    ]);
+    expect(storedWriteId(fakeSharedTagsMap.store.get('item:a'))).toBe(
+      writeIdAfterConcurrentWrite,
+    );
     expect(fakeSharedTagsMap.delete).not.toHaveBeenCalled();
-    expect(fakeWriteIds.delete).not.toHaveBeenCalled();
 
     const unlink = (handler as any).client.unlink as ReturnType<typeof vi.fn>;
     await handler.revalidateTag('old-tag');

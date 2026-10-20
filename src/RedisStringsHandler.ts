@@ -243,25 +243,35 @@ const NEXT_CACHE_IMPLICIT_TAG_ID = '_N_T_';
 const REVALIDATED_TAGS_KEY = '__revalidated_tags__';
 
 /**
- * `sharedTagsMap` values stay JSON arrays on the wire. Released handlers
- * scan that hash with `sharedTags.some(...)`. One object value makes the
- * whole scan throw, so a rolling upgrade would stop invalidating every tag.
- *
- * The per-write id lives in a sibling hash (`${sharedTagsKey}__writeId`)
- * that older instances never read. It exists so an untagged replacement can
- * tell "nobody has touched this association since I last observed it" apart
- * from "someone just re-confirmed the exact same tag text for a different
- * value". Comparing tag arrays cannot make that distinction.
+ * Trailing element of a shared-tags array. It is not a cache tag. Released
+ * handlers scan this hash with `sharedTags.some(...)`, so the value has to
+ * stay a string array. The id also has to travel in that same array: tags
+ * and their generation are one hash field and one pub/sub message. A second
+ * hash can deliver the new tags before the new id, and an untagged writer
+ * will then delete the replacement.
  *
  * `{ tags, writeId }` is only accepted on read, for entries written by the
- * short-lived object format. New writes always store a plain `string[]`.
+ * short-lived object format.
  */
+const WRITE_ID_MARKER_PREFIX = '\u0000writeId:';
+
 type LegacyTagAssociation = {
   tags?: string[];
   writeId?: string;
 };
 
 type StoredSharedTags = string[] | LegacyTagAssociation;
+
+function splitStoredTags(tags: string[]): { tags: string[]; writeId: string } {
+  const last = tags[tags.length - 1];
+  if (last?.startsWith(WRITE_ID_MARKER_PREFIX)) {
+    return {
+      tags: tags.slice(0, -1),
+      writeId: last.slice(WRITE_ID_MARKER_PREFIX.length),
+    };
+  }
+  return { tags, writeId: '' };
+}
 
 function sharedTagNames(
   value: StoredSharedTags | undefined,
@@ -270,26 +280,23 @@ function sharedTagNames(
     return undefined;
   }
   if (Array.isArray(value)) {
-    return value;
+    return splitStoredTags(value).tags;
   }
   return Array.isArray(value.tags) ? value.tags : undefined;
 }
 
-function sharedTagsWriteIdKey(sharedTagsKey: string): string {
-  return `${sharedTagsKey}__writeId`;
+function observedWriteId(stored: StoredSharedTags | undefined): string {
+  if (stored === undefined) {
+    return '';
+  }
+  if (Array.isArray(stored)) {
+    return splitStoredTags(stored).writeId;
+  }
+  return stored.writeId ?? '';
 }
 
-// An object value is the previous on-wire format, so its embedded writeId is
-// the generation of that write. Array values take their generation from the
-// sibling hash. Missing on both sides is the legacy array with no generation.
-function observedWriteId(
-  stored: StoredSharedTags | undefined,
-  sideWriteId: string | undefined,
-): string {
-  if (stored && !Array.isArray(stored) && stored.writeId) {
-    return stored.writeId;
-  }
-  return sideWriteId ?? '';
+function tagsWithWriteId(tags: string[], writeId: string): string[] {
+  return [...tags, `${WRITE_ID_MARKER_PREFIX}${writeId}`];
 }
 
 // Cache kinds this handler is designed and tested for. Kept as the single
@@ -314,7 +321,6 @@ let killContainerOnErrorCount: number = 0;
 export default class RedisStringsHandler {
   private client: Client;
   private sharedTagsMap: SyncedMap<StoredSharedTags>;
-  private sharedTagsWriteIdMap: SyncedMap<string>;
   private revalidatedTagsMap: SyncedMap<number>;
   private inMemoryDeduplicationCache: SyncedMap<
     Promise<ReturnType<Client['get']>>
@@ -443,29 +449,13 @@ export default class RedisStringsHandler {
         throw error;
       }
 
-      const writeIdKey = sharedTagsWriteIdKey(sharedTagsKey);
       const filterKeys = (key: string): boolean =>
-        key !== REVALIDATED_TAGS_KEY &&
-        key !== sharedTagsKey &&
-        key !== writeIdKey;
+        key !== REVALIDATED_TAGS_KEY && key !== sharedTagsKey;
 
       this.sharedTagsMap = new SyncedMap<StoredSharedTags>({
         client: this.client,
         keyPrefix,
         redisKey: sharedTagsKey,
-        database,
-        querySize: revalidateTagQuerySize,
-        filterKeys,
-        resyncIntervalMs:
-          avgResyncIntervalMs -
-          avgResyncIntervalMs / 10 +
-          Math.random() * (avgResyncIntervalMs / 10),
-      });
-
-      this.sharedTagsWriteIdMap = new SyncedMap<string>({
-        client: this.client,
-        keyPrefix,
-        redisKey: writeIdKey,
         database,
         querySize: revalidateTagQuerySize,
         filterKeys,
@@ -547,7 +537,6 @@ export default class RedisStringsHandler {
       await Promise.race([
         Promise.all([
           this.sharedTagsMap.waitUntilReady(),
-          this.sharedTagsWriteIdMap.waitUntilReady(),
           this.revalidatedTagsMap.waitUntilReady(),
         ]),
         new Promise((_, reject) => {
@@ -892,19 +881,16 @@ export default class RedisStringsHandler {
       let deleteTagsAfterSet = false;
       const currentStoredTags = this.sharedTagsMap.get(key);
       const currentTags = sharedTagNames(currentStoredTags);
-      const currentWriteId = observedWriteId(
-        currentStoredTags,
-        this.sharedTagsWriteIdMap.get(key),
-      );
+      const currentWriteId = observedWriteId(currentStoredTags);
       if (ctx.tags && ctx.tags.length > 0) {
-        // Always write the tag array and a fresh write id, even when the tag
-        // text is unchanged. Skipping that write is what let a same-tag
-        // concurrent write go unnoticed below. The hash value stays a plain
-        // string array so older instances can still call `.some()` on it.
-        setTagsOperation = Promise.all([
-          this.sharedTagsMap.set(key, structuredClone(ctx.tags) as string[]),
-          this.sharedTagsWriteIdMap.set(key, randomUUID()),
-        ]).then(() => undefined);
+        // Always write a fresh generation, even when the tag text is
+        // unchanged. Skipping that write is what let a same-tag concurrent
+        // write go unnoticed below. The id is the last array element so it
+        // arrives in the same pub/sub message as the tags.
+        setTagsOperation = this.sharedTagsMap.set(
+          key,
+          tagsWithWriteId(structuredClone(ctx.tags) as string[], randomUUID()),
+        );
       } else if (currentTags && currentTags.length > 0) {
         deleteTagsAfterSet = true;
       }
@@ -918,18 +904,12 @@ export default class RedisStringsHandler {
 
       if (deleteTagsAfterSet) {
         await setOperation;
-        const latestWriteId = observedWriteId(
-          this.sharedTagsMap.get(key),
-          this.sharedTagsWriteIdMap.get(key),
-        );
+        const latestWriteId = observedWriteId(this.sharedTagsMap.get(key));
         // Only delete if the generation is exactly the one observed before
         // this write started. Any intervening tagged write - even one that
         // re-confirms the exact same tags - carries a new write id.
         if (latestWriteId === currentWriteId) {
-          await Promise.all([
-            this.sharedTagsMap.delete(key),
-            this.sharedTagsWriteIdMap.delete(key),
-          ]);
+          await this.sharedTagsMap.delete(key);
         }
       } else {
         await Promise.all([setOperation, setTagsOperation]);
