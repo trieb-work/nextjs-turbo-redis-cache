@@ -111,16 +111,19 @@ export async function clusterSafeUnlink(
   async function worker(): Promise<void> {
     while (nextIndex < work.length) {
       const [slot, groupKeys] = work[nextIndex++]!;
+      // Count the UNLINK once, before either the command or the success
+      // callback can reject. A callback failure happens after the command
+      // already ran, so counting again in the catch would report two
+      // commands for one UNLINK.
+      result.commandCount++;
       try {
         const deleted = await client.unlink(
           groupKeys.length === 1 ? groupKeys[0]! : groupKeys,
         );
         result.deleted += deleted;
-        result.commandCount++;
         result.successfulKeys.push(...groupKeys);
         await options.onGroupSuccess?.(groupKeys);
       } catch (error) {
-        result.commandCount++;
         result.failures.push({ slot, keys: groupKeys, error });
       }
     }

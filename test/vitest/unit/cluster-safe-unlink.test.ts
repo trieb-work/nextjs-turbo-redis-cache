@@ -89,6 +89,7 @@ describe('clusterSafeUnlink', () => {
     ).rejects.toMatchObject({
       name: 'ClusterSafeUnlinkError',
       result: {
+        commandCount: 2,
         successfulKeys: ['cache:item:a'],
         failures: [
           {
@@ -97,6 +98,27 @@ describe('clusterSafeUnlink', () => {
         ],
       },
     });
+  });
+
+  it('counts one command when the success callback rejects', async () => {
+    const unlink = vi.fn(async () => 1);
+
+    await expect(
+      clusterSafeUnlink({ unlink }, ['cache:item:a'], {
+        onGroupSuccess: async () => {
+          throw new Error('publish failed');
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: 'ClusterSafeUnlinkError',
+      result: {
+        commandCount: 1,
+        successfulKeys: ['cache:item:a'],
+        failures: [{ keys: ['cache:item:a'] }],
+      },
+    });
+
+    expect(unlink).toHaveBeenCalledTimes(1);
   });
 
   it('calls onGroupSuccess after a slot group was deleted', async () => {
