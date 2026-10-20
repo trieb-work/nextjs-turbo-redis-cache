@@ -279,6 +279,90 @@ describe('RedisStringsHandler', () => {
     expect(batchesBeforeUnlink).toEqual([500, 1]);
   });
 
+  it('clears remaining local cache batches after the first batch fails', async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'cluster-safe:',
+      database: 0,
+      redisGetDeduplication: true,
+      inMemoryCachingTime: 1_000,
+    });
+
+    const keys = Array.from({ length: 501 }, (_, index) => `{tenant}:${index}`);
+    const events: string[] = [];
+    const unlink = (handler as any).client.unlink as ReturnType<typeof vi.fn>;
+    unlink.mockImplementation(async () => {
+      events.push('unlink');
+      return keys.length;
+    });
+    (handler as any).sharedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      entries: function* () {
+        for (const key of keys) {
+          yield [key, ['tag-1']];
+        }
+      },
+      delete: vi.fn(async () => undefined),
+    };
+    (handler as any).revalidatedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+    };
+    (handler as any).inMemoryDeduplicationCache = {
+      delete: vi.fn(async (batch: string[]) => {
+        events.push(`delete:${batch.length}`);
+        if (events.length === 1) {
+          throw new Error('first batch failed');
+        }
+      }),
+    };
+
+    await expect(handler.revalidateTag('tag-1')).resolves.toBeUndefined();
+
+    expect(events).toEqual([
+      'delete:500',
+      'delete:1',
+      'unlink',
+      'delete:500',
+      'delete:1',
+    ]);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'failed to clear local read-through cache before deletion',
+      ),
+      expect.any(Error),
+    );
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('invalidates tags stored in the previous object-shaped association', async () => {
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'legacy-association:',
+      database: 0,
+      redisGetDeduplication: false,
+    });
+
+    const unlink = (handler as any).client.unlink as ReturnType<typeof vi.fn>;
+    unlink.mockResolvedValue(1);
+    (handler as any).sharedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      entries: function* () {
+        yield ['item:a', { tags: ['tag-1'], writeId: 'legacy-write' }];
+      },
+      delete: vi.fn(async () => undefined),
+    };
+    (handler as any).revalidatedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+    };
+
+    await handler.revalidateTag('tag-1');
+
+    expect(unlink).toHaveBeenCalledWith('legacy-association:item:a');
+  });
+
   it('propagates local read-cache deletion failures after unlink succeeds', async () => {
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
@@ -356,6 +440,32 @@ describe('RedisStringsHandler', () => {
       expect.any(Error),
     );
     consoleErrorSpy.mockRestore();
+  });
+
+  it('invalidates tags stored in the previous object-shaped association', async () => {
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'legacy-association:',
+      database: 0,
+      redisGetDeduplication: false,
+    });
+
+    const unlink = (handler as any).client.unlink as ReturnType<typeof vi.fn>;
+    unlink.mockResolvedValue(1);
+    (handler as any).sharedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      entries: function* () {
+        yield ['item:a', { tags: ['tag-1'], writeId: 'legacy-write' }];
+      },
+      delete: vi.fn(async () => undefined),
+    };
+    (handler as any).revalidatedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+    };
+
+    await handler.revalidateTag('tag-1');
+
+    expect(unlink).toHaveBeenCalledWith('legacy-association:item:a');
   });
 
   it('treats revalidated page tags as stale for non-fetch cache entries', async () => {
@@ -502,22 +612,21 @@ describe('RedisStringsHandler', () => {
   });
 
   /**
-   * Both races below use a tiny fake `sharedTagsMap` that mirrors the one
-   * property of the real `SyncedMap` that matters here: `set()`/`delete()`
-   * mutate the local map synchronously, before any `await`, exactly like
-   * `SyncedMap.set()`/`delete()` do (`this.map.set(...)` runs before the
-   * Redis hSet/publish call). That is what makes the race windows below
-   * reachable: a concurrent `handler.set()` call's tag-association write
-   * takes effect immediately, not after some network round trip.
+   * Both races below use tiny fakes that mirror the one property of the real
+   * `SyncedMap` that matters here: `set()`/`delete()` mutate the local map
+   * synchronously, before any `await`, exactly like `SyncedMap.set()` /
+   * `delete()` do (`this.map.set(...)` runs before the Redis hSet/publish
+   * call). That is what makes the race windows below reachable: a concurrent
+   * `handler.set()` call's tag write takes effect immediately, not after some
+   * network round trip. Tags stay a string array; the write id is a sibling
+   * map, matching the on-wire split.
    */
-  function createFakeSharedTagsMap(
-    initial: Iterable<[string, { tags: string[]; writeId: string }]>,
-  ) {
+  function createFakeSharedTagsMap(initial: Iterable<[string, string[]]>) {
     const store = new Map(initial);
     return {
       waitUntilReady: vi.fn(async () => undefined),
       get: (key: string) => store.get(key),
-      set: vi.fn((key: string, value: { tags: string[]; writeId: string }) => {
+      set: vi.fn((key: string, value: string[]) => {
         store.set(key, value);
         return Promise.resolve();
       }),
@@ -526,6 +635,23 @@ describe('RedisStringsHandler', () => {
         return Promise.resolve();
       }),
       entries: () => store.entries(),
+      store,
+    };
+  }
+
+  function createFakeWriteIdMap(initial: Iterable<[string, string]>) {
+    const store = new Map(initial);
+    return {
+      waitUntilReady: vi.fn(async () => undefined),
+      get: (key: string) => store.get(key),
+      set: vi.fn((key: string, value: string) => {
+        store.set(key, value);
+        return Promise.resolve();
+      }),
+      delete: vi.fn((key: string) => {
+        store.delete(key);
+        return Promise.resolve();
+      }),
       store,
     };
   }
@@ -554,9 +680,11 @@ describe('RedisStringsHandler', () => {
       redisGetDeduplication: false,
     });
     const fakeSharedTagsMap = createFakeSharedTagsMap([
-      ['item:a', { tags: ['old-tag'], writeId: 'initial' }],
+      ['item:a', ['old-tag']],
     ]);
+    const fakeWriteIds = createFakeWriteIdMap([['item:a', 'initial']]);
     (handler as any).sharedTagsMap = fakeSharedTagsMap;
+    (handler as any).sharedTagsWriteIdMap = fakeWriteIds;
 
     // Hold the untagged write's own Redis SET pending so the tag-association
     // snapshot it took before the SET is stale by the time it re-checks the
@@ -590,15 +718,16 @@ describe('RedisStringsHandler', () => {
       ...concurrentCtx,
       tags: ['new-tag'],
     });
-    expect(fakeSharedTagsMap.store.get('item:a')?.tags).toEqual(['new-tag']);
+    expect(fakeSharedTagsMap.store.get('item:a')).toEqual(['new-tag']);
 
     resolveUntaggedSet('OK');
     await untaggedWrite;
 
     // The concurrent write's association must survive the untagged write's
-    // cleanup.
-    expect(fakeSharedTagsMap.store.get('item:a')?.tags).toEqual(['new-tag']);
+    // cleanup, and the shared hash must stay a plain tag array.
+    expect(fakeSharedTagsMap.store.get('item:a')).toEqual(['new-tag']);
     expect(fakeSharedTagsMap.delete).not.toHaveBeenCalled();
+    expect(fakeWriteIds.delete).not.toHaveBeenCalled();
 
     const unlink = (handler as any).client.unlink as ReturnType<typeof vi.fn>;
     await handler.revalidateTag('new-tag');
@@ -614,9 +743,11 @@ describe('RedisStringsHandler', () => {
       redisGetDeduplication: false,
     });
     const fakeSharedTagsMap = createFakeSharedTagsMap([
-      ['item:a', { tags: ['old-tag'], writeId: 'initial' }],
+      ['item:a', ['old-tag']],
     ]);
+    const fakeWriteIds = createFakeWriteIdMap([['item:a', 'initial']]);
     (handler as any).sharedTagsMap = fakeSharedTagsMap;
+    (handler as any).sharedTagsWriteIdMap = fakeWriteIds;
 
     // Hold the untagged write's own Redis SET pending so the tag-association
     // snapshot it took before the SET is stale by the time it re-checks the
@@ -652,20 +783,19 @@ describe('RedisStringsHandler', () => {
       ...concurrentCtx,
       tags: ['old-tag'],
     });
-    const writeIdAfterConcurrentWrite =
-      fakeSharedTagsMap.store.get('item:a')?.writeId;
+    const writeIdAfterConcurrentWrite = fakeWriteIds.store.get('item:a');
     expect(writeIdAfterConcurrentWrite).not.toBe('initial');
+    expect(fakeSharedTagsMap.store.get('item:a')).toEqual(['old-tag']);
 
     resolveUntaggedSet('OK');
     await untaggedWrite;
 
     // The concurrent write's association must survive the untagged write's
     // cleanup, even though both writes used the exact same tag text.
-    expect(fakeSharedTagsMap.store.get('item:a')).toEqual({
-      tags: ['old-tag'],
-      writeId: writeIdAfterConcurrentWrite,
-    });
+    expect(fakeSharedTagsMap.store.get('item:a')).toEqual(['old-tag']);
+    expect(fakeWriteIds.store.get('item:a')).toBe(writeIdAfterConcurrentWrite);
     expect(fakeSharedTagsMap.delete).not.toHaveBeenCalled();
+    expect(fakeWriteIds.delete).not.toHaveBeenCalled();
 
     const unlink = (handler as any).client.unlink as ReturnType<typeof vi.fn>;
     await handler.revalidateTag('old-tag');

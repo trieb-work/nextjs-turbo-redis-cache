@@ -243,35 +243,53 @@ const NEXT_CACHE_IMPLICIT_TAG_ID = '_N_T_';
 const REVALIDATED_TAGS_KEY = '__revalidated_tags__';
 
 /**
- * Value stored per key in `sharedTagsMap`. `writeId` is an opaque per-write
- * identifier, not a user-facing value. It exists so an untagged replacement
- * write can tell "nobody has touched this association since I last observed
- * it" apart from "someone just re-confirmed the exact same tag text for a
- * different value". Comparing `tags` arrays for equality cannot make that
- * distinction, which is what allowed a same-tag concurrent write to have its
- * association deleted by an untagged replacement (see revalidateTag() races).
+ * `sharedTagsMap` values stay JSON arrays on the wire. Released handlers
+ * scan that hash with `sharedTags.some(...)`. One object value makes the
+ * whole scan throw, so a rolling upgrade would stop invalidating every tag.
+ *
+ * The per-write id lives in a sibling hash (`${sharedTagsKey}__writeId`)
+ * that older instances never read. It exists so an untagged replacement can
+ * tell "nobody has touched this association since I last observed it" apart
+ * from "someone just re-confirmed the exact same tag text for a different
+ * value". Comparing tag arrays cannot make that distinction.
+ *
+ * `{ tags, writeId }` is only accepted on read, for entries written by the
+ * short-lived object format. New writes always store a plain `string[]`.
  */
-type TagAssociation = {
-  tags: string[];
-  writeId: string;
+type LegacyTagAssociation = {
+  tags?: string[];
+  writeId?: string;
 };
 
-// Entries written before this type existed are plain `string[]` in Redis.
-// Normalize them to a TagAssociation with an empty writeId so comparisons
-// below are always against the same shape. An empty writeId only ever
-// matches another empty writeId, i.e. a legacy entry that nothing has
-// written to since - any write (legacy or not) that touches the key going
-// forward always gets a fresh, non-empty writeId (see set() below).
-function normalizeTagAssociation(
-  value: TagAssociation | string[] | undefined,
-): TagAssociation | undefined {
+type StoredSharedTags = string[] | LegacyTagAssociation;
+
+function sharedTagNames(
+  value: StoredSharedTags | undefined,
+): string[] | undefined {
   if (value === undefined) {
     return undefined;
   }
   if (Array.isArray(value)) {
-    return { tags: value, writeId: '' };
+    return value;
   }
-  return value;
+  return Array.isArray(value.tags) ? value.tags : undefined;
+}
+
+function sharedTagsWriteIdKey(sharedTagsKey: string): string {
+  return `${sharedTagsKey}__writeId`;
+}
+
+// An object value is the previous on-wire format, so its embedded writeId is
+// the generation of that write. Array values take their generation from the
+// sibling hash. Missing on both sides is the legacy array with no generation.
+function observedWriteId(
+  stored: StoredSharedTags | undefined,
+  sideWriteId: string | undefined,
+): string {
+  if (stored && !Array.isArray(stored) && stored.writeId) {
+    return stored.writeId;
+  }
+  return sideWriteId ?? '';
 }
 
 // Cache kinds this handler is designed and tested for. Kept as the single
@@ -295,7 +313,8 @@ const SUPPORTED_SET_KINDS = [
 let killContainerOnErrorCount: number = 0;
 export default class RedisStringsHandler {
   private client: Client;
-  private sharedTagsMap: SyncedMap<TagAssociation>;
+  private sharedTagsMap: SyncedMap<StoredSharedTags>;
+  private sharedTagsWriteIdMap: SyncedMap<string>;
   private revalidatedTagsMap: SyncedMap<number>;
   private inMemoryDeduplicationCache: SyncedMap<
     Promise<ReturnType<Client['get']>>
@@ -424,13 +443,29 @@ export default class RedisStringsHandler {
         throw error;
       }
 
+      const writeIdKey = sharedTagsWriteIdKey(sharedTagsKey);
       const filterKeys = (key: string): boolean =>
-        key !== REVALIDATED_TAGS_KEY && key !== sharedTagsKey;
+        key !== REVALIDATED_TAGS_KEY &&
+        key !== sharedTagsKey &&
+        key !== writeIdKey;
 
-      this.sharedTagsMap = new SyncedMap<TagAssociation>({
+      this.sharedTagsMap = new SyncedMap<StoredSharedTags>({
         client: this.client,
         keyPrefix,
         redisKey: sharedTagsKey,
+        database,
+        querySize: revalidateTagQuerySize,
+        filterKeys,
+        resyncIntervalMs:
+          avgResyncIntervalMs -
+          avgResyncIntervalMs / 10 +
+          Math.random() * (avgResyncIntervalMs / 10),
+      });
+
+      this.sharedTagsWriteIdMap = new SyncedMap<string>({
+        client: this.client,
+        keyPrefix,
+        redisKey: writeIdKey,
         database,
         querySize: revalidateTagQuerySize,
         filterKeys,
@@ -512,6 +547,7 @@ export default class RedisStringsHandler {
       await Promise.race([
         Promise.all([
           this.sharedTagsMap.waitUntilReady(),
+          this.sharedTagsWriteIdMap.waitUntilReady(),
           this.revalidatedTagsMap.waitUntilReady(),
         ]),
         new Promise((_, reject) => {
@@ -854,22 +890,22 @@ export default class RedisStringsHandler {
       // Setting the tags for the cache entry in the sharedTagsMap (locally stored hashmap synced via redis)
       let setTagsOperation: Promise<void> | undefined;
       let deleteTagsAfterSet = false;
-      const currentAssociation = normalizeTagAssociation(
-        this.sharedTagsMap.get(key),
+      const currentStoredTags = this.sharedTagsMap.get(key);
+      const currentTags = sharedTagNames(currentStoredTags);
+      const currentWriteId = observedWriteId(
+        currentStoredTags,
+        this.sharedTagsWriteIdMap.get(key),
       );
       if (ctx.tags && ctx.tags.length > 0) {
-        // Always write a fresh association, even when the tag *content* is
-        // identical to what is already stored. Skipping this write when the
-        // content looked unchanged is what let a same-tag concurrent write
-        // go unnoticed below: a plain tags-array comparison cannot tell
-        // "nobody touched this since I read it" apart from "someone just
-        // re-confirmed the exact same tags for a different value". A fresh
-        // writeId makes that distinction exact.
-        setTagsOperation = this.sharedTagsMap.set(key, {
-          tags: structuredClone(ctx.tags) as string[],
-          writeId: randomUUID(),
-        });
-      } else if (currentAssociation && currentAssociation.tags.length > 0) {
+        // Always write the tag array and a fresh write id, even when the tag
+        // text is unchanged. Skipping that write is what let a same-tag
+        // concurrent write go unnoticed below. The hash value stays a plain
+        // string array so older instances can still call `.some()` on it.
+        setTagsOperation = Promise.all([
+          this.sharedTagsMap.set(key, structuredClone(ctx.tags) as string[]),
+          this.sharedTagsWriteIdMap.set(key, randomUUID()),
+        ]).then(() => undefined);
+      } else if (currentTags && currentTags.length > 0) {
         deleteTagsAfterSet = true;
       }
 
@@ -882,21 +918,18 @@ export default class RedisStringsHandler {
 
       if (deleteTagsAfterSet) {
         await setOperation;
-        const latestAssociation = normalizeTagAssociation(
+        const latestWriteId = observedWriteId(
           this.sharedTagsMap.get(key),
+          this.sharedTagsWriteIdMap.get(key),
         );
-        // Only delete if the association is exactly the one observed before
+        // Only delete if the generation is exactly the one observed before
         // this write started. Any intervening tagged write - even one that
-        // re-confirms the exact same tags - carries a new writeId, so unlike
-        // a tags-array comparison this check cannot be fooled by equal tag
-        // content belonging to a different write.
-        const associationIsStillOurs =
-          latestAssociation !== undefined &&
-          currentAssociation !== undefined &&
-          latestAssociation.writeId === currentAssociation.writeId;
-
-        if (associationIsStillOurs) {
-          await this.sharedTagsMap.delete(key);
+        // re-confirms the exact same tags - carries a new write id.
+        if (latestWriteId === currentWriteId) {
+          await Promise.all([
+            this.sharedTagsMap.delete(key),
+            this.sharedTagsWriteIdMap.delete(key),
+          ]);
         }
       } else {
         await Promise.all([setOperation, setTagsOperation]);
@@ -927,9 +960,22 @@ export default class RedisStringsHandler {
   }
 
   private async deleteLocalReadCacheKeys(keys: string[]): Promise<void> {
+    const errors: unknown[] = [];
     for (let i = 0; i < keys.length; i += LOCAL_CACHE_DELETE_BATCH_SIZE) {
-      await this.inMemoryDeduplicationCache.delete(
-        keys.slice(i, i + LOCAL_CACHE_DELETE_BATCH_SIZE),
+      try {
+        await this.inMemoryDeduplicationCache.delete(
+          keys.slice(i, i + LOCAL_CACHE_DELETE_BATCH_SIZE),
+        );
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    if (errors.length > 1) {
+      throw new Error(
+        `Failed to clear ${errors.length} local read-cache batches`,
       );
     }
   }
@@ -975,8 +1021,8 @@ export default class RedisStringsHandler {
       }
 
       // Scan the whole sharedTagsMap for keys that are dependent on any of the revalidated tags
-      for (const [key, association] of this.sharedTagsMap.entries()) {
-        const associationTags = normalizeTagAssociation(association)?.tags;
+      for (const [key, storedTags] of this.sharedTagsMap.entries()) {
+        const associationTags = sharedTagNames(storedTags);
         if (associationTags?.some((tag) => tags.has(tag))) {
           keysToDelete.add(key);
         }
