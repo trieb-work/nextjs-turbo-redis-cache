@@ -31,12 +31,20 @@ async function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function sharedTagNames(serializedTags: string): string[] {
+  const parsed = JSON.parse(serializedTags) as string[] | { tags?: string[] };
+  if (Array.isArray(parsed)) {
+    return parsed;
+  }
+  return parsed.tags ?? [];
+}
+
 function expectOptionalSharedTagsEntry(serializedTags: string | null) {
   if (serializedTags === null) {
     return;
   }
 
-  expect(Array.isArray(JSON.parse(serializedTags))).toBe(true);
+  expect(sharedTagNames(serializedTags)).toEqual(expect.any(Array));
 }
 
 async function findFetchCacheEntryKey(tag: string): Promise<string> {
@@ -45,8 +53,7 @@ async function findFetchCacheEntryKey(tag: string): Promise<string> {
   );
   const matches = Object.entries(sharedTags).filter(
     ([key, serializedTags]) =>
-      !key.startsWith('/') &&
-      (JSON.parse(serializedTags) as string[]).includes(tag),
+      !key.startsWith('/') && sharedTagNames(serializedTags).includes(tag),
   );
 
   expect(matches).toHaveLength(1);
@@ -274,7 +281,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           process.env.VERCEL_URL + SHARED_TAGS_KEY,
           '/api/cached-static-fetch',
         )) as string;
-        expect(JSON.parse(hashmap)).toEqual([
+        expect(sharedTagNames(hashmap)).toEqual([
           '_N_T_/layout',
           '_N_T_/api/layout',
           '_N_T_/api/cached-static-fetch/layout',
@@ -561,7 +568,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
               process.env.VERCEL_URL + SHARED_TAGS_KEY,
               cacheEntryKey,
             )) as string;
-            expect(JSON.parse(hashmap)).toEqual([
+            expect(sharedTagNames(hashmap)).toEqual([
               'revalidated-fetch-revalidate3-nested-fetch-in-api-route',
             ]);
           });
@@ -615,7 +622,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
               process.env.VERCEL_URL + SHARED_TAGS_KEY,
               cacheEntryKey,
             )) as string;
-            expect(JSON.parse(hashmap)).toEqual([
+            expect(sharedTagNames(hashmap)).toEqual([
               'revalidated-fetch-revalidate3-nested-fetch-in-api-route',
             ]);
           });
@@ -767,7 +774,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             process.env.VERCEL_URL + SHARED_TAGS_KEY,
             '/pages/no-fetch/default-page',
           )) as string;
-          expect(JSON.parse(hashmap)).toEqual([
+          expect(sharedTagNames(hashmap)).toEqual([
             '_N_T_/layout',
             '_N_T_/pages/layout',
             '_N_T_/pages/no-fetch/layout',
@@ -826,7 +833,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           process.env.VERCEL_URL + SHARED_TAGS_KEY,
           '/pages/revalidated-fetch/revalidate15--default-page',
         )) as string;
-        expect(JSON.parse(hashmap1)).toEqual([
+        expect(sharedTagNames(hashmap1)).toEqual([
           '_N_T_/layout',
           '_N_T_/pages/layout',
           '_N_T_/pages/revalidated-fetch/layout',
@@ -839,14 +846,14 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           process.env.VERCEL_URL + SHARED_TAGS_KEY,
           nestedFetchCacheEntryKey,
         )) as string;
-        expect(JSON.parse(hashmap2)).toEqual([
+        expect(sharedTagNames(hashmap2)).toEqual([
           'revalidated-fetch-revalidate15-default-page',
         ]);
         const hashmap3 = (await redisClient.hGet(
           process.env.VERCEL_URL + SHARED_TAGS_KEY,
           '/api/revalidated-fetch',
         )) as string;
-        expect(JSON.parse(hashmap3)).toEqual([
+        expect(sharedTagNames(hashmap3)).toEqual([
           '_N_T_/layout',
           '_N_T_/api/layout',
           '_N_T_/api/revalidated-fetch/layout',
@@ -920,7 +927,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           process.env.VERCEL_URL + SHARED_TAGS_KEY,
           '/api/revalidated-fetch',
         )) as string;
-        expect(JSON.parse(hashmap3)).toEqual([
+        expect(sharedTagNames(hashmap3)).toEqual([
           '_N_T_/layout',
           '_N_T_/api/layout',
           '_N_T_/api/revalidated-fetch/layout',

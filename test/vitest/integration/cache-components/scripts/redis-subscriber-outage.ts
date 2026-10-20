@@ -127,8 +127,8 @@ async function main() {
   );
 
   const pubsubInitial = await waitUntil(async () => {
-    const tags = (handlerB as any).sharedTagsMap.get('key1');
-    return !!tags && tags.length === 1 && tags[0] === 'tag1';
+    const association = (handlerB as any).sharedTagsMap.get('key1');
+    return association?.tags?.length === 1 && association.tags[0] === 'tag1';
   }, 5_000);
 
   record(
@@ -274,8 +274,8 @@ async function main() {
     // After a 3s outage + restart, the subscriber may need up to ~10s to
     // reconnect depending on which backoff slot it's in.
     const pubsubAfter = await waitUntil(async () => {
-      const tags = (handlerB as any).sharedTagsMap.get('key2');
-      return !!tags && tags.length === 1 && tags[0] === 'tag2';
+      const association = (handlerB as any).sharedTagsMap.get('key2');
+      return association?.tags?.length === 1 && association.tags[0] === 'tag2';
     }, 20_000);
 
     record(
