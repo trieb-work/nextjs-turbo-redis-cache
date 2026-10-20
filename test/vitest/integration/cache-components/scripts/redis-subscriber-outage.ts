@@ -42,6 +42,19 @@ function record(name: string, pass: boolean, detail: string) {
   process.stdout.write(`RESULT|${name}|${pass ? 'PASS' : 'FAIL'}|${detail}\n`);
 }
 
+function syncedTagNames(value: unknown): string[] {
+  const tags = Array.isArray(value)
+    ? value
+    : value &&
+        typeof value === 'object' &&
+        Array.isArray((value as { tags?: unknown }).tags)
+      ? (value as { tags: string[] }).tags
+      : [];
+  return tags.filter(
+    (tag) => typeof tag !== 'string' || !tag.startsWith('\u0000writeId:'),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -127,8 +140,8 @@ async function main() {
   );
 
   const pubsubInitial = await waitUntil(async () => {
-    const tags = (handlerB as any).sharedTagsMap.get('key1');
-    return !!tags && tags.length === 1 && tags[0] === 'tag1';
+    const tags = syncedTagNames((handlerB as any).sharedTagsMap.get('key1'));
+    return tags.length === 1 && tags[0] === 'tag1';
   }, 5_000);
 
   record(
@@ -274,8 +287,8 @@ async function main() {
     // After a 3s outage + restart, the subscriber may need up to ~10s to
     // reconnect depending on which backoff slot it's in.
     const pubsubAfter = await waitUntil(async () => {
-      const tags = (handlerB as any).sharedTagsMap.get('key2');
-      return !!tags && tags.length === 1 && tags[0] === 'tag2';
+      const tags = syncedTagNames((handlerB as any).sharedTagsMap.get('key2'));
+      return tags.length === 1 && tags[0] === 'tag2';
     }, 20_000);
 
     record(
