@@ -31,22 +31,14 @@ async function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function sharedTagNames(serializedTags: string): string[] {
-  const parsed = JSON.parse(serializedTags) as string[] | { tags?: string[] };
-  const tags = Array.isArray(parsed) ? parsed : (parsed.tags ?? []);
-  const last = tags[tags.length - 1];
-  if (typeof last === 'string' && last.startsWith('\u0000writeId:')) {
-    return tags.slice(0, -1);
-  }
-  return tags;
-}
-
+// revalidateTag()/revalidatePath() keep tag metadata in place, so the hash
+// field may still exist after the value was deleted.
 function expectOptionalSharedTagsEntry(serializedTags: string | null) {
   if (serializedTags === null) {
     return;
   }
 
-  expect(sharedTagNames(serializedTags)).toEqual(expect.any(Array));
+  expect(JSON.parse(serializedTags)).toEqual(expect.any(Array));
 }
 
 async function findFetchCacheEntryKey(tag: string): Promise<string> {
@@ -55,7 +47,8 @@ async function findFetchCacheEntryKey(tag: string): Promise<string> {
   );
   const matches = Object.entries(sharedTags).filter(
     ([key, serializedTags]) =>
-      !key.startsWith('/') && sharedTagNames(serializedTags).includes(tag),
+      !key.startsWith('/') &&
+      (JSON.parse(serializedTags) as string[]).includes(tag),
   );
 
   expect(matches).toHaveLength(1);
@@ -283,7 +276,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           process.env.VERCEL_URL + SHARED_TAGS_KEY,
           '/api/cached-static-fetch',
         )) as string;
-        expect(sharedTagNames(hashmap)).toEqual([
+        expect(JSON.parse(hashmap)).toEqual([
           '_N_T_/layout',
           '_N_T_/api/layout',
           '_N_T_/api/cached-static-fetch/layout',
@@ -570,7 +563,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
               process.env.VERCEL_URL + SHARED_TAGS_KEY,
               cacheEntryKey,
             )) as string;
-            expect(sharedTagNames(hashmap)).toEqual([
+            expect(JSON.parse(hashmap)).toEqual([
               'revalidated-fetch-revalidate3-nested-fetch-in-api-route',
             ]);
           });
@@ -624,7 +617,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
               process.env.VERCEL_URL + SHARED_TAGS_KEY,
               cacheEntryKey,
             )) as string;
-            expect(sharedTagNames(hashmap)).toEqual([
+            expect(JSON.parse(hashmap)).toEqual([
               'revalidated-fetch-revalidate3-nested-fetch-in-api-route',
             ]);
           });
@@ -776,7 +769,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
             process.env.VERCEL_URL + SHARED_TAGS_KEY,
             '/pages/no-fetch/default-page',
           )) as string;
-          expect(sharedTagNames(hashmap)).toEqual([
+          expect(JSON.parse(hashmap)).toEqual([
             '_N_T_/layout',
             '_N_T_/pages/layout',
             '_N_T_/pages/no-fetch/layout',
@@ -835,7 +828,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           process.env.VERCEL_URL + SHARED_TAGS_KEY,
           '/pages/revalidated-fetch/revalidate15--default-page',
         )) as string;
-        expect(sharedTagNames(hashmap1)).toEqual([
+        expect(JSON.parse(hashmap1)).toEqual([
           '_N_T_/layout',
           '_N_T_/pages/layout',
           '_N_T_/pages/revalidated-fetch/layout',
@@ -848,14 +841,14 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           process.env.VERCEL_URL + SHARED_TAGS_KEY,
           nestedFetchCacheEntryKey,
         )) as string;
-        expect(sharedTagNames(hashmap2)).toEqual([
+        expect(JSON.parse(hashmap2)).toEqual([
           'revalidated-fetch-revalidate15-default-page',
         ]);
         const hashmap3 = (await redisClient.hGet(
           process.env.VERCEL_URL + SHARED_TAGS_KEY,
           '/api/revalidated-fetch',
         )) as string;
-        expect(sharedTagNames(hashmap3)).toEqual([
+        expect(JSON.parse(hashmap3)).toEqual([
           '_N_T_/layout',
           '_N_T_/api/layout',
           '_N_T_/api/revalidated-fetch/layout',
@@ -929,7 +922,7 @@ describe('Next.js Turbo Redis Cache Integration', () => {
           process.env.VERCEL_URL + SHARED_TAGS_KEY,
           '/api/revalidated-fetch',
         )) as string;
-        expect(sharedTagNames(hashmap3)).toEqual([
+        expect(JSON.parse(hashmap3)).toEqual([
           '_N_T_/layout',
           '_N_T_/api/layout',
           '_N_T_/api/revalidated-fetch/layout',

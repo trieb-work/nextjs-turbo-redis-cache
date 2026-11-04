@@ -121,6 +121,24 @@ describe('clusterSafeUnlink', () => {
     expect(unlink).toHaveBeenCalledTimes(1);
   });
 
+  it('handles a slot group larger than the function argument limit', async () => {
+    const keys = Array.from(
+      { length: 500_000 },
+      (_, index) => `cache:{tenant}:${index}`,
+    );
+    const onGroupSuccess = vi.fn();
+
+    const result = await clusterSafeUnlink(
+      { unlink: vi.fn(async (group: string | string[]) => group.length) },
+      keys,
+      { onGroupSuccess },
+    );
+
+    expect(result.failures).toEqual([]);
+    expect(result.successfulKeys).toHaveLength(keys.length);
+    expect(onGroupSuccess).toHaveBeenCalledTimes(1);
+  });
+
   it('calls onGroupSuccess after a slot group was deleted', async () => {
     const onGroupSuccess = vi.fn();
 

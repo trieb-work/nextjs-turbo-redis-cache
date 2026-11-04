@@ -121,7 +121,11 @@ export async function clusterSafeUnlink(
           groupKeys.length === 1 ? groupKeys[0]! : groupKeys,
         );
         result.deleted += deleted;
-        result.successfulKeys.push(...groupKeys);
+        // No spread: one slot group can hold more keys than the engine
+        // accepts as function arguments.
+        for (const key of groupKeys) {
+          result.successfulKeys.push(key);
+        }
         await options.onGroupSuccess?.(groupKeys);
       } catch (error) {
         result.failures.push({ slot, keys: groupKeys, error });
