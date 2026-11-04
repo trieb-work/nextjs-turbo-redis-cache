@@ -711,6 +711,55 @@ describe('RedisStringsHandler', () => {
     expect(unlink).toHaveBeenCalledWith('same-tag:item:a');
   });
 
+  it('keeps a tagged rewrite discoverable when the local tag map lags behind another instance', async () => {
+    const handler = new RedisStringsHandler({
+      redisUrl: 'redis://localhost:6379',
+      keyPrefix: 'lagging:',
+      database: 0,
+      redisGetDeduplication: false,
+    });
+
+    // This instance still believes the key is tagged `tag-a`. Another
+    // instance has already stored `tag-b` in the shared hash and published
+    // that update, but the message has not been applied here yet.
+    const localStore = new Map<string, string[]>([['item:a', ['tag-a']]]);
+    const sharedHash = new Map<string, string[]>([['item:a', ['tag-b']]]);
+    const publishedByThisInstance: string[][] = [];
+    (handler as any).sharedTagsMap = {
+      waitUntilReady: vi.fn(async () => undefined),
+      get: (key: string) => localStore.get(key),
+      set: vi.fn((key: string, value: string[]) => {
+        localStore.set(key, [...value]);
+        sharedHash.set(key, [...value]);
+        publishedByThisInstance.push([...value]);
+        return Promise.resolve();
+      }),
+      delete: vi.fn(async () => undefined),
+      entries: () => localStore.entries(),
+    };
+
+    await handler.set('item:a', concurrentCacheValue('rewritten-with-tag-a'), {
+      ...concurrentCtx,
+      tags: ['tag-a'],
+    });
+
+    // The in-flight message arrives, then this instance's own publish.
+    // Redis pub/sub delivers those in publish order, so the older `tag-b`
+    // update is applied first.
+    localStore.set('item:a', ['tag-b']);
+    for (const tags of publishedByThisInstance) {
+      localStore.set('item:a', tags);
+    }
+
+    expect(sharedHash.get('item:a')).toEqual(['tag-a']);
+    expect(localStore.get('item:a')).toEqual(['tag-a']);
+
+    const unlink = (handler as any).client.unlink as ReturnType<typeof vi.fn>;
+    await handler.revalidateTag('tag-a');
+
+    expect(unlink).toHaveBeenCalledWith('lagging:item:a');
+  });
+
   it('keeps stale tag metadata when an untagged replacement write fails', async () => {
     const consoleErrorSpy = vi
       .spyOn(console, 'error')

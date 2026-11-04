@@ -824,20 +824,19 @@ export default class RedisStringsHandler {
       // so deleting here could remove that instance's fresh association and
       // make its value impossible to invalidate. A stale association only
       // costs one extra cache miss on a later revalidateTag().
+      //
+      // A tagged write always stores its association, even when the local map
+      // already shows the same tags. That map can lag behind another instance
+      // that stored different tags for this key. Skipping the write would leave
+      // the shared hash pointing at those other tags, and revalidateTag() would
+      // never find this value. A later full sync reads the same hash, so it
+      // cannot repair the miss.
       let setTagsOperation: Promise<void> | undefined;
       if (ctx.tags && ctx.tags.length > 0) {
-        const currentTags = this.sharedTagsMap.get(key);
-        const currentIsSameAsNew =
-          currentTags?.length === ctx.tags.length &&
-          currentTags.every((v) => ctx.tags!.includes(v)) &&
-          ctx.tags.every((v) => currentTags.includes(v));
-
-        if (!currentIsSameAsNew) {
-          setTagsOperation = this.sharedTagsMap.set(
-            key,
-            structuredClone(ctx.tags) as string[],
-          );
-        }
+        setTagsOperation = this.sharedTagsMap.set(
+          key,
+          structuredClone(ctx.tags) as string[],
+        );
       }
 
       debug(
