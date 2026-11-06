@@ -111,11 +111,49 @@ describe('RedisStringsHandler Pages Router kinds', () => {
         value: pagesData,
         lastModified: expect.any(Number),
         tags: ['_N_T_/blog/post-1'],
+        cacheControl: { revalidate: 60 },
       });
       // TTL is derived from cacheControl.revalidate (getStaticProps revalidate)
       expect(ex).toBe(expireAge(60));
       expect(warnSpy).not.toHaveBeenCalled();
       expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    // A Next.js 16.4 route-cache key is /route-cache/<kind>/<sha256(sourceRoute)>/$/<path>.
+    // Next.js 16.3 and older use the page path as the key.
+    const SOURCE_ROUTE_HASH =
+      'b6406f8ebe93bedb5824e46146a9228cd4a5a3fb152b9f1fcffe6046ef30c7a3';
+    it.each([
+      {
+        name: 'Next.js 16.4 route-cache key',
+        key: `/route-cache/PAGES/${SOURCE_ROUTE_HASH}/$/blog/post-1`,
+        tag: '_N_T_/blog/post-1',
+      },
+      {
+        // normalizePagePath stores '/' as '/index', as Next.js 16.3 did, and
+        // revalidatePath('/') revalidates both _N_T_/ and _N_T_/index
+        name: 'Next.js 16.4 route-cache key of the root page',
+        key: `/route-cache/PAGES/${SOURCE_ROUTE_HASH}/$/index`,
+        tag: '_N_T_/index',
+      },
+      {
+        name: 'Next.js 16.3 page path that looks like a route-cache key',
+        key: '/route-cache/docs/$/post',
+        tag: '_N_T_/route-cache/docs/$/post',
+      },
+      {
+        name: 'Next.js 16.3 page path under /route-cache/ without a /$/ marker',
+        key: `/route-cache/PAGES/${SOURCE_ROUTE_HASH}/blog`,
+        tag: `_N_T_/route-cache/PAGES/${SOURCE_ROUTE_HASH}/blog`,
+      },
+    ])('set() tags a $name with $tag', async ({ key, tag }) => {
+      const handler = createHandler();
+      await handler.set(key, pagesData, {
+        ...baseCtx,
+        cacheControl: { revalidate: 60, expire: undefined },
+      });
+
+      expect(storedEntry(key).entry.tags).toEqual([tag]);
     });
 
     it('get() returns a PAGES entry without warnings', async () => {
@@ -134,6 +172,7 @@ describe('RedisStringsHandler Pages Router kinds', () => {
         value: pagesData,
         lastModified: expect.any(Number),
         tags: ['_N_T_/blog/post-1'],
+        cacheControl: { revalidate: 60 },
       });
       expect(warnSpy).not.toHaveBeenCalled();
       expect(errorSpy).not.toHaveBeenCalled();
@@ -195,6 +234,7 @@ describe('RedisStringsHandler Pages Router kinds', () => {
         value: redirectData,
         lastModified: expect.any(Number),
         tags: ['_N_T_/old-location'],
+        cacheControl: { revalidate: 30 },
       });
       expect(ex).toBe(expireAge(30));
 
@@ -221,6 +261,7 @@ describe('RedisStringsHandler Pages Router kinds', () => {
         value: null,
         lastModified: expect.any(Number),
         tags: ['_N_T_/missing-page'],
+        cacheControl: { revalidate: 15 },
       });
       expect(ex).toBe(expireAge(15));
       expect(warnSpy).not.toHaveBeenCalled();
@@ -243,6 +284,7 @@ describe('RedisStringsHandler Pages Router kinds', () => {
         value: null,
         lastModified: expect.any(Number),
         tags: ['_N_T_/missing-page'],
+        cacheControl: { revalidate: 15 },
       });
       expect(warnSpy).not.toHaveBeenCalled();
       expect(errorSpy).not.toHaveBeenCalled();

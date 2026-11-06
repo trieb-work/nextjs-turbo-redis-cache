@@ -37,21 +37,22 @@ Fast tests with no external dependencies. Mocks are used where needed.
 | `pages-router-kinds.test.ts`              | Pages Router cache kinds (`PAGES`, `REDIRECT`, `null`/notFound), implicit tags, TTL derivation                   |
 | `postponed-rsc-read.contract.test.ts`     | #102 regression: `APP_PAGE` `rscData` read normalization matches Next `FileSystemCache` (fallback/postponed PPR) |
 
-**Next.js fixture requirement.** The `FileSystemCache`-backed part of the
-`postponed-rsc-read` contract test compares against the real Next.js cache
-implementation from the `next-app-16-3-0` fixture. That fixture is managed
-separately and is **not** installed by the root `pnpm install`. The suite
-skips itself (and prints the setup command) when the fixture is absent, so the
-rest of the unit suite always runs; to enable it:
+**Next.js fixture requirement.** The `FileSystemCache`-backed contract tests
+compare against the real Next.js cache implementation. `next-app-16-3-0` pins
+the 16.1-16.3 read behavior, where `FileSystemCache` omits `rscData` for
+fallback and postponed PPR reads. `next-app-16-4-2` pins the `cacheControl`
+that `get()` returns for `APP_PAGE` and `APP_ROUTE` entries. Both fixtures are
+managed separately and are **not** installed by the root `pnpm install`. A
+suite skips itself (and prints the setup command) when its fixture is absent,
+so the rest of the unit suite always runs; to enable them:
 
 ```bash
 cd test/nextjs-test-projects/next-app-16-3-0 && pnpm install
+cd test/nextjs-test-projects/next-app-16-4-2 && pnpm install
 ```
 
-The contract pins the Next 16.1-16.3 read behavior (where `FileSystemCache`
-omits `rscData` for fallback and postponed PPR reads). See the test file header
-for the version-coverage rationale. CI installs the fixture before
-`pnpm test:unit:coverage`.
+See the test file header for the version-coverage rationale. CI installs both
+fixtures before `pnpm test:unit:coverage`.
 
 ```bash
 pnpm test:unit          # single run
@@ -72,7 +73,7 @@ These tests spawn a real Next.js server as a child process, make `fetch()` reque
 
 ### Standard Integration (`nextjs-cache-handler.integration.test.ts`)
 
-Full cache lifecycle: static pages, fetch caching, revalidation, tag invalidation, TTL behavior. In CI this runs against Next.js 15.4, 16.0, 16.2, and 16.3. Nested fetch entries are resolved from their explicit cache tag in Redis's shared-tags map rather than Next.js's internal fetch-key hash, which changed in Next.js 16.3.
+Full cache lifecycle: static pages, fetch caching, revalidation, tag invalidation, TTL behavior. In CI this runs against Next.js 15.4, 16.0, 16.2, 16.3, and 16.4. Nested fetch entries are resolved from their explicit cache tag in Redis's shared-tags map rather than Next.js's internal fetch-key hash, which changed in Next.js 16.3.
 
 ```bash
 pnpm test:integration
@@ -80,7 +81,7 @@ pnpm test:integration
 
 ### Pages Router (`pages-router.integration.test.ts`)
 
-Pages Router cache lifecycle against the `next-pages-16-2-6` and `next-pages-16-3-0` apps: `PAGES` entry format, TTL derivation from `getStaticProps` `revalidate`, `fallback: 'blocking'` first hits, `notFound: true` (null cache entries), `redirect:` results, and `revalidate: false` TTL fallback.
+Pages Router cache lifecycle against the `next-pages-16-2-6`, `next-pages-16-3-0`, and `next-pages-16-4-2` apps: `PAGES` entry format, TTL derivation from `getStaticProps` `revalidate`, `fallback: 'blocking'` first hits, `notFound: true` (null cache entries), `redirect:` results, and `revalidate: false` TTL fallback.
 
 Starts **two** `next start` instances of the same build sharing one Redis and proves that on-demand revalidation (`res.revalidate(path)`) triggered on instance A is served fresh by instance B (HTML and `/_next/data` pageData JSON) — the multi-instance ISR scenario behind a load balancer.
 
@@ -98,7 +99,7 @@ pnpm test:integration:build-id-prefix
 
 ### Cache Components (`cache-components/`)
 
-Integration tests specific to Next.js 16 Cache Components (`use cache`). CI runs them against the 16.0, 16.2, and 16.3 Cache Components test apps.
+Integration tests specific to Next.js 16 Cache Components (`use cache`). CI runs them against the 16.0, 16.2, 16.3, and 16.4 Cache Components test apps.
 
 | File                                   | What it tests                                                                                                                                                                                                                                                       |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -164,9 +165,15 @@ Minimal Next.js applications used as fixtures. They are not test runners — the
 | `next-app-15-4-11`                  | 15.4.11 | Integration (matrix, default for local), build-id-prefix       |
 | `next-app-16-0-11`                  | 16.0.11 | Integration (matrix)                                           |
 | `next-app-16-2-6`                   | 16.2.6  | Integration (matrix)                                           |
+| `next-app-16-3-0`                   | 16.3.0  | Integration (matrix)                                           |
+| `next-app-16-4-2`                   | 16.4.2  | Integration (matrix)                                           |
 | `next-pages-16-2-6`                 | 16.2.6  | Integration (Pages Router, two-instance revalidation)          |
+| `next-pages-16-3-0`                 | 16.3.0  | Integration (Pages Router, two-instance revalidation)          |
+| `next-pages-16-4-2`                 | 16.4.2  | Integration (Pages Router, two-instance revalidation)          |
 | `next-app-16-0-11-cache-components` | 16.0.11 | Integration (cache-components matrix), E2E (Playwright matrix) |
 | `next-app-16-2-6-cache-components`  | 16.2.6  | Integration (cache-components matrix), E2E (Playwright matrix) |
+| `next-app-16-3-0-cache-components`  | 16.3.0  | Integration (cache-components matrix), E2E (Playwright matrix) |
+| `next-app-16-4-2-cache-components`  | 16.4.2  | Integration (cache-components matrix), E2E (Playwright matrix) |
 | `next-app-customized`               | —       | Example of custom config (referenced in project README)        |
 
 ---
@@ -177,23 +184,23 @@ The CI workflow (`.github/workflows/ci.yml`) is structured as:
 
 ```
 lint-and-unit                        → Lint + Unit Tests + Coverage
-  ├── integration                    → Matrix: 3 Next.js versions (15.4–16.2)
-  ├── integration-pages              → Pages Router (two-instance revalidation)
+  ├── integration                    → Matrix: Next.js 15.4, 16.0, 16.2, 16.3, 16.4
+  ├── integration-pages              → Pages Router 16.2, 16.3, 16.4 (two-instance revalidation)
   ├── integration-build-id-prefix    → Isolated BUILD_ID prefix test
-  ├── integration-cache-components   → Matrix: 16.0.11 + 16.2.6 cache-components
-  └── e2e                            → Matrix: Playwright against 16.0.11 + 16.2.6
+  ├── integration-cache-components   → Matrix: 16.0, 16.2, 16.3, 16.4 cache-components
+  └── e2e                            → Matrix: Playwright against 16.0, 16.2, 16.3, 16.4
 ```
 
 `lint-and-unit` runs first as a gate. All other jobs run in parallel after it passes.
 
-| CI Job                         | Test App(s)                                               | What runs                                                       |
-| ------------------------------ | --------------------------------------------------------- | --------------------------------------------------------------- |
-| `lint-and-unit`                | —                                                         | `pnpm lint` + `pnpm test:unit:coverage`                         |
-| `integration`                  | `next-app-15-4-11`, `next-app-16-0-11`, `next-app-16-2-6` | `pnpm test:integration` (per matrix entry)                      |
-| `integration-pages`            | `next-pages-16-2-6`                                       | `pnpm test:integration:pages`                                   |
-| `integration-build-id-prefix`  | `next-app-15-4-11`                                        | `pnpm test:integration:build-id-prefix`                         |
-| `integration-cache-components` | `next-app-16-{0-3,2-3}-cache-components`                  | `pnpm test:integration:cache-components` + Redis kill/reconnect |
-| `e2e`                          | `next-app-16-{0-3,2-3}-cache-components`                  | `pnpm test:e2e` (Playwright)                                    |
+| CI Job                         | Test App(s)                                                                                                                                     | What runs                                                       |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `lint-and-unit`                | —                                                                                                                                               | `pnpm lint` + `pnpm test:unit:coverage`                         |
+| `integration`                  | `next-app-15-4-11`, `next-app-16-0-11`, `next-app-16-2-6`, `next-app-16-3-0`, `next-app-16-4-2`                                                 | `pnpm test:integration` (per matrix entry)                      |
+| `integration-pages`            | `next-pages-16-2-6`, `next-pages-16-3-0`, `next-pages-16-4-2`                                                                                   | `pnpm test:integration:pages`                                   |
+| `integration-build-id-prefix`  | `next-app-15-4-11`                                                                                                                              | `pnpm test:integration:build-id-prefix`                         |
+| `integration-cache-components` | `next-app-16-0-11-cache-components`, `next-app-16-2-6-cache-components`, `next-app-16-3-0-cache-components`, `next-app-16-4-2-cache-components` | `pnpm test:integration:cache-components` + Redis kill/reconnect |
+| `e2e`                          | `next-app-16-0-11-cache-components`, `next-app-16-2-6-cache-components`, `next-app-16-3-0-cache-components`, `next-app-16-4-2-cache-components` | `pnpm test:e2e` (Playwright)                                    |
 
 ---
 

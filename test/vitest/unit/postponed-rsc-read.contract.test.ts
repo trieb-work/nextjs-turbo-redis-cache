@@ -16,14 +16,18 @@
  * supported release; the contract is pinned against the newest 16.x line
  * (16.3.0 fixture), which is representative of the 16.1-16.3 behavior.
  *
- * The FileSystemCache-backed suite needs the separately managed fixture app
+ * A second suite pins the `cacheControl` that get() returns against the
+ * Next.js 16.4 FileSystemCache (16.4.2 fixture).
+ *
+ * The FileSystemCache-backed suites need the separately managed fixture apps
  * (not installed by the root `pnpm install`):
  *
  *   cd test/nextjs-test-projects/next-app-16-3-0 && pnpm install
+ *   cd test/nextjs-test-projects/next-app-16-4-2 && pnpm install
  *
- * When the fixture is absent the suite is skipped — the rest of the unit suite
- * must keep running on a fresh checkout. CI installs the fixture before
- * `pnpm test:unit:coverage`, so the contract always runs there.
+ * When a fixture is absent its suite is skipped — the rest of the unit suite
+ * must keep running on a fresh checkout. CI installs the fixtures before
+ * `pnpm test:unit:coverage`, so the contracts always run there.
  */
 import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
@@ -34,30 +38,46 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import RedisStringsHandler from '../../../src/RedisStringsHandler';
 
-const NEXT_FIXTURE_APP = path.join(
-  __dirname,
-  '../../nextjs-test-projects/next-app-16-3-0',
-);
-const nextPkgJson = path.join(
-  NEXT_FIXTURE_APP,
-  'node_modules/next/package.json',
-);
-const FIXTURE_INSTALL_HINT =
-  `Next.js 16.3 contract fixture is not installed (${nextPkgJson}). ` +
-  `Run: cd test/nextjs-test-projects/next-app-16-3-0 && pnpm install`;
+type FileSystemCacheInstance = {
+  get(
+    key: string,
+    ctx: {
+      kind: 'APP_PAGE' | 'APP_ROUTE';
+      isFallback: boolean;
+      isRoutePPREnabled: boolean;
+    },
+  ): Promise<{
+    value: Record<string, unknown>;
+    cacheControl?: unknown;
+  } | null>;
+  set(key: string, data: unknown, ctx: Record<string, unknown>): Promise<void>;
+};
+
+function fixtureInstallHint(app: string) {
+  return (
+    `Next.js contract fixture is not installed (${app}). ` +
+    `Run: cd test/nextjs-test-projects/${app} && pnpm install`
+  );
+}
 
 // Returns null instead of throwing so a missing fixture only skips the
-// FileSystemCache-backed suite below and never aborts the unit suite.
-function resolveNextFixture() {
+// FileSystemCache-backed suite that needs it and never aborts the unit suite.
+function resolveNextFixture(app: string, versionPrefix: string) {
+  const nextPkgJson = path.join(
+    __dirname,
+    '../../nextjs-test-projects',
+    app,
+    'node_modules/next/package.json',
+  );
   if (!fsSync.existsSync(nextPkgJson)) {
     return null;
   }
   const { version } = JSON.parse(fsSync.readFileSync(nextPkgJson, 'utf8')) as {
     version: string;
   };
-  if (!version.startsWith('16.3.')) {
+  if (!version.startsWith(versionPrefix)) {
     console.warn(
-      `Next.js contract fixture must provide 16.3.x (got ${version} at ` +
+      `Next.js contract fixture must provide ${versionPrefix}x (got ${version} at ` +
         `${nextPkgJson}); skipping the FileSystemCache contract suite.`,
     );
     return null;
@@ -71,33 +91,28 @@ function resolveNextFixture() {
     maxMemoryCacheSize: number;
     flushToDisk: boolean;
     revalidatedTags: string[];
-  }) => {
-    get(
-      key: string,
-      ctx: {
-        kind: 'APP_PAGE';
-        isFallback: boolean;
-        isRoutePPREnabled: boolean;
-      },
-    ): Promise<{
-      value: Record<string, unknown>;
-    } | null>;
-  };
+  }) => FileSystemCacheInstance;
   const { RSC_SEGMENTS_DIR_SUFFIX, RSC_SEGMENT_SUFFIX, NEXT_META_SUFFIX } =
     requireNext('next/dist/lib/constants') as {
       RSC_SEGMENTS_DIR_SUFFIX: string;
       RSC_SEGMENT_SUFFIX: string;
       NEXT_META_SUFFIX: string;
     };
+  // FileSystemCache.set() needs Next's fs wrapper (recursive mkdir).
+  const { nodeFs } = requireNext('next/dist/server/lib/node-fs-methods') as {
+    nodeFs: typeof fs;
+  };
   return {
     FileSystemCache,
+    nodeFs,
     RSC_SEGMENTS_DIR_SUFFIX,
     RSC_SEGMENT_SUFFIX,
     NEXT_META_SUFFIX,
   };
 }
 
-const nextFixture = resolveNextFixture();
+const nextFixture = resolveNextFixture('next-app-16-3-0', '16.3.');
+const next164Fixture = resolveNextFixture('next-app-16-4-2', '16.4.');
 
 const hoisted = vi.hoisted(() => {
   const store = new Map<string, { value: string; ex?: number }>();
@@ -200,7 +215,7 @@ const cases: Case[] = [
 ];
 
 describe.runIf(!nextFixture)('Next.js 16.3 contract fixture absent', () => {
-  it.skip(FIXTURE_INSTALL_HINT, () => undefined);
+  it.skip(fixtureInstallHint('next-app-16-3-0'), () => undefined);
 });
 
 describe.runIf(!!nextFixture)(
@@ -468,3 +483,108 @@ describe('APP_PAGE get() edge cases (#102)', () => {
     expect(entry?.value.body).toEqual(body);
   });
 });
+
+// Next.js 16.4 FileSystemCache stores ctx.cacheControl on set() and returns it
+// from get() for APP_PAGE and APP_ROUTE entries, so IncrementalCache applies
+// the stored lifetime on every instance. Its disk store does not keep it for
+// PAGES and FETCH entries (the Pages Router integration test covers PAGES).
+const cacheControlCases = [
+  {
+    name: 'APP_PAGE with revalidate and expire',
+    kind: 'APP_PAGE' as const,
+    cacheControl: { revalidate: 300, expire: 31536000 },
+  },
+  {
+    name: 'APP_PAGE with revalidate false',
+    kind: 'APP_PAGE' as const,
+    cacheControl: { revalidate: false as const, expire: undefined },
+  },
+  {
+    name: 'APP_ROUTE with revalidate and expire',
+    kind: 'APP_ROUTE' as const,
+    cacheControl: { revalidate: 60, expire: 3600 },
+  },
+  {
+    name: 'APP_ROUTE without cacheControl',
+    kind: 'APP_ROUTE' as const,
+    cacheControl: undefined,
+  },
+];
+
+describe.runIf(!next164Fixture)('Next.js 16.4 contract fixture absent', () => {
+  it.skip(fixtureInstallHint('next-app-16-4-2'), () => undefined);
+});
+
+describe.runIf(!!next164Fixture)(
+  'get() returns the cacheControl like Next 16.4 FileSystemCache',
+  () => {
+    let fixtureRoot: string;
+
+    beforeEach(async () => {
+      hoisted.store.clear();
+      fixtureRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'nextjs-turbo-cache-control-contract-'),
+      );
+    });
+
+    afterEach(async () => {
+      await fs.rm(fixtureRoot, { recursive: true, force: true });
+    });
+
+    it.each(cacheControlCases)('$name', async (testCase) => {
+      const key = `/cache-control-${testCase.name.replace(/\s+/g, '-')}`;
+      const headers = {
+        'x-next-cache-tags': 'cache-control-contract',
+        'x-nextjs-stale-time': '300',
+      };
+      const value =
+        testCase.kind === 'APP_PAGE'
+          ? {
+              kind: 'APP_PAGE' as const,
+              html: '<h1>Cached</h1>',
+              rscData: Buffer.from('0:{}\n'),
+              postponed: undefined,
+              segmentData: undefined,
+              headers,
+              status: 200,
+            }
+          : {
+              kind: 'APP_ROUTE' as const,
+              body: Buffer.from('{}'),
+              headers,
+              status: 200,
+            };
+      const context = {
+        kind: testCase.kind,
+        isFallback: false,
+        isRoutePPREnabled: false,
+      };
+
+      const disk = new next164Fixture!.FileSystemCache({
+        fs: next164Fixture!.nodeFs,
+        serverDistDir: path.join(fixtureRoot, 'server'),
+        maxMemoryCacheSize: 0,
+        flushToDisk: true,
+        revalidatedTags: [],
+      });
+      const redis = new RedisStringsHandler({
+        redisUrl: 'redis://127.0.0.1:6379',
+        keyPrefix: KEY_PREFIX,
+        database: 0,
+        getTimeoutMs: 500,
+        redisGetDeduplication: false,
+        inMemoryCachingTime: 0,
+      });
+
+      const setContext = { ...context, cacheControl: testCase.cacheControl };
+      await disk.set(key, value, setContext);
+      await redis.set(key, value, setContext);
+
+      const expected = await disk.get(key, context);
+      const actual = await redis.get(key, context);
+
+      expect(expected).toBeTruthy();
+      expect(actual?.cacheControl).toEqual(expected!.cacheControl);
+    });
+  },
+);

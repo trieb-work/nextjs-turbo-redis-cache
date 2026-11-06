@@ -37,10 +37,19 @@ Tested versions are:
 - Nextjs 16.3.0 + redis client 4.7.0 (cacheComponents: false)
 - Nextjs 16.3.0 + redis client 4.7.0 (cacheComponents: true)
 - Nextjs 16.3.0 + redis client 4.7.0 (Pages Router)
+- Nextjs 16.4.2 + redis client 4.7.0 (cacheComponents: false)
+- Nextjs 16.4.2 + redis client 4.7.0 (cacheComponents: true)
+- Nextjs 16.4.2 + redis client 4.7.0 (Pages Router)
 
 _Cache Components_ (Next.js 16+) are fully supported. Automated test coverage includes `'use cache'`, `cacheTag`, and `cacheLife` flows in the Cache Components integration suite.
 
+If you use Cache Components, use Next.js 16.4.1 or higher. Next.js 16.0.0 to 16.4.0 have a critical remote code execution vulnerability in `'use cache'` functions ([GHSA-673q-mjm6-r5xr](https://github.com/vercel/next.js/security/advisories/GHSA-673q-mjm6-r5xr)).
+
 For Cache Components, see the "Cache Components handler (Next.js 16+)" section below.
+
+### Upgrade from Next.js 16.3 to 16.4
+
+Next.js 16.4 changed the cache keys of routes (App Router pages, App Router route handlers and Pages Router pages). The new keys have the form `/route-cache/<kind>/<hash>/$/<path>`. Thus, after the upgrade, the cache is empty for these entries and Next.js renders them again on the first request. The keys of `fetch` entries and the stored value format did not change. Old route keys stay in Redis until their TTL expires. You do not have to delete them.
 
 ## Getting started
 
@@ -564,6 +573,7 @@ This package follows the semantics documented in the [Next.js self-hosting guide
 | Topic                             | Behavior                                                                                                                                                                                                                                                                                                     |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **ISR Redis TTL**                 | Key TTL on `cacheControl.expire`, not `revalidate`. Past `revalidate` an entry is only stale (SWR); evicting at that boundary would defeat background refresh. Legacy callers that only pass `revalidate` still get `estimateExpireAge(revalidate)`.                                                         |
+| **Entry lifetime (ISR)**          | `set()` stores `ctx.cacheControl` in the entry and `get()` returns it. Next.js 16.4+ then uses the lifetime of the instance that rendered the entry on every instance that shares Redis, also after a restart or on an instance that did not render the route. Older versions ignore it.                     |
 | **Tag sources (ISR)**             | `APP_PAGE` / `APP_ROUTE` tags come from `data.headers['x-next-cache-tags']` plus `ctx.tags`. `FETCH` tags come from `ctx.tags`.                                                                                                                                                                              |
 | **Buffer / Map serialization**    | `rscData` (`Buffer`) and `segmentData` (`Map`) require custom JSON encoding — use the built-in `jsonCacheValueSerializer` or wrap it. Plain `JSON.stringify` causes `segmentData.get is not a function` on RSC navigation.                                                                                   |
 | **`updateTags(tags, durations)`** | Persists Next.js tag-manifest fields in Redis (`stale` / `expired`). No `durations` or `{ expire: 0 }` hard-expires (`expired = now`). `expire > 0` (including `'max'` ~1 year) is the SWR window: `stale = now`, `expired = now + expire * 1000`, and `get()` returns `revalidate: -1` until that deadline. |
