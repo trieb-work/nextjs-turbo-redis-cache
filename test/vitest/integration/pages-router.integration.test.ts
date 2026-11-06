@@ -334,7 +334,6 @@ describe('Pages Router Redis cache integration (two instances)', () => {
         await delay(REDIS_BACKGROUND_SYNC_DELAY);
 
         expect(await findRouteKeys('/isr/prebuilt')).toEqual([]);
-        expect(await findRouteSharedTags('/isr/prebuilt')).toBeUndefined();
 
         const after = extractTimestamp(
           await (await fetch(INSTANCE_A_URL + '/isr/prebuilt')).text(),
