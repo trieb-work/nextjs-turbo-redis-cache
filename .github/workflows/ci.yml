@@ -59,6 +59,34 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npx semantic-release --dry-run
 
+  unit-redis-v4:
+    name: unit tests (redis 4.7.0)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --ignore-scripts
+
+      - name: Install redis 4.7.0
+        run: pnpm add -D redis@4.7.0 --ignore-scripts
+
+      - name: Install Next.js 16.3 fixture for contract unit tests
+        run: cd test/nextjs-test-projects/next-app-16-3-0 && pnpm install --ignore-scripts
+
+      - name: Run unit tests
+        run: pnpm test:unit
+
   integration:
     runs-on: ubuntu-latest
     needs: lint-and-unit

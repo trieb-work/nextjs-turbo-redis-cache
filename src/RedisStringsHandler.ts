@@ -1,16 +1,14 @@
-import { commandOptions, createClient, RedisClientOptions } from 'redis';
+import { createClient, RedisClientOptions } from 'redis';
 import { SyncedMap } from './SyncedMap';
 import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
 import { debug } from './utils/debug';
 import { CacheValueSerializer, jsonCacheValueSerializer } from './serializer';
 import { resolveCacheEntryTtlSeconds } from './utils/cacheTtl';
 import { shouldDeferRedisConnection } from './utils/redisConnection';
-import {
-  clusterSafeUnlink,
-  ClusterSafeUnlinkError,
-} from './utils/clusterSafeUnlink';
+import { AbortableGet, createAbortableGet } from './utils/abortableGet';
+import { RedisTimeoutError, untilDeadline } from './utils/deadline';
+import { clusterSafeUnlink } from './utils/clusterSafeUnlink';
 
-export type CommandOptions = ReturnType<typeof commandOptions>;
 export type Client = ReturnType<typeof createClient>;
 
 export type CacheEntry = {
@@ -114,12 +112,6 @@ export function redisErrorHandler<T extends Promise<unknown>>(
   }) as T;
 }
 
-function isAbortError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const err = error as { name?: unknown; code?: unknown };
-  return err.name === 'AbortError' || err.code === 'ABORT_ERR';
-}
-
 if (process.env.DEBUG_CACHE_HANDLER) {
   // This is a test to check if the event loop is lagging. If it lags, increase CPU of container
   setInterval(() => {
@@ -157,6 +149,14 @@ export type CreateRedisStringsHandlerOptions = {
    * @default 500
    */
   getTimeoutMs?: number;
+  /** Timeout in milliseconds for the Redis writes that a request waits for (set, revalidateTag).
+   *  If Redis does not confirm them within this time, `set` logs a warning and returns, so the
+   *  request is not blocked further. The write can still be applied later, or be lost.
+   *  `revalidateTag` logs an error and throws a `RedisTimeoutError` instead, because a lost
+   *  invalidation leaves stale entries on every instance.
+   * @default process.env.REDIS_WRITE_TIMEOUT_MS, else getTimeoutMs
+   */
+  writeTimeoutMs?: number;
   /** Number of entries to query in one batch during full sync of shared tags hash map
    * @default 250
    */
@@ -264,16 +264,15 @@ export default class RedisStringsHandler {
   private client: Client;
   private sharedTagsMap: SyncedMap<string[]>;
   private revalidatedTagsMap: SyncedMap<number>;
-  private inMemoryDeduplicationCache: SyncedMap<
-    Promise<ReturnType<Client['get']>>
-  >;
+  private inMemoryDeduplicationCache: SyncedMap<Promise<string | null>>;
   private getTimeoutMs: number;
-  private redisGet: Client['get'];
+  private writeTimeoutMs: number;
+  private redisGet: AbortableGet;
   private redisDeduplicationHandler: DeduplicatedRequestHandler<
-    Client['get'],
-    string | Buffer | null
+    AbortableGet,
+    string | null
   >;
-  private deduplicatedRedisGet: (key: string) => Client['get'];
+  private deduplicatedRedisGet: (key: string) => AbortableGet;
   private keyPrefix: string;
   private redisGetDeduplication: boolean;
   private inMemoryCachingTime: number;
@@ -298,6 +297,9 @@ export default class RedisStringsHandler {
     getTimeoutMs = process.env.REDIS_COMMAND_TIMEOUT_MS
       ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 500)
       : 500,
+    writeTimeoutMs = process.env.REDIS_WRITE_TIMEOUT_MS
+      ? Number.parseInt(process.env.REDIS_WRITE_TIMEOUT_MS) || getTimeoutMs
+      : getTimeoutMs,
     revalidateTagQuerySize = 250,
     avgResyncIntervalMs = 60 * 60 * 1_000,
     redisGetDeduplication = true,
@@ -326,6 +328,7 @@ export default class RedisStringsHandler {
         Math.floor(revalidateTagDeleteConcurrency),
       );
       this.getTimeoutMs = getTimeoutMs;
+      this.writeTimeoutMs = writeTimeoutMs;
       this.valueSerializer = valueSerializer;
       this.redisConnectionDeferred = shouldDeferRedisConnection();
 
@@ -434,7 +437,7 @@ export default class RedisStringsHandler {
         },
       });
 
-      const redisGet: Client['get'] = this.client.get.bind(this.client);
+      const redisGet = createAbortableGet(this.client);
       this.redisDeduplicationHandler = new DeduplicatedRequestHandler(
         redisGet,
         inMemoryCachingTime,
@@ -538,10 +541,10 @@ export default class RedisStringsHandler {
         : this.redisGet;
 
       const redisGetOperation = clientGet(
-        commandOptions({ signal: AbortSignal.timeout(this.getTimeoutMs) }),
         this.keyPrefix + key,
+        AbortSignal.timeout(this.getTimeoutMs),
       ).catch((error) => {
-        if (isAbortError(error)) {
+        if (error instanceof RedisTimeoutError) {
           return null;
         }
         throw error;
@@ -867,8 +870,20 @@ export default class RedisStringsHandler {
         ctx.tags as string[],
       );
 
-      await Promise.all([setOperation, setTagsOperation]);
+      await untilDeadline(
+        Promise.all([setOperation, setTagsOperation]),
+        AbortSignal.timeout(this.writeTimeoutMs),
+      );
     } catch (error) {
+      if (error instanceof RedisTimeoutError) {
+        console.warn(
+          'RedisStringsHandler.set() Redis did not confirm the write within',
+          this.writeTimeoutMs,
+          'ms. Returning without it, the entry may not be stored:',
+          this.keyPrefix + key,
+        );
+        return;
+      }
       console.error(
         'RedisStringsHandler.set() Error occurred while setting cache entry. The original error was:',
         error,
@@ -929,6 +944,10 @@ export default class RedisStringsHandler {
         return;
       }
 
+      // Start every write before waiting, so that one deadline bounds them
+      // all and a timeout does not skip the writes after it.
+      const writes: Promise<unknown>[] = [];
+
       // find all keys that are related to this tag
       const keysToDelete: Set<string> = new Set();
 
@@ -950,7 +969,7 @@ export default class RedisStringsHandler {
             'to',
             now,
           );
-          await this.revalidatedTagsMap.set(tag, now);
+          writes.push(this.revalidatedTagsMap.set(tag, now));
         }
       }
 
@@ -968,104 +987,97 @@ export default class RedisStringsHandler {
         'keys to delete',
       );
 
-      // exit early if no keys are related to this tag
-      if (keysToDelete.size === 0) {
-        return;
-      }
+      if (keysToDelete.size > 0) {
+        // prepare deletion of all keys in redis that are related to this tag.
+        // Always slot-grouped, including standalone Redis. Cluster mode rejects
+        // one UNLINK whose keys span hash slots (CROSSSLOT). See
+        // clusterSafeUnlink for the protocol formula and the single-node cost:
+        // one command per occupied slot, bounded by
+        // revalidateTagDeleteConcurrency.
+        const redisKeys = Array.from(keysToDelete);
+        const fullRedisKeys = redisKeys.map((key) => this.keyPrefix + key);
+        const redisKeyByFullRedisKey = new Map(
+          fullRedisKeys.map((fullRedisKey, index) => [
+            fullRedisKey,
+            redisKeys[index]!,
+          ]),
+        );
+        const clearLocalReadCache =
+          this.redisGetDeduplication && this.inMemoryCachingTime > 0;
 
-      // prepare deletion of all keys in redis that are related to this tag.
-      // Always slot-grouped, including standalone Redis. Cluster mode rejects
-      // one UNLINK whose keys span hash slots (CROSSSLOT). See
-      // clusterSafeUnlink for the protocol formula and the single-node cost:
-      // one command per occupied slot, bounded by
-      // revalidateTagDeleteConcurrency.
-      const redisKeys = Array.from(keysToDelete);
-      const fullRedisKeys = redisKeys.map((key) => this.keyPrefix + key);
-      const redisKeyByFullRedisKey = new Map(
-        fullRedisKeys.map((fullRedisKey, index) => [
-          fullRedisKey,
-          redisKeys[index]!,
-        ]),
-      );
-      const successfulRedisKeys = new Set<string>();
-
-      // Clear local read-through cache before deleting Redis values. With
-      // slot-grouped deletes, some Redis keys can be gone while other slots are
-      // still pending; clearing first prevents stale local reads in that window.
-      // This is a best-effort race-avoidance step: a failure here (e.g. the
-      // local cache's pub/sub notification could not be published) must not
-      // prevent the Redis UNLINKs below from running, since skipping the
-      // actual invalidation would be far worse than a brief stale-read window
-      // that resolves itself once the in-memory cache entry expires.
-      if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
-        try {
-          await this.deleteLocalReadCacheKeys(redisKeys);
-        } catch (err) {
-          console.error(
-            'RedisStringsHandler.revalidateTag() failed to clear local read-through cache before deletion. Continuing with Redis deletion regardless. Error was:',
-            err,
-          );
-        }
-      }
-
-      const deleteKeysOperation = redisErrorHandler(
-        'RedisStringsHandler.revalidateTag(), operation: cluster-safe unlink ' +
-          this.keyPrefix +
-          ' ' +
-          fullRedisKeys.length +
-          ' key(s)',
-        clusterSafeUnlink(this.client, fullRedisKeys, {
-          concurrency: this.revalidateTagDeleteConcurrency,
-          onGroupSuccess: async (deletedFullRedisKeys) => {
-            if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
-              const deletedRedisKeys = deletedFullRedisKeys.flatMap(
-                (fullRedisKey) => {
-                  const redisKey = redisKeyByFullRedisKey.get(fullRedisKey);
-                  return redisKey ? [redisKey] : [];
-                },
+        // Clear local read-through cache before deleting Redis values. With
+        // slot-grouped deletes, some Redis keys can be gone while other slots are
+        // still pending; clearing first prevents stale local reads in that window.
+        // This is a best-effort race-avoidance step: a failure here (e.g. the
+        // local cache's pub/sub notification could not be published) must not
+        // prevent the Redis UNLINKs below from running, since skipping the
+        // actual invalidation would be far worse than a brief stale-read window
+        // that resolves itself once the in-memory cache entry expires.
+        // The clearing publishes through Redis too, so it is part of the same
+        // write and the write deadline below bounds it.
+        const clearBeforeDelete = clearLocalReadCache
+          ? this.deleteLocalReadCacheKeys(redisKeys).catch((err) => {
+              console.error(
+                'RedisStringsHandler.revalidateTag() failed to clear local read-through cache before deletion. Continuing with Redis deletion regardless. Error was:',
+                err,
               );
-              await this.deleteLocalReadCacheKeys(deletedRedisKeys);
-            }
-          },
-        }).then((result) => {
-          for (const fullRedisKey of result.successfulKeys) {
-            const redisKey = redisKeyByFullRedisKey.get(fullRedisKey);
-            if (redisKey) {
-              successfulRedisKeys.add(redisKey);
-            }
-          }
-          return result;
-        }),
-      ).catch((error) => {
-        if (error instanceof ClusterSafeUnlinkError) {
-          for (const fullRedisKey of error.result.successfulKeys) {
-            const redisKey = redisKeyByFullRedisKey.get(fullRedisKey);
-            if (redisKey) {
-              successfulRedisKeys.add(redisKey);
-            }
-          }
-        }
-        throw error;
-      });
+            })
+          : Promise.resolve();
 
-      try {
-        await deleteKeysOperation;
-      } finally {
-        if (successfulRedisKeys.size > 0) {
-          // Do not delete sharedTagsMap entries here. A fresh set() can write a
-          // replacement value and tag association immediately after UNLINK; an
-          // unconditional HDEL would remove that fresh association. Stale tag
-          // metadata is harmless for correctness and is removed by SyncedMap's
-          // periodic orphan cleanup, which compares the tag hash against live
-          // Redis keys.
-        }
+        writes.push(
+          clearBeforeDelete.then(() =>
+            redisErrorHandler(
+              'RedisStringsHandler.revalidateTag(), operation: cluster-safe unlink ' +
+                this.keyPrefix +
+                ' ' +
+                fullRedisKeys.length +
+                ' key(s)',
+              clusterSafeUnlink(this.client, fullRedisKeys, {
+                concurrency: this.revalidateTagDeleteConcurrency,
+                onGroupSuccess: async (deletedFullRedisKeys) => {
+                  if (clearLocalReadCache) {
+                    await this.deleteLocalReadCacheKeys(
+                      deletedFullRedisKeys.flatMap((fullRedisKey) => {
+                        const redisKey =
+                          redisKeyByFullRedisKey.get(fullRedisKey);
+                        return redisKey ? [redisKey] : [];
+                      }),
+                    );
+                  }
+                },
+              }),
+            ),
+          ),
+        );
+
+        // Do not delete sharedTagsMap entries here. A fresh set() can write a
+        // replacement value and tag association immediately after UNLINK; an
+        // unconditional HDEL would remove that fresh association. Stale tag
+        // metadata is harmless for correctness and is removed by SyncedMap's
+        // periodic orphan cleanup, which compares the tag hash against live
+        // Redis keys.
       }
 
+      await untilDeadline(
+        Promise.all(writes),
+        AbortSignal.timeout(this.writeTimeoutMs),
+      );
       debug(
         'red',
         'RedisStringsHandler.revalidateTag() finished delete operations',
       );
     } catch (error) {
+      // Unlike set(), a lost invalidation leaves stale entries on every
+      // instance, so the caller must see it fail.
+      if (error instanceof RedisTimeoutError) {
+        console.error(
+          'RedisStringsHandler.revalidateTag() Redis did not confirm the writes within',
+          this.writeTimeoutMs,
+          'ms. Other instances may serve stale entries for tags:',
+          tagOrTags,
+        );
+        throw error;
+      }
       console.error(
         'RedisStringsHandler.revalidateTag() Error occurred while revalidating tags. The original error was:',
         error,
