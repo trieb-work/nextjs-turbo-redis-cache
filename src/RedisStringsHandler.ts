@@ -953,10 +953,11 @@ export default class RedisStringsHandler {
       }
 
       // prepare deletion of all keys in redis that are related to this tag.
-      // Redis cluster mode rejects one UNLINK with keys from different hash
-      // slots (CROSSSLOT). Group by slot so each command stays cluster-safe,
-      // and cap parallelism so high-cardinality tags do not create an
-      // unbounded command burst.
+      // Always slot-grouped, including standalone Redis. Cluster mode rejects
+      // one UNLINK whose keys span hash slots (CROSSSLOT). See
+      // clusterSafeUnlink for the protocol formula and the single-node cost:
+      // one command per occupied slot, bounded by
+      // revalidateTagDeleteConcurrency.
       const redisKeys = Array.from(keysToDelete);
       const fullRedisKeys = redisKeys.map((key) => this.keyPrefix + key);
       const redisKeyByFullRedisKey = new Map(

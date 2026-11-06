@@ -1,5 +1,53 @@
+/**
+ * Delete keys with one UNLINK per Redis Cluster hash slot.
+ *
+ * Cluster mode rejects a multi-key command whose keys are not in the same
+ * slot, with `CROSSSLOT`. That check happens even when every slot currently
+ * lives on the node that received the command. A cache tag does not imply a
+ * hash slot, so the old single UNLINK of every key for a tag failed and left
+ * the values in place (issue #101).
+ *
+ * The slot comes from the cluster protocol, unchanged since Redis 3.0 and
+ * copied by Valkey:
+ *
+ *   HASH_SLOT = CRC16(key) mod 16384
+ *
+ * CRC16 is the XMODEM variant: polynomial 0x1021, initial value 0. The table
+ * below is that algorithm, built once at load, matching Appendix A of the
+ * Redis cluster specification. `CLUSTER KEYSLOT` on a cluster node returns
+ * the same number. Hash tags are part of the same rule: if the key contains
+ * `{...}` with at least one character between the braces, only that text is
+ * hashed. `{user}.a` and `{user}.b` therefore share a slot.
+ *
+ * https://redis.io/docs/latest/operate/oss_and_stack/reference/cluster-spec/
+ * https://valkey.io/topics/cluster-spec/#key-distribution-model
+ *
+ * `redis` 4.7 does not export this function. `@redis/client` calculates it
+ * with the `cluster-key-slot` package and keeps that package private, so the
+ * formula is inlined instead of imported from a path pnpm does not allow.
+ * The CRC itself will not change quietly: a different formula would move
+ * every existing key to another slot and break every running cluster. Hash-tag
+ * edge cases are the part that a future client release might correct, and
+ * those corrections have to be applied here by hand.
+ *
+ * `revalidateTag()` always uses this function. There is no cluster-mode
+ * switch. Standalone Redis accepts one UNLINK across slots, so grouping is
+ * not required there and cannot drop a key: every input key is sent in
+ * exactly one group. What does change on a single node is the command shape.
+ * One tag becomes one UNLINK per occupied slot, at most `concurrency` of
+ * those commands at a time. A failure deletes the groups that succeeded and
+ * leaves the rest, instead of one command covering every key.
+ *
+ * This does not speak the cluster bus. The handler uses the standalone
+ * client. Same-slot UNLINK avoids CROSSSLOT on the node it is connected to,
+ * including a cluster node that owns all 16,384 slots (the #101 setup). A
+ * slot owned by another node comes back as MOVED, and that group is reported
+ * as a failure. Redirects are not followed.
+ */
+
 const REDIS_CLUSTER_SLOT_COUNT = 16_384;
 
+// XMODEM CRC16 table from Appendix A of the Redis cluster specification.
 const CRC16_TABLE = (() => {
   const table: number[] = [];
   for (let i = 0; i < 256; i++) {
@@ -46,6 +94,8 @@ export class ClusterSafeUnlinkError extends Error {
   }
 }
 
+// Hash-tag exception from the same specification: hash only the first
+// non-empty `{...}` segment. Anything else hashes as the whole key.
 function hashSlotKey(key: string): string {
   const open = key.indexOf('{');
   if (open === -1) {
