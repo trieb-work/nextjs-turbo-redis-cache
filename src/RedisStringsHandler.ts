@@ -7,6 +7,7 @@ import { resolveCacheEntryTtlSeconds } from './utils/cacheTtl';
 import { shouldDeferRedisConnection } from './utils/redisConnection';
 import { AbortableGet, createAbortableGet } from './utils/abortableGet';
 import { RedisTimeoutError, untilDeadline } from './utils/deadline';
+import { clusterSafeUnlink } from './utils/clusterSafeUnlink';
 
 export type Client = ReturnType<typeof createClient>;
 
@@ -188,6 +189,12 @@ export type CreateRedisStringsHandlerOptions = {
    * @default 0 (0 means no error threshold)
    */
   killContainerOnErrorThreshold?: number;
+  /** Maximum number of Redis hash slot groups deleted concurrently during tag invalidation.
+   *  Keeps Valkey/Redis cluster invalidation cluster-safe without creating unbounded
+   *  command bursts for high-cardinality tags.
+   * @default 16
+   */
+  revalidateTagDeleteConcurrency?: number;
   /** Additional Redis client socket options
    * @example { tls: true, rejectUnauthorized: false }
    */
@@ -218,6 +225,13 @@ export type CreateRedisStringsHandlerOptions = {
    */
   valueSerializer?: CacheValueSerializer;
 };
+
+// One SyncedMap.delete() publishes a single sync message for every key it
+// receives. Clearing the local read-through cache one key at a time therefore
+// turns a high-cardinality tag into one Redis publish per key, ahead of the
+// bounded UNLINK workers. Batch the keys, and cap each message so a very
+// large tag cannot produce an unbounded pub/sub payload either.
+const LOCAL_CACHE_DELETE_BATCH_SIZE = 500;
 
 // Identifier prefix used by Next.js to mark automatically generated cache tags
 // These tags are created internally by Next.js for route-based invalidation
@@ -267,6 +281,7 @@ export default class RedisStringsHandler {
   private killContainerOnErrorThreshold: number;
   private valueSerializer: CacheValueSerializer;
   private redisConnectionDeferred: boolean;
+  private revalidateTagDeleteConcurrency: number;
 
   constructor({
     redisUrl = process.env.REDIS_URL
@@ -296,6 +311,7 @@ export default class RedisStringsHandler {
       .KILL_CONTAINER_ON_ERROR_THRESHOLD
       ? (Number.parseInt(process.env.KILL_CONTAINER_ON_ERROR_THRESHOLD) ?? 0)
       : 0,
+    revalidateTagDeleteConcurrency = 16,
     socketOptions,
     clientOptions,
     valueSerializer = jsonCacheValueSerializer,
@@ -307,6 +323,10 @@ export default class RedisStringsHandler {
       this.defaultStaleAge = defaultStaleAge;
       this.estimateExpireAge = estimateExpireAge;
       this.killContainerOnErrorThreshold = killContainerOnErrorThreshold;
+      this.revalidateTagDeleteConcurrency = Math.max(
+        1,
+        Math.floor(revalidateTagDeleteConcurrency),
+      );
       this.getTimeoutMs = getTimeoutMs;
       this.writeTimeoutMs = writeTimeoutMs;
       this.valueSerializer = valueSerializer;
@@ -608,22 +628,22 @@ export default class RedisStringsHandler {
         );
       }
 
-      if (ctx.kind === 'FETCH') {
-        const combinedTags = new Set([
-          ...(ctx?.softTags || []),
-          ...(ctx?.tags || []),
-        ]);
+      const tagsToCheckForRevalidation =
+        ctx.kind === 'FETCH'
+          ? new Set([
+              ...(cacheEntry.tags || []),
+              ...(ctx?.softTags || []),
+              ...(ctx?.tags || []),
+            ])
+          : new Set(cacheEntry.tags || []);
 
-        if (combinedTags.size === 0) {
-          return cacheEntry;
-        }
-
+      if (tagsToCheckForRevalidation.size > 0) {
         // INFO: implicit tags (revalidate of nested fetch in api route/page on revalidatePath call of the page/api route). See revalidateTag() for more information
         //
-        // This code checks if any of the cache tags associated with this entry (normally the internal tag of the parent page/api route containing the fetch request)
+        // This code checks if any of the cache tags associated with this entry
         // have been revalidated since the entry was last modified. If any tag was revalidated more recently than the entry's
         // lastModified timestamp, then the cached content is considered stale (therefore return null) and should be removed.
-        for (const tag of combinedTags) {
+        for (const tag of tagsToCheckForRevalidation) {
           // Get the last revalidation time for this tag from our revalidatedTagsMap
           const revalidationTime = this.revalidatedTagsMap.get(tag);
 
@@ -646,9 +666,18 @@ export default class RedisStringsHandler {
                 );
               })
               .finally(async () => {
-                // Clean up our tag tracking maps after the Redis key is removed
-                await this.sharedTagsMap.delete(key);
-                await this.revalidatedTagsMap.delete(tag);
+                // Only FETCH reads clear the shared revalidation marker. A page/route
+                // entry and one or more nested FETCH entries can all be tagged with
+                // the same implicit tag; if a page/route read deleted the marker
+                // here, a not-yet-read FETCH entry sharing that tag would lose the
+                // only signal it has that it is stale (its own Redis key can still
+                // exist when the direct sharedTagsMap-based delete in
+                // revalidateTag() raced with this entry's set()). Only FETCH reads
+                // are the intended (and only) consumer of this marker, so only they
+                // retire it once observed.
+                if (ctx.kind === 'FETCH') {
+                  await this.revalidatedTagsMap.delete(tag);
+                }
               });
 
             debug(
@@ -814,20 +843,24 @@ export default class RedisStringsHandler {
       );
 
       // Setting the tags for the cache entry in the sharedTagsMap (locally stored hashmap synced via redis)
+      // An untagged write intentionally leaves an existing association in
+      // place. The local map can lag behind another instance's tagged write,
+      // so deleting here could remove that instance's fresh association and
+      // make its value impossible to invalidate. A stale association only
+      // costs one extra cache miss on a later revalidateTag().
+      //
+      // A tagged write always stores its association, even when the local map
+      // already shows the same tags. That map can lag behind another instance
+      // that stored different tags for this key. Skipping the write would leave
+      // the shared hash pointing at those other tags, and revalidateTag() would
+      // never find this value. A later full sync reads the same hash, so it
+      // cannot repair the miss.
       let setTagsOperation: Promise<void> | undefined;
       if (ctx.tags && ctx.tags.length > 0) {
-        const currentTags = this.sharedTagsMap.get(key);
-        const currentIsSameAsNew =
-          currentTags?.length === ctx.tags.length &&
-          currentTags.every((v) => ctx.tags!.includes(v)) &&
-          ctx.tags.every((v) => currentTags.includes(v));
-
-        if (!currentIsSameAsNew) {
-          setTagsOperation = this.sharedTagsMap.set(
-            key,
-            structuredClone(ctx.tags) as string[],
-          );
-        }
+        setTagsOperation = this.sharedTagsMap.set(
+          key,
+          structuredClone(ctx.tags) as string[],
+        );
       }
 
       debug(
@@ -872,6 +905,27 @@ export default class RedisStringsHandler {
         }, 500);
       }
       throw error;
+    }
+  }
+
+  private async deleteLocalReadCacheKeys(keys: string[]): Promise<void> {
+    const errors: unknown[] = [];
+    for (let i = 0; i < keys.length; i += LOCAL_CACHE_DELETE_BATCH_SIZE) {
+      try {
+        await this.inMemoryDeduplicationCache.delete(
+          keys.slice(i, i + LOCAL_CACHE_DELETE_BATCH_SIZE),
+        );
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    if (errors.length > 1) {
+      throw new Error(
+        `Failed to clear ${errors.length} local read-cache batches`,
+      );
     }
   }
 
@@ -934,28 +988,74 @@ export default class RedisStringsHandler {
       );
 
       if (keysToDelete.size > 0) {
-        // prepare deletion of all keys in redis that are related to this tag
+        // prepare deletion of all keys in redis that are related to this tag.
+        // Always slot-grouped, including standalone Redis. Cluster mode rejects
+        // one UNLINK whose keys span hash slots (CROSSSLOT). See
+        // clusterSafeUnlink for the protocol formula and the single-node cost:
+        // one command per occupied slot, bounded by
+        // revalidateTagDeleteConcurrency.
         const redisKeys = Array.from(keysToDelete);
         const fullRedisKeys = redisKeys.map((key) => this.keyPrefix + key);
+        const redisKeyByFullRedisKey = new Map(
+          fullRedisKeys.map((fullRedisKey, index) => [
+            fullRedisKey,
+            redisKeys[index]!,
+          ]),
+        );
+        const clearLocalReadCache =
+          this.redisGetDeduplication && this.inMemoryCachingTime > 0;
+
+        // Clear local read-through cache before deleting Redis values. With
+        // slot-grouped deletes, some Redis keys can be gone while other slots are
+        // still pending; clearing first prevents stale local reads in that window.
+        // This is a best-effort race-avoidance step: a failure here (e.g. the
+        // local cache's pub/sub notification could not be published) must not
+        // prevent the Redis UNLINKs below from running, since skipping the
+        // actual invalidation would be far worse than a brief stale-read window
+        // that resolves itself once the in-memory cache entry expires.
+        // The clearing publishes through Redis too, so it is part of the same
+        // write and the write deadline below bounds it.
+        const clearBeforeDelete = clearLocalReadCache
+          ? this.deleteLocalReadCacheKeys(redisKeys).catch((err) => {
+              console.error(
+                'RedisStringsHandler.revalidateTag() failed to clear local read-through cache before deletion. Continuing with Redis deletion regardless. Error was:',
+                err,
+              );
+            })
+          : Promise.resolve();
+
         writes.push(
-          redisErrorHandler(
-            'RedisStringsHandler.revalidateTag(), operation: unlink ' +
-              this.keyPrefix +
-              ' ' +
-              fullRedisKeys,
-            this.client.unlink(fullRedisKeys),
+          clearBeforeDelete.then(() =>
+            redisErrorHandler(
+              'RedisStringsHandler.revalidateTag(), operation: cluster-safe unlink ' +
+                this.keyPrefix +
+                ' ' +
+                fullRedisKeys.length +
+                ' key(s)',
+              clusterSafeUnlink(this.client, fullRedisKeys, {
+                concurrency: this.revalidateTagDeleteConcurrency,
+                onGroupSuccess: async (deletedFullRedisKeys) => {
+                  if (clearLocalReadCache) {
+                    await this.deleteLocalReadCacheKeys(
+                      deletedFullRedisKeys.flatMap((fullRedisKey) => {
+                        const redisKey =
+                          redisKeyByFullRedisKey.get(fullRedisKey);
+                        return redisKey ? [redisKey] : [];
+                      }),
+                    );
+                  }
+                },
+              }),
+            ),
           ),
         );
 
-        // also delete entries from in-memory deduplication cache if they get revalidated
-        if (this.redisGetDeduplication && this.inMemoryCachingTime > 0) {
-          for (const key of keysToDelete) {
-            this.inMemoryDeduplicationCache.delete(key);
-          }
-        }
-
-        // prepare deletion of entries from shared tags map if they get revalidated so that the map will not grow indefinitely
-        writes.push(this.sharedTagsMap.delete(redisKeys));
+        // Do not delete sharedTagsMap entries here. A fresh set() can write a
+        // replacement value and tag association immediately after UNLINK; an
+        // unconditional HDEL would remove that fresh association. Stale tag
+        // metadata is harmless for correctness and is removed by SyncedMap's
+        // periodic orphan cleanup, which compares the tag hash against live
+        // Redis keys.
       }
 
       await untilDeadline(
