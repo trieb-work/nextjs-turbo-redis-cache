@@ -54,9 +54,10 @@ vi.mock('redis', () => {
       hoisted.store.set(key, value);
       return 'OK';
     }),
-    unlink: vi.fn(async (keys: string[]) => {
-      for (const key of keys) hoisted.store.delete(key);
-      return keys.length;
+    unlink: vi.fn(async (keys: string | string[]) => {
+      const keyList = [keys].flat();
+      for (const key of keyList) hoisted.store.delete(key);
+      return keyList.length;
     }),
     sendCommand: vi.fn(async (args: string[]) => {
       const [command] = args;
