@@ -22,6 +22,8 @@ For a deep dive into the internal architecture (shared hash maps, SyncedMap, req
 This package is compatible with Next.js 15.0.3 and above, with the App Router, the Pages Router, or both together in a hybrid app. It is not compatible with Next.js 14.x. or 15-canary.
 Redis Server need to have Redis Server Version 2.8.0 or higher and have to be configured with `notify-keyspace-events` to be able to use the key-space notifications feature.
 
+The package supports the `redis` client package (node-redis) in version 4.7.0, 5.x and 6.x. Install the version you want next to this package. node-redis 6 needs Node.js 20 or higher.
+
 Pages Router support covers ISR pages (`getStaticProps` + `revalidate`, `getStaticPaths` with `fallback`), `notFound: true` and `redirect:` results, and on-demand revalidation via `res.revalidate(path)` — including across multiple server instances sharing one Redis (see the two-instance integration test). App Router and Pages Router entries are handled side by side by the same handler instance, so hybrid apps that use both routers work without any extra configuration.
 
 Tested versions are:
@@ -34,8 +36,8 @@ Tested versions are:
 - Nextjs 16.2.6 + redis client 4.7.0 (cacheComponents: false)
 - Nextjs 16.2.6 + redis client 4.7.0 (cacheComponents: true)
 - Nextjs 16.2.6 + redis client 4.7.0 (Pages Router)
-- Nextjs 16.3.0 + redis client 4.7.0 (cacheComponents: false)
-- Nextjs 16.3.0 + redis client 4.7.0 (cacheComponents: true)
+- Nextjs 16.3.0 + redis client 6.3.0 (cacheComponents: false)
+- Nextjs 16.3.0 + redis client 6.3.0 (cacheComponents: true)
 - Nextjs 16.3.0 + redis client 4.7.0 (Pages Router)
 
 _Cache Components_ (Next.js 16+) are fully supported. Automated test coverage includes `'use cache'`, `cacheTag`, and `cacheLife` flows in the Cache Components integration suite.
@@ -75,6 +77,8 @@ There exists also the SKIP_KEYSPACE_CONFIG_CHECK environment variable to skip th
 KILL_CONTAINER_ON_ERROR_THRESHOLD: Optional environment variable that defines how many Redis client errors should occur before the process exits with code 1. This is useful in container environments like Kubernetes where you want the container to restart if Redis connectivity issues persist. Set to 0 (default) to disable this feature. For example, setting KILL_CONTAINER_ON_ERROR_THRESHOLD=10 will exit the process after 10 Redis client errors, allowing the container orchestrator to restart the container.
 
 REDIS_COMMAND_TIMEOUT_MS: Optional environment variable that sets the timeout in milliseconds for Redis get command. If not set, defaults to 500ms. The value is parsed as an integer, and if parsing fails, falls back to the 500ms default.
+
+REDIS_WRITE_TIMEOUT_MS: Optional environment variable that sets the timeout in milliseconds for the Redis writes that a request waits for (`set`, `revalidateTag`, and `updateTags` for Cache Components). If Redis does not confirm the writes within this time, `set` and `updateTags` log a warning and return, so that a Redis that stops answering does not block the request. `revalidateTag` logs an error and throws, because a lost invalidation leaves stale entries on every instance. The write can still be applied later, or be lost. If not set, 0 or not a number, the get timeout is used.
 
 ### Option A: minimum implementation with default options
 
@@ -156,6 +160,7 @@ A working example of above can be found in the `test/nextjs-test-projects/next-a
 | keyPrefix                     | Prefix added to all Redis keys                                                                                                                                                                                                                                                         | `RedisStringsHandler` default: `process.env.KEY_PREFIX \|\| process.env.VERCEL_URL \|\| 'UNDEFINED_URL_'`<br> Next handlers resolve: `options.keyPrefix \|\| KEY_PREFIX \|\| VERCEL_URL \|\| BUILD_ID \|\| 'UNDEFINED_URL_'` |
 | sharedTagsKey                 | Key used to store shared tags hash map in Redis                                                                                                                                                                                                                                        | `'__sharedTags__'`                                                                                                                                                                                                           |
 | getTimeoutMs                  | Timeout in milliseconds for time critical Redis operations. If Redis get is not fulfilled within this time, returns null to avoid blocking site rendering.                                                                                                                             | `process.env.REDIS_COMMAND_TIMEOUT_MS ? (Number.parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS) ?? 500) : 500`                                                                                                                |
+| writeTimeoutMs                | Timeout in milliseconds for the Redis writes that a request waits for. If Redis does not confirm a write within this time, `set` logs a warning and returns instead of blocking the request; `revalidateTag` throws.                                                                   | `process.env.REDIS_WRITE_TIMEOUT_MS ? (Number.parseInt(process.env.REDIS_WRITE_TIMEOUT_MS) \|\| getTimeoutMs) : getTimeoutMs`                                                                                                |
 | revalidateTagQuerySize        | Number of entries to query in one batch during full sync of shared tags hash map                                                                                                                                                                                                       | `250`                                                                                                                                                                                                                        |
 | avgResyncIntervalMs           | Average interval in milliseconds between tag map full re-syncs                                                                                                                                                                                                                         | `3600000` (1 hour)                                                                                                                                                                                                           |
 | redisGetDeduplication         | Enable deduplication of Redis get requests via internal in-memory cache.                                                                                                                                                                                                               | `true`                                                                                                                                                                                                                       |
@@ -556,6 +561,7 @@ Optional:
 
 - `VERCEL_URL`: used as a key prefix for multi-tenant isolation (also useful in tests). If unset, a default prefix is used.
 - `REDIS_COMMAND_TIMEOUT_MS`: timeout (ms) for Redis commands used by the handler.
+- `REDIS_WRITE_TIMEOUT_MS`: timeout (ms) for the Redis writes that a request waits for. Defaults to the get timeout.
 
 ### Official caching semantics (Vercel / Next.js self-hosting docs)
 
