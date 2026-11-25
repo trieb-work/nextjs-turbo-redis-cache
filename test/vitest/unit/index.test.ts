@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import type { CreateRedisStringsHandlerOptions } from '../../../src/index';
 import RedisStringsHandler from '../../../src/RedisStringsHandler';
+import { SyncedMap } from '../../../src/SyncedMap';
 
 vi.mock('redis', () => {
   const createClient = vi.fn(() => {
@@ -71,6 +72,8 @@ vi.mock('../../src/SyncedMap', () => {
 describe('RedisStringsHandler', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    // Many tests replace the tag maps with plain fakes.
+    vi.spyOn(SyncedMap, 'waitUntilAllReady').mockResolvedValue(undefined);
   });
 
   afterEach(() => {
