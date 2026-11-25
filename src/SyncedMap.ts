@@ -32,9 +32,19 @@ export type SyncMessage<V> = {
 };
 
 const SYNC_CHANNEL_SUFFIX = ':sync-channel:';
+const READY_TIMEOUT_MS = 30_000;
+
+type ReadyWaiter = {
+  ready: () => void;
+  fail: (error: Error) => void;
+};
+
+const retryDelayMs = (attempt: number) =>
+  Math.min(500 * Math.pow(2, Math.min(attempt, 5)), 10_000);
+
 export class SyncedMap<V> {
   private client: Client;
-  private subscriberClient: Client;
+  private subscriberClient?: Client;
   private map: Map<string, V>;
   private keyPrefix: string;
   private syncChannel: string;
@@ -45,9 +55,12 @@ export class SyncedMap<V> {
   private resyncIntervalMs?: number;
   private customizedSync?: CustomizedSync;
 
-  private setupLock: Promise<void>;
-  private setupLockResolve!: () => void;
-  private isReconnecting = false;
+  private isSetUp = false;
+  private lastSetupError: unknown;
+  private readyWaiters = new Set<ReadyWaiter>();
+  private subscriberSetup?: Promise<void>;
+  private sync?: Promise<void>;
+  private resyncNeeded = false;
 
   constructor(options: SyncedMapOptions) {
     this.client = options.client;
@@ -61,31 +74,84 @@ export class SyncedMap<V> {
     this.customizedSync = options.customizedSync;
 
     this.map = new Map<string, V>();
-    this.subscriberClient = this.client.duplicate();
-    this.setupLock = new Promise<void>((resolve) => {
-      this.setupLockResolve = resolve;
-    });
 
-    this.setup().catch((error) => {
-      console.error('Failed to setup SyncedMap:', error);
-      throw error;
-    });
+    void this.setup();
   }
 
   private async setup() {
     if (shouldDeferRedisConnection()) {
-      this.setupLockResolve();
+      this.markReady();
       return;
     }
-
-    let setupPromises: Promise<void>[] = [];
     if (!this.customizedSync?.withoutRedisHashmap) {
-      setupPromises.push(this.initialSync());
       this.setupPeriodicResync();
     }
-    setupPromises.push(this.setupPubSub());
-    await Promise.all(setupPromises);
-    this.setupLockResolve();
+    await this.subscribeAndSync();
+  }
+
+  /**
+   * Sync messages published while no subscriber listens are lost. Subscribe
+   * first, then load the Redis hash, so the map misses no entry. Run again if
+   * the subscriber fails during the load.
+   */
+  private subscribeAndSync(): Promise<void> {
+    this.sync ??= (async () => {
+      do {
+        this.resyncNeeded = false;
+        await this.reconnectSubscriber();
+        if (!this.customizedSync?.withoutRedisHashmap) {
+          await this.retryUntilSuccess('Initial sync', () =>
+            this.initialSync(),
+          );
+        }
+      } while (this.resyncNeeded);
+      this.markReady();
+    })().finally(() => {
+      this.sync = undefined;
+    });
+    return this.sync;
+  }
+
+  private markReady() {
+    this.lastSetupError = undefined;
+    this.isSetUp = true;
+    for (const waiter of this.readyWaiters) waiter.ready();
+  }
+
+  /**
+   * Until the subscriber is back and the map is reloaded, the map can miss
+   * entries, so revalidateTag() could skip keys. Report not ready meanwhile.
+   */
+  private onSubscriberError(error: unknown) {
+    console.error('Subscriber client error:', error);
+    this.isSetUp = false;
+    this.recordSetupError(error);
+    // A subscriber setup in flight already creates a new client.
+    if (!this.subscriberSetup) this.resyncNeeded = true;
+    void this.subscribeAndSync();
+  }
+
+  /**
+   * A pod can start while Redis is down, or lose the socket during the first
+   * HSCAN. One failed attempt must not leave the map unready for good.
+   */
+  private async retryUntilSuccess(
+    label: string,
+    operation: () => Promise<void>,
+  ): Promise<void> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        this.recordSetupError(error);
+        const delay = retryDelayMs(attempt);
+        console.error(
+          `${label} attempt ${attempt + 1} failed, retrying in ${delay}ms`,
+          error,
+        );
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
   }
 
   private async initialSync() {
@@ -182,7 +248,7 @@ export class SyncedMap<V> {
     }
   }
 
-  private async setupPubSub() {
+  private async setupPubSub(subscriber: Client) {
     const syncHandler = async (message: string) => {
       const syncMessage: SyncMessage<V> = JSON.parse(message);
       if (syncMessage.type === 'insert') {
@@ -234,38 +300,16 @@ export class SyncedMap<V> {
       // a reconnection. Previously this was attached after the subscribe()
       // calls, which meant if subscribe threw during an outage the handler
       // was never attached and the subscriber was permanently dead.
-      this.subscriberClient.on('error', async (err) => {
-        console.error('Subscriber client error:', err);
-        await this.reconnectSubscriber();
-      });
+      subscriber.on('error', (err) => this.onSubscriberError(err));
 
-      const connectIfNeeded = async () => {
-        // Avoid overlapping connect() calls which can lead to
-        // "Socket already opened" errors when a connect is already in progress
-        // or the socket is still open.
-        if (!this.subscriberClient.isOpen && !this.subscriberClient.isReady) {
-          await this.subscriberClient.connect();
-        }
-      };
-
-      await connectIfNeeded().catch(async (error) => {
-        console.error('Failed to connect subscriber client. Retrying...');
-        try {
-          await connectIfNeeded();
-        } catch (err) {
-          console.error('Failed to connect subscriber client.', err);
-          throw err;
-        }
-        // keep original error in logs for context
-        void error;
-      });
+      await subscriber.connect();
 
       // Check if keyspace event configuration is set correctly
       if (
         (process.env.SKIP_KEYSPACE_CONFIG_CHECK || '').toUpperCase() !== 'TRUE'
       ) {
         const keyspaceEventConfig = (
-          await this.subscriberClient.configGet('notify-keyspace-events')
+          await subscriber.configGet('notify-keyspace-events')
         )?.['notify-keyspace-events'];
         if (!keyspaceEventConfig.includes('E')) {
           throw new Error(
@@ -298,13 +342,13 @@ export class SyncedMap<V> {
         // With custom channel we can delete multiple entries in one message. If we would listen to unlink / del we
         // could get thousands of messages for one revalidateTag (For example revalidateTag("algolia") would send an enormous amount of network packages)
         // Also we can send the value in the message for insert
-        this.subscriberClient.subscribe(this.syncChannel, syncHandler),
+        subscriber.subscribe(this.syncChannel, syncHandler),
         // Subscribe to Redis keyevent notifications for evicted and expired keys
-        this.subscriberClient.subscribe(
+        subscriber.subscribe(
           `__keyevent@${this.database}__:evicted`,
           keyEventHandler,
         ),
-        this.subscriberClient.subscribe(
+        subscriber.subscribe(
           `__keyevent@${this.database}__:expired`,
           keyEventHandler,
         ),
@@ -316,56 +360,97 @@ export class SyncedMap<V> {
   }
 
   /**
-   * Reconnect the subscriber client with exponential backoff.
-   * Guarded by `isReconnecting` to prevent concurrent reconnection
-   * attempts when multiple error events fire during an outage.
-   * Retries indefinitely (with capped delay) so the subscriber
-   * eventually recovers once Redis is available again.
+   * Replace the subscriber client and subscribe again, with exponential
+   * backoff until it works. Concurrent callers (setup and every error event
+   * during an outage) share one attempt loop.
    */
-  private async reconnectSubscriber(): Promise<void> {
-    if (this.isReconnecting) return;
-    this.isReconnecting = true;
-
-    try {
-      let attempt = 0;
-      while (true) {
+  private reconnectSubscriber(): Promise<void> {
+    this.subscriberSetup ??= this.retryUntilSuccess(
+      'Subscriber setup',
+      async () => {
+        // Forcibly tear down the old subscriber so its internal reconnect
+        // loop cannot come back to life once Redis recovers. `quit()` waits
+        // for the server and can silently fail during an outage, leaving a
+        // zombie client that still fires our error handler. Remove that
+        // handler first so a delayed error from the old socket cannot tear
+        // down the replacement subscriber we are about to create.
         try {
-          // Forcibly tear down the old subscriber so its internal reconnect
-          // loop cannot come back to life once Redis recovers. `quit()` waits
-          // for the server and can silently fail during an outage, leaving a
-          // zombie client that still fires our error handler. Remove that
-          // handler first so a delayed error from the old socket cannot tear
-          // down the replacement subscriber we are about to create.
-          try {
-            this.subscriberClient.removeAllListeners('error');
-            await this.subscriberClient.disconnect();
-          } catch {
-            // expected during outage
-          }
-          // Create a fresh subscriber client
-          this.subscriberClient = this.client.duplicate();
-          await this.setupPubSub();
-          return; // success
-        } catch (error) {
-          const delay = Math.min(
-            500 * Math.pow(2, Math.min(attempt, 5)),
-            10_000,
-          );
-          attempt++;
-          console.error(
-            `Subscriber reconnect attempt ${attempt} failed, retrying in ${delay}ms`,
-            error,
-          );
-          await new Promise((r) => setTimeout(r, delay));
+          this.subscriberClient?.removeAllListeners('error');
+          await this.subscriberClient?.disconnect();
+        } catch {
+          // expected during outage
         }
-      }
-    } finally {
-      this.isReconnecting = false;
-    }
+        const subscriber = this.client.duplicate();
+        this.subscriberClient = subscriber;
+        await this.setupPubSub(subscriber);
+      },
+    ).finally(() => {
+      this.subscriberSetup = undefined;
+    });
+    return this.subscriberSetup;
   }
 
-  public async waitUntilReady() {
-    await this.setupLock;
+  private recordSetupError(error: unknown) {
+    this.lastSetupError = error;
+    for (const waiter of this.readyWaiters) waiter.fail(this.notReadyError());
+  }
+
+  private notReadyError() {
+    return new Error(
+      `SyncedMap ${this.redisKey} is not ready, setup is retrying after: ${String(this.lastSetupError)}`,
+    );
+  }
+
+  /**
+   * Waits for the initial sync and the subscriber of every map. Rejects as
+   * soon as a setup attempt fails, so cache calls miss instead of hanging.
+   * A ready map can lose its subscriber during the wait, so the wait watches
+   * every map, not only the ones that were loading when it started.
+   */
+  public static async waitUntilAllReady(
+    maps: SyncedMap<unknown>[],
+    timeoutMs = READY_TIMEOUT_MS,
+  ): Promise<void> {
+    const notReady = () => maps.filter((map) => !map.isSetUp);
+    const throwIfFailed = () => {
+      const failed = notReady().find((map) => map.lastSetupError !== undefined);
+      if (failed) throw failed.notReadyError();
+    };
+    if (notReady().length === 0) return;
+    throwIfFailed();
+
+    let readyTimeout: ReturnType<typeof setTimeout> | undefined;
+    let waiter: ReadyWaiter | undefined;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        waiter = {
+          ready: () => {
+            if (notReady().length === 0) resolve();
+          },
+          fail: reject,
+        };
+        for (const map of maps) map.readyWaiters.add(waiter);
+        readyTimeout = setTimeout(() => {
+          reject(
+            new Error(
+              `SyncedMap ${notReady()
+                .map((map) => map.redisKey)
+                .join(', ')} is not ready after ${timeoutMs}ms`,
+            ),
+          );
+        }, timeoutMs);
+      });
+    } finally {
+      // Timers capture the ambient async context (AsyncLocalStorage), so in a
+      // Next.js server a leaked timer pins the request's object graph.
+      clearTimeout(readyTimeout);
+      for (const map of maps) map.readyWaiters.delete(waiter!);
+    }
+    throwIfFailed();
+  }
+
+  public waitUntilReady(timeoutMs?: number): Promise<void> {
+    return SyncedMap.waitUntilAllReady([this], timeoutMs);
   }
 
   public get(key: string): V | undefined {

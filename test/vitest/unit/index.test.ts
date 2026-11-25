@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import type { CreateRedisStringsHandlerOptions } from '../../../src/index';
 import RedisStringsHandler from '../../../src/RedisStringsHandler';
+import { SyncedMap } from '../../../src/SyncedMap';
 
 vi.mock('redis', () => {
   const createClient = vi.fn(() => {
@@ -54,7 +55,7 @@ vi.mock('redis', () => {
 
 vi.mock('../../src/SyncedMap', () => {
   class SyncedMap {
-    waitUntilReady = vi.fn(async () => undefined);
+    static waitUntilAllReady = vi.fn(async () => undefined);
     get = vi.fn(() => undefined);
     set = vi.fn(async () => undefined);
     delete = vi.fn(async () => undefined);
@@ -71,6 +72,8 @@ vi.mock('../../src/SyncedMap', () => {
 describe('RedisStringsHandler', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    // Many tests replace the tag maps with plain fakes.
+    vi.spyOn(SyncedMap, 'waitUntilAllReady').mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -200,10 +203,9 @@ describe('RedisStringsHandler', () => {
         isFallback: false,
       });
 
-      // assertClientIsReady() races waitUntilReady() against a 30s timeout;
-      // the timer must not stay pending once the race is settled, because
-      // pending timers retain the ambient async context (and with it, in a
-      // Next.js server, the whole per-request object graph).
+      // No timer may stay pending after get(), because pending timers retain
+      // the ambient async context (and with it, in a Next.js server, the
+      // whole per-request object graph).
       expect(vi.getTimerCount()).toBe(timersBefore);
     } finally {
       vi.useRealTimers();
