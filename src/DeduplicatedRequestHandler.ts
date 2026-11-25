@@ -30,7 +30,7 @@ export class DeduplicatedRequestHandler<
     );
 
     setTimeout(() => {
-      this.inMemoryDeduplicationCache.delete(key);
+      this.inMemoryDeduplicationCache.delete(key, true);
     }, this.cachingTimeMs);
   }
 
@@ -92,7 +92,8 @@ export class DeduplicatedRequestHandler<
         );
         return structuredClone(result);
       } finally {
-        // Once the promise is resolved/rejected and caching timeout is over, remove it from the map
+        // Once the promise is resolved/rejected and caching timeout is over, remove it from the map.
+        // Each instance runs its own timer, so the expiry is local and does not publish a sync message.
         setTimeout(() => {
           debugVerbose(
             'DeduplicatedRequestHandler.deduplicatedFunction().dedupedFn ',
@@ -101,7 +102,7 @@ export class DeduplicatedRequestHandler<
             self.cachingTimeMs,
             'ms',
           );
-          self.inMemoryDeduplicationCache.delete(key);
+          self.inMemoryDeduplicationCache.delete(key, true);
         }, self.cachingTimeMs);
       }
     };
