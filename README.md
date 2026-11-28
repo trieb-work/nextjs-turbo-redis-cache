@@ -70,7 +70,7 @@ For direct usage of `RedisStringsHandler`, the default remains framework-agnosti
 - options.keyPrefix → KEY*PREFIX → VERCEL_URL → `UNDEFINED_URL*`
 
 VERCEL_ENV is used to determine the database to use. Only VERCEL_ENV=production will show up in DB 0 (redis default db). All other values of VERCEL_ENV will use DB 1, use `redis-cli -n 1` to connect to different DB 1. This is another protection feature to avoid that different environments (e.g. staging and production) will overwrite each other.
-Furthermore there exists the DEBUG_CACHE_HANDLER environment variable to enable debug logging of the caching handler once it is set to true.
+Furthermore there exists the DEBUG_CACHE_HANDLER environment variable to enable debug logging of the caching handler. Any value other than empty, `false`, `0`, `no` or `off` enables it.
 
 There exists also the SKIP_KEYSPACE_CONFIG_CHECK environment variable to skip the check for the keyspace configuration. This is useful if you are using redis in a cloud environment that forbids access to config commands. If you set SKIP_KEYSPACE_CONFIG_CHECK=true the check will be skipped and the keyspace configuration will be assumed to be correct (e.g. notify-keyspace-events Exe).
 

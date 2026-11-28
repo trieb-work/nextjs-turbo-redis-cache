@@ -1,7 +1,7 @@
 import { createClient, RedisClientOptions } from 'redis';
 import { SyncedMap } from './SyncedMap';
 import { DeduplicatedRequestHandler } from './DeduplicatedRequestHandler';
-import { debug } from './utils/debug';
+import { debug, isEnvFlagEnabled } from './utils/debug';
 import { CacheValueSerializer, jsonCacheValueSerializer } from './serializer';
 import { resolveCacheEntryTtlSeconds } from './utils/cacheTtl';
 import { shouldDeferRedisConnection } from './utils/redisConnection';
@@ -112,7 +112,13 @@ export function redisErrorHandler<T extends Promise<unknown>>(
   }) as T;
 }
 
-if (process.env.DEBUG_CACHE_HANDLER) {
+function isAbortError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const err = error as { name?: unknown; code?: unknown };
+  return err.name === 'AbortError' || err.code === 'ABORT_ERR';
+}
+
+if (isEnvFlagEnabled('DEBUG_CACHE_HANDLER')) {
   // This is a test to check if the event loop is lagging. If it lags, increase CPU of container
   setInterval(() => {
     const start = performance.now();
